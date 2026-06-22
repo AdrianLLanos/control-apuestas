@@ -155,6 +155,12 @@ button {
     font-weight: 700;
 }
 
+#btnSincronizarFutbol {
+    background: #60a5fa;
+    color: #071d3a;
+    font-weight: 700;
+}
+
 .mlb-sync-status {
     min-height: 20px;
     margin-top: 8px;

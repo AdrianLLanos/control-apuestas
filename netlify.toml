@@ -7,11 +7,26 @@
   status = 200
 
 [[headers]]
-  for = "/index.html"
+  for = "/*.html"
   [headers.values]
-    Cache-Control = "no-cache"
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
 
 [[headers]]
   for = "/script/*"
   [headers.values]
-    Cache-Control = "no-cache"
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/estilos/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
