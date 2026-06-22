@@ -3138,7 +3138,11 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
   if (!marcador) return "";
   const estadoJuego = selection.autoFutbol.estadoJuego || "Final";
   const liga = selection.autoFutbol.liga ? ` · ${escapeHtml(selection.autoFutbol.liga)}` : "";
-  const corners = selection.autoFutbol.totalCorners !== undefined
+  const totalCorners = selection.autoFutbol.totalCorners;
+  if (totalCorners !== undefined && totalCorners !== null) {
+    return `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>`;
+  }
+  const corners = totalCorners !== undefined && totalCorners !== null
     ? ` · Corners: ${escapeHtml(selection.autoFutbol.totalCorners)}`
     : "";
   return `<div class="auto-mlb-score">${escapeHtml(estadoJuego)} · ${escapeHtml(marcador)}${corners}${liga}</div>`;
