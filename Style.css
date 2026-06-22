@@ -170,6 +170,14 @@ button {
     color: #86efac;
 }
 
+.auto-mlb-score {
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.25;
+    color: #93c5fd;
+    font-weight: 600;
+}
+
 /* eliminar tabla */
 .btn-eliminar-tabla {
     background: #ff3b3b !important;

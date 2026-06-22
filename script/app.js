@@ -2282,6 +2282,20 @@ function apuestaTieneAutoMlb(apuesta) {
   );
 }
 
+function apuestaPareceMlb(apuesta) {
+  if (apuestaTieneAutoMlb(apuesta)) return true;
+  return (apuesta?.jugadas || []).some(j => {
+    const ev = typeof j === "object" && j ? (j.ev || j.evento || apuesta.evento || "") : apuesta.evento || "";
+    return detectarEquiposMlb(ev).length >= 2;
+  });
+}
+
+function apuestaTieneMarcadorMlb(apuesta) {
+  return (apuesta?.jugadas || []).some(j =>
+    (j?.selections || []).some(sel => Boolean(sel?.autoMlb?.marcador))
+  );
+}
+
 async function cargarJuegosMlbPorFecha(fecha) {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore`;
   const response = await fetch(url);
@@ -2472,15 +2486,15 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
 }
 
 async function sincronizarResultadosMlb() {
-  const pendientes = apuestas.filter(a =>
-    apuestaTieneAutoMlb(a) &&
-    (a.resultado || "pendiente") === "pendiente" &&
+  const candidatas = apuestas.filter(a =>
+    apuestaPareceMlb(a) &&
+    ((a.resultado || "pendiente") === "pendiente" || !apuestaTieneMarcadorMlb(a)) &&
     Array.isArray(a.jugadas) &&
     a.jugadas.length > 0
   );
 
-  if (pendientes.length === 0) {
-    setMlbSyncStatus("No hay apuestas MLB pendientes para sincronizar.", "");
+  if (candidatas.length === 0) {
+    setMlbSyncStatus("No hay apuestas MLB para sincronizar.", "");
     return;
   }
 
@@ -2489,7 +2503,7 @@ async function sincronizarResultadosMlb() {
   setMlbSyncStatus("Sincronizando resultados MLB...", "");
 
   try {
-    const fechas = [...new Set(pendientes.map(a => a.fecha || a.dia).filter(Boolean))];
+    const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
       juegosPorFecha.set(fecha, await cargarJuegosMlbPorFecha(fecha));
@@ -2498,7 +2512,7 @@ async function sincronizarResultadosMlb() {
     let actualizadas = 0;
     let revisadas = 0;
 
-    for (const apuesta of pendientes) {
+    for (const apuesta of candidatas) {
       revisadas++;
       const fecha = apuesta.fecha || apuesta.dia;
       const updateData = aplicarResultadoMlbApuesta(apuesta, juegosPorFecha.get(fecha) || []);
@@ -2518,6 +2532,13 @@ async function sincronizarResultadosMlb() {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+function getAutoMlbMarcadorHtml(selection = {}) {
+  const marcador = selection?.autoMlb?.marcador;
+  if (!marcador) return "";
+  const estadoJuego = selection.autoMlb.estadoJuego || "Final";
+  return `<div class="auto-mlb-score">${escapeHtml(estadoJuego)} · ${escapeHtml(marcador)}</div>`;
 }
 
 /* =========================
@@ -3165,6 +3186,7 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
+              const autoMlbMarcadorHtml = getAutoMlbMarcadorHtml(sel);
               allTimelineItems.push({
                 html: `
                   <div data-selection-wrap="${a.id}-${matchIndex}-${selIndex}" style="display:flex; flex-direction:column; gap:1px; ${styleMod}">
@@ -3173,6 +3195,7 @@ function _render() {
                     <div class="bet-selection-line" style="font-size:13px; color:#ffffff; font-weight:600;">
                       <span class="bet-selection-value">${formattedJugada}</span>${estadoIcon}
                     </div>
+                    ${autoMlbMarcadorHtml}
                   </div>
                 `
               });
@@ -3259,12 +3282,14 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
+              const autoMlbMarcadorHtml = getAutoMlbMarcadorHtml(sel);
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
                   ${sel.titulo ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${sel.titulo}</div>` : ""}
                   <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
                     <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
                   </div>
+                  ${autoMlbMarcadorHtml}
                 </div>
               `;
             }).join('');
