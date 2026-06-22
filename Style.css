@@ -149,6 +149,27 @@ button {
     color: black;
 }
 
+#btnSincronizarMlb {
+    background: #34d399;
+    color: #06281c;
+    font-weight: 700;
+}
+
+.mlb-sync-status {
+    min-height: 20px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #cbd5e1;
+}
+
+.mlb-sync-status.error {
+    color: #fca5a5;
+}
+
+.mlb-sync-status.success {
+    color: #86efac;
+}
+
 /* eliminar tabla */
 .btn-eliminar-tabla {
     background: #ff3b3b !important;

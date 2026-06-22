@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control Personal de Apuestas</title>
 
-<link rel="stylesheet" href="Style.css?v=7.6">
+<link rel="stylesheet" href="Style.css?v=7.7">
 <link rel="stylesheet" href="estilos/simple.css?v=1.0">
 <link rel="stylesheet" href="estilos/combinada.css?v=1.0">
 <link rel="stylesheet" href="estilos/crear-apuesta-combinada.css?v=1.0">
@@ -53,6 +53,10 @@
     <!-- Fila de campos numéricos -->
     <div class="form-group">
       <input type="date" id="fecha" autocomplete="off">
+      <select id="deporte">
+        <option value="">Deporte</option>
+        <option value="mlb">MLB</option>
+      </select>
       <input type="number" id="importe" placeholder="Importe" step="0.01" autocomplete="off">
       <select id="resultado">
         <option value="pendiente">Pendiente</option>
@@ -120,8 +124,10 @@
 
     <div class="btn-group">
       <button id="btnAgregar">Agregar</button>
+      <button type="button" id="btnSincronizarMlb">Sincronizar MLB</button>
       <button id="btnEliminarTodo" class="eliminar">Eliminar Todo</button>
     </div>
+    <div id="mlbSyncStatus" class="mlb-sync-status" aria-live="polite"></div>
 
   </div>
 
@@ -181,7 +187,7 @@
 <button id="btnArriba">↑ NUEVA APUESTA</button>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script type="module" src="script/main.js?v=9.4"></script>
+<script type="module" src="script/main.js?v=9.5"></script>
 
 </body>
 </html>
