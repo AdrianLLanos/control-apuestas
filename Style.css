@@ -1,0 +1,1450 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    background: #0f172a;
+    color: white;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.page {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 15px;
+    background: #1e293b;
+}
+
+.formulario-global {
+    padding: 20px;
+    background: #1e293b;
+    border-radius: 15px;
+}
+
+.form-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    align-items: start;
+}
+
+input,
+select {
+    padding: 10px;
+    border-radius: 10px;
+    border: none;
+}
+
+/* =========================
+   BOTONES BASE
+   ========================= */
+button {
+    padding: 10px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+/* botones principales */
+#btnBankroll,
+#btnAgregar {
+    background: #00c6ff;
+    color: black;
+}
+
+/* eliminar tabla */
+.btn-eliminar-tabla {
+    background: #ff3b3b !important;
+    color: white !important;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.btn-eliminar-tabla:hover {
+    background: #ff1f1f !important;
+    transform: scale(1.05);
+}
+
+/* botón eliminar individual */
+.eliminar {
+    background: #ff3b3b;
+    color: white;
+}
+
+/* =========================
+   TABLA
+   ========================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    background: #0f172a;
+    color: white;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.page {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 15px;
+    background: #1e293b;
+}
+
+.formulario-global {
+    padding: 20px;
+    background: #1e293b;
+    border-radius: 15px;
+}
+
+.form-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    align-items: start;
+}
+
+input,
+select {
+    padding: 10px;
+    border-radius: 10px;
+    border: none;
+}
+
+/* =========================
+   BOTONES BASE
+   ========================= */
+button {
+    padding: 10px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+/* botones principales */
+#btnBankroll,
+#btnAgregar {
+    background: #00c6ff;
+    color: black;
+}
+
+/* eliminar tabla */
+.btn-eliminar-tabla {
+    background: #ff3b3b !important;
+    color: white !important;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.btn-eliminar-tabla:hover {
+    background: #ff1f1f !important;
+    transform: scale(1.05);
+}
+
+/* botón eliminar individual */
+.eliminar {
+    background: #ff3b3b;
+    color: white;
+}
+
+/* =========================
+   TABLA
+   ========================= */
+table {
+    width: 100%;
+    margin-top: 10px;
+    border-collapse: collapse;
+}
+
+td,
+th {
+    padding: 10px 6px;
+    text-align: center;
+    font-size: 14px;
+}
+
+tr {
+    border-bottom: 1px solid #334155;
+    /* Borde sutil y moderno */
+    transition: background-color 0.2s ease;
+}
+
+tr:hover {
+    background-color: rgba(255, 255, 255, 0.015);
+    /* Hover elegante en filas */
+}
+
+/* Evitamos que el select cambie de tamaño al cambiar el texto de la opción */
+table select {
+    width: 110px;
+    text-align: center;
+    font-size: 13px;
+    padding: 5px 4px;
+}
+
+/* Estilo limpio para los botones de acción dentro de la tabla */
+table button {
+    padding: 6px 10px;
+    margin-top: 0;
+    font-size: 15px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+table button:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+}
+
+.acciones-tabla {
+    min-width: 48px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.acciones-tabla button {
+    width: 38px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.acciones-tabla button+button {
+    margin-top: 10px;
+}
+
+.apuesta-edit-cell {
+    min-width: 0;
+    text-align: left;
+}
+
+.apuesta-edit-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+    white-space: normal;
+}
+
+.apuesta-edit-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.apuesta-edit-header select {
+    width: auto;
+    max-width: 100%;
+}
+
+.apuesta-edit-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    align-items: end;
+}
+
+.apuesta-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: left;
+}
+
+.apuesta-edit-field input,
+.apuesta-edit-field select {
+    width: 100%;
+    min-width: 0;
+    background: #1e293b;
+    color: white;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.apuesta-edit-money {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: white;
+}
+
+.apuesta-edit-money input {
+    flex: 1;
+}
+
+/* Reservamos espacio para la columna de retorno para que $0.00 y montos mayores ocupen lo mismo */
+table td:nth-child(6) {
+    min-width: 70px;
+}
+
+.corner-kick-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: text-bottom;
+}
+
+.corner-kick-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+}
+
+.corner-kick-text svg.corner-kick-icon {
+    width: 21px;
+    height: 21px;
+}
+
+.goal-ball-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    margin: 0;
+}
+
+.card-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    margin: 0;
+}
+
+.corner-kick-label {
+    display: inline-block;
+    line-height: 1.2;
+}
+
+.bet-selection-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bet-selection-value {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 5px;
+    row-gap: 2px;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.handicap-selection-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
+}
+
+.handicap-line-value {
+    display: inline-block;
+    margin-left: 1px;
+}
+
+.mlb-team-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.mlb-team-logo {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.country-flag-logo {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.country-flag-logo.is-loaded {
+    opacity: 1;
+}
+
+.country-flag-mark {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.country-flag-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    font-size: 21px;
+    line-height: 1;
+}
+
+.mlb-versus {
+    display: inline-block;
+    margin: 0 6px;
+    color: #94a3b8;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* =========================
+   COLORES
+   ========================= */
+.ganada {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.perdida {
+    color: #ff3b3b;
+    font-weight: bold;
+}
+
+.nula {
+    color: gray;
+}
+
+/* =========================
+   BANKROLL
+   ========================= */
+.top-controls {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 24px;
+    margin-bottom: 25px;
+}
+
+.top-controls input,
+.top-controls select,
+.casa-select-group input,
+.casa-select-group select,
+.casa-create-group input {
+    height: 39px;
+    min-width: 0;
+}
+
+.casa-select-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.casa-delete-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 24px;
+    padding-left: 18px;
+    border-left: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.casa-select-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 160px;
+}
+
+.casa-bankroll-label,
+.casa-filter-label {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+}
+
+.casa-bankroll-label {
+    margin-top: 0;
+}
+
+.casa-filter-label {
+    margin-top: 10px;
+}
+
+.casa-create-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-left: 0;
+    padding-left: 18px;
+    border-left: 1px solid rgba(34, 197, 94, 0.28);
+}
+
+.casa-select-group > #bankroll,
+.casa-select-group > #btnBankroll,
+.casa-delete-group,
+.casa-create-group {
+    margin-top: 18px;
+}
+
+#casaApuesta,
+#filtroCasa {
+    width: 100%;
+}
+
+#bankroll {
+    width: 170px;
+}
+
+#casaEliminar {
+    width: 150px;
+}
+
+#nuevaCasa {
+    width: 210px;
+}
+
+#btnBankroll,
+#btnEliminarCasa,
+#btnCrearCasa {
+    height: 39px;
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#btnEliminarCasa {
+    width: 150px;
+    min-width: 150px;
+    background: #ef4444;
+    color: white;
+    white-space: nowrap;
+}
+
+#btnCrearCasa {
+    width: 210px;
+    min-width: 112px;
+    white-space: nowrap;
+}
+
+#btnCrearCasa {
+    background: #22c55e;
+    color: #07111f;
+    font-weight: 700;
+}
+
+.casa-badge {
+    display: inline-flex;
+    align-items: center;
+    max-width: 120px;
+    margin-top: 4px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.13);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: #86efac;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* =========================
+   PAGINACIÓN
+   ========================= */
+.paginacion {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.paginacion button {
+    padding: 8px 15px;
+}
+
+/* =========================
+   BOTÓN FLOTANTE
+   ========================= */
+#btnArriba {
+    position: fixed;
+    bottom: 30px;
+    right: 25px;
+
+    background: linear-gradient(135deg, #00ff88, #00c6ff);
+    color: black;
+
+    border: none;
+    padding: 12px;
+    border-radius: 30px;
+
+    font-weight: bold;
+    cursor: pointer;
+
+    display: none;
+    z-index: 999;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+}
+
+#btnArriba:hover {
+    transform: scale(1.1);
+}
+
+/* =========================
+   MÓVIL
+   ========================= */
+@media (max-width:600px) {
+
+    body {
+        padding: 10px;
+    }
+
+    .form-group {
+        grid-template-columns: 1fr;
+    }
+
+    button {
+        width: 100%;
+    }
+
+    .top-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .casa-select-group,
+    .casa-delete-group,
+    .casa-create-group {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .casa-delete-group,
+    .casa-create-group {
+        margin-left: 0;
+        padding-left: 0;
+        border-left: none;
+    }
+
+    .casa-select-stack {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    #casaApuesta,
+    #filtroCasa,
+    #casaEliminar,
+    #bankroll,
+    #nuevaCasa {
+        width: 100%;
+    }
+
+    .casa-select-group > #bankroll,
+    .casa-select-group > #btnBankroll,
+    .casa-create-group {
+        margin-top: 0;
+    }
+
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .apuesta-edit-card {
+        white-space: normal;
+    }
+
+    .apuesta-edit-meta {
+        grid-template-columns: 1fr;
+    }
+
+    th,
+    td {
+        font-size: 14px;
+        padding: 6px;
+    }
+
+    .page {
+        padding: 15px;
+    }
+
+    #bankroll {
+        width: 100%;
+    }
+}
+
+/* =========================
+   ESTADÍSTICAS
+   ========================= */
+.stats-box {
+    margin-top: 20px;
+}
+
+.stat {
+    margin-bottom: 10px;
+}
+
+.stat-bar {
+    width: 100%;
+    height: 10px;
+    background: #0f172a;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.stat-fill {
+    height: 100%;
+    border-radius: 10px;
+}
+
+.stat-fill.ganada {
+    background: #00ff88;
+}
+
+.stat-fill.perdida {
+    background: #ff3b3b;
+}
+
+.stat-fill.nula {
+    background: gray;
+}
+
+/* =========================
+   BOTÓN NUEVA APUESTA
+   ========================= */
+#btnNuevaApuestaBottom {
+    position: fixed;
+    right: 20px;
+    bottom: 90px;
+
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+
+    background: linear-gradient(135deg, #00ff88, #00c6ff);
+    color: black;
+
+    border: none;
+    cursor: pointer;
+
+    font-weight: bold;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+}
+
+.btn-eliminar-dia {
+    display: block;
+    margin: 15px auto 0 auto;
+
+    padding: 10px 20px;
+    border: none;
+    border-radius: 25px;
+
+    background: #ff3b3b;
+    color: white;
+
+    font-weight: bold;
+    cursor: pointer;
+
+    transition: 0.2s ease;
+}
+
+.btn-eliminar-dia:hover {
+    background: #ff1f1f;
+    transform: scale(1.05);
+}
+
+.formulario-global h2 {
+    margin-bottom: 20px;
+}
+
+.page {
+    transition: all 0.3s ease;
+}
+
+/* =========================
+   TARJETA APUESTA
+   ========================= */
+.tarjeta-apuesta {
+    margin-top: 15px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.3s ease;
+}
+
+.tarjeta-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tarjeta-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tarjeta-label {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Select estilizado como badge */
+.tipo-select-badge {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 4px 28px 4px 12px;
+    border-radius: 20px;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23000'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+
+/* Input evento principal (en negrita como en edición) */
+.evento-principal-input {
+    width: 100%;
+    background: #1e293b;
+    color: white;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 15px;
+    font-weight: 600;
+    box-sizing: border-box;
+}
+
+.evento-principal-input:focus {
+    outline: none;
+    border-color: #00c6ff;
+}
+
+
+.tarjeta-apuesta input[type="text"] {
+    width: 100%;
+    background: #1e293b;
+    color: white;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 14px;
+}
+
+.tarjeta-apuesta input[type="text"]:focus {
+    outline: none;
+    border-color: #00c6ff;
+}
+
+.jugadas-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.jugadas-lista .evento-input {
+    font-size: 13px;
+    color: #cbd5e1;
+    background: #1e293b;
+    border: 1px dashed #475569;
+    border-radius: 8px;
+    padding: 7px 12px;
+}
+
+.jugadas-lista .evento-input:focus {
+    outline: none;
+    border-color: #fbbf24;
+    border-style: solid;
+}
+
+/* Par Evento + Jugada */
+.jugada-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 2px solid #fbbf24;
+    padding-left: 10px;
+    margin-bottom: 8px;
+}
+
+.jugada-slot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.jugada-slot-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: #fbbf24;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-eliminar-slot {
+    padding: 2px 7px !important;
+    margin-top: 0 !important;
+    font-size: 11px !important;
+    font-weight: 700;
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: #f87171 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-radius: 4px !important;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
+}
+
+.btn-eliminar-slot:hover {
+    background: #ef4444 !important;
+    color: white !important;
+    border-color: #ef4444 !important;
+    transform: scale(1.05) !important;
+}
+
+.jugada-ev-input {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f1f5f9 !important;
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+}
+
+.jugada-jug-input {
+    font-size: 12px;
+    color: #94a3b8 !important;
+    background: #1e293b !important;
+    border: 1px dashed #475569 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+}
+
+/* =========================
+   SKELETON LOADING SHIMMER
+   ========================= */
+.skeleton-box {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 15px;
+    background: #1e293b;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.skeleton-title {
+    width: 150px;
+    height: 24px;
+    background: #334155;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.skeleton-text {
+    width: 100%;
+    height: 14px;
+    background: #334155;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.skeleton-table {
+    width: 100%;
+    height: 120px;
+    background: #334155;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.shimmer::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.05) 20%,
+            rgba(255, 255, 255, 0.1) 60%,
+            rgba(255, 255, 255, 0) 100%);
+    animation: shimmer 1.5s infinite;
+    content: '';
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* =========================
+   MODAL DE VALIDACIÓN ELEGANTE
+   ========================= */
+.custom-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.custom-modal-backdrop.show {
+    opacity: 1;
+}
+
+.custom-modal-content {
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 450px;
+    padding: 24px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3),
+        0 8px 10px -6px rgba(0, 0, 0, 0.3),
+        0 0 20px rgba(251, 191, 36, 0.1);
+    transform: scale(0.9) translateY(-20px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.custom-modal-backdrop.show .custom-modal-content {
+    transform: scale(1) translateY(0);
+}
+
+.custom-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 12px;
+}
+
+.custom-modal-icon {
+    font-size: 24px;
+    animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.15);
+        text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.custom-modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #f8fafc;
+}
+
+.custom-modal-body {
+    font-size: 14px;
+    color: #cbd5e1;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.custom-modal-body p {
+    margin-bottom: 12px;
+}
+
+.custom-modal-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.custom-modal-list li {
+    position: relative;
+    padding-left: 20px;
+    color: #fda4af;
+    font-weight: 500;
+}
+
+.custom-modal-list li::before {
+    content: "•";
+    position: absolute;
+    left: 6px;
+    color: #f43f5e;
+    font-weight: bold;
+    font-size: 16px;
+    top: -1px;
+}
+
+.custom-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.custom-modal-btn {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #0f172a !important;
+    border: none;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(251, 191, 36, 0.2);
+    margin-top: 0 !important;
+}
+
+.custom-modal-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px -2px rgba(251, 191, 36, 0.3);
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.custom-modal-btn:active {
+    transform: translateY(0);
+}
+
+.casa-confirm-name {
+    display: block;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    color: #fecaca;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+}
+
+.casa-confirm-footer {
+    justify-content: flex-end;
+}
+
+.custom-modal-btn-secondary {
+    background: rgba(148, 163, 184, 0.16);
+    color: #e2e8f0 !important;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: none;
+}
+
+.custom-modal-btn-secondary:hover {
+    background: rgba(148, 163, 184, 0.24);
+    box-shadow: none;
+}
+
+.custom-modal-btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white !important;
+    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.25);
+}
+
+.custom-modal-btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    box-shadow: 0 6px 12px -2px rgba(239, 68, 68, 0.32);
+}
+
+.casa-confirm-content-success {
+    border-color: rgba(34, 197, 94, 0.38);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3),
+        0 8px 10px -6px rgba(0, 0, 0, 0.3),
+        0 0 24px rgba(34, 197, 94, 0.18);
+}
+
+.casa-confirm-icon-success {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.16);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.38);
+    animation: success-pop 0.7s ease both, success-glow 1.8s ease-in-out infinite;
+}
+
+.casa-confirm-name-success {
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #bbf7d0;
+}
+
+.custom-modal-btn-success {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: #052e16 !important;
+    box-shadow: 0 4px 6px -1px rgba(34, 197, 94, 0.25);
+}
+
+.custom-modal-btn-success:hover {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    box-shadow: 0 6px 12px -2px rgba(34, 197, 94, 0.32);
+}
+
+@keyframes success-pop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    70% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes success-glow {
+    0%,
+    100% {
+        box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 16px rgba(34, 197, 94, 0.45);
+    }
+}
+
+/* =========================
+   NUEVOS CONTROLES MULTI-SELECCIÓN (BET BUILDER)
+   ========================= */
+.jugada-market-input {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fbbf24 !important;
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 2px;
+}
+
+.edit-jugada-market-input {
+    background: #1e293b !important;
+    color: #fbbf24 !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edit-jugada-jug-input {
+    background: #1e293b !important;
+    color: #ffffff !important;
+    border: 1px dashed #475569 !important;
+    border-radius: 6px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edit-jugada-ev-input {
+    background: #1e293b !important;
+    color: #f1f5f9 !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edit-jugada-cuota-input {
+    background: #1e293b !important;
+    color: white !important;
+    border: 1px dashed #fbbf24 !important;
+    border-radius: 6px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Contenedor para evitar desbordamiento lateral de la tabla */
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Barra de desplazamiento ultra-sutil y premium */
+.table-container::-webkit-scrollbar {
+    height: 5px;
+}
+.table-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.table-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Evitar que las opciones del select hereden el color rojo o verde del td */
+table select option,
+.patente-state select option {
+    background-color: #1e293b;
+    color: white;
+    font-weight: normal;
+}
+table select option[value="ganada"],
+.patente-state select option[value="ganada"] {
+    color: #00ff88 !important;
+}
+table select option[value="perdida"],
+.patente-state select option[value="perdida"] {
+    color: #ff3b3b !important;
+}
+table select option[value="nula"],
+.patente-state select option[value="nula"] {
+    color: gray !important;
+}
+table select option[value="pendiente"],
+.patente-state select option[value="pendiente"] {
+    color: white !important;
+}
+
+/* Base de select de edición */
+.edit-tipo-select {
+    background: #1e293b;
+    border: 1px solid #475569;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.edit-tipo-select option {
+    background-color: #1e293b;
+    color: white;
+}
+
+/* Estilos de Patente (añadidos aquí para no tocar patente.css) */
+.tarjeta-apuesta.patente {
+    border-color: #fb7185;
+    box-shadow: 0 0 12px rgba(251, 113, 133, 0.15);
+}
+.apuesta-edit-card.patente {
+    border-color: #fb7185;
+    box-shadow: 0 0 12px rgba(251, 113, 133, 0.15);
+}
+.edit-tipo-select.patente {
+    color: #fb7185;
+}

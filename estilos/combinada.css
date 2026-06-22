@@ -1,0 +1,45 @@
+/* Estilos aislados para apuestas combinadas */
+
+.tarjeta-apuesta.combinada {
+    border-color: #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.15);
+}
+
+.tipo-select-badge.combinada {
+    background-color: #fbbf24;
+    color: black;
+}
+
+.tarjeta-badge.combinada {
+    background: #fbbf24;
+    color: black;
+}
+
+#btnAgregarCampo {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #fbbf24;
+    color: black;
+    border-radius: 6px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 2px;
+    transition: 0.2s ease;
+}
+
+#btnAgregarCampo:hover {
+    background: #f59e0b;
+    transform: scale(1.03);
+}
+
+.apuesta-edit-card.combinada {
+    border-color: #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.15);
+}
+
+.edit-tipo-select.combinada {
+    color: #fbbf24;
+}
+

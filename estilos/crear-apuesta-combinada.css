@@ -1,0 +1,44 @@
+/* Estilos aislados para crear apuesta combinada */
+
+.tipo-select-badge.crear_apuesta {
+    background-color: #818cf8;
+    color: black;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23000'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+#btnAgregarPartidoCrear {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #818cf8;
+    color: black;
+    border-radius: 6px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 2px;
+    transition: 0.2s ease;
+}
+
+#btnAgregarPartidoCrear:hover {
+    background: #6366f1;
+    color: white;
+    transform: scale(1.03);
+}
+
+.tarjeta-apuesta.crear_apuesta {
+    border-color: #818cf8;
+    box-shadow: 0 0 12px rgba(129, 140, 248, 0.15);
+}
+
+.apuesta-edit-card.crear_apuesta {
+    border-color: #818cf8;
+    box-shadow: 0 0 12px rgba(129, 140, 248, 0.15);
+}
+
+.edit-tipo-select.crear_apuesta {
+    color: #818cf8;
+}
+

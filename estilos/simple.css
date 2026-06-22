@@ -1,0 +1,45 @@
+/* Estilos aislados para apuestas simples */
+
+.tipo-select-badge.simple {
+    background-color: #00c6ff;
+    color: black;
+}
+
+.tarjeta-badge.simple {
+    background: #00c6ff;
+    color: black;
+}
+
+#btnAgregarPartidoSimple {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #00c6ff;
+    color: black;
+    border-radius: 6px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 2px;
+    transition: 0.2s ease;
+}
+
+#btnAgregarPartidoSimple:hover {
+    background: #0099cc;
+    transform: scale(1.03);
+}
+
+.tarjeta-apuesta.simple {
+    border-color: #334155;
+    box-shadow: none;
+}
+
+.apuesta-edit-card.simple {
+    border-color: #334155;
+    box-shadow: none;
+}
+
+.edit-tipo-select.simple {
+    color: #00c6ff;
+}
+

@@ -1,0 +1,221 @@
+/* Estilos aislados para Simple Option Bet */
+
+.tipo-select-badge.simple_option_bet {
+    background-color: #22d3ee;
+    color: black;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23000'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+#btnAgregarPartidoSimpleOption {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #22d3ee;
+    color: black;
+    border-radius: 6px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 2px;
+    transition: 0.2s ease;
+}
+
+#btnAgregarPartidoSimpleOption:hover {
+    background: #0891b2;
+    transform: scale(1.03);
+}
+
+.tarjeta-apuesta.simple_option_bet {
+    border-color: #22d3ee;
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.15);
+}
+
+.apuesta-edit-card.simple_option_bet {
+    border-color: #22d3ee;
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.15);
+}
+
+.edit-tipo-select.simple_option_bet {
+    color: #22d3ee;
+}
+
+.simple-option-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-width: 134px;
+}
+
+.simple-option-total-input {
+    width: 76px;
+    flex: 0 0 76px;
+    background: #1e293b;
+    color: #f1f5f9;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+    font-weight: 700;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.simple-option-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 64px;
+    line-height: 1.05;
+    text-align: left;
+    font-weight: 800;
+}
+
+.simple-option-status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border-radius: 50%;
+    background: #22c55e;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.35);
+}
+
+.simple-option-status-icon--lost {
+    background: #ef4444;
+    color: rgba(74, 222, 128, 0.88);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+}
+
+.simple-option-status-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    white-space: nowrap;
+}
+
+.simple-option-status-copy span,
+.simple-option-status-copy strong {
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
+.simple-option-status--ganada {
+    color: #4ade80;
+}
+
+.simple-option-status--perdida {
+    color: #ff4444;
+}
+
+.simple-option-status--nula {
+    color: #94a3b8;
+}
+
+.simple-option-status--pendiente {
+    color: #f1f5f9;
+}
+
+.simple-option-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0 10px 2px;
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 18px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.simple-option-notice--max,
+.simple-option-notice--opti,
+.simple-option-notice--max > span:last-child,
+.simple-option-notice--opti > span:last-child {
+    color: rgba(74, 222, 128, 0.92);
+}
+
+.simple-option-notice--lost {
+    color: #fecaca;
+    background: transparent;
+}
+
+.simple-option-notice--lost .simple-option-notice-icon {
+    background: #ef4444;
+    color: #f8fafc;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+}
+
+.simple-option-notice-icon--lost {
+    background: #ef4444;
+    color: #f8fafc;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+}
+
+.simple-option-main-row {
+    border-bottom: none;
+}
+
+.simple-option-main-row:hover + .simple-option-notice-row,
+.simple-option-notice-row:hover {
+    background-color: transparent;
+}
+
+.simple-option-notice-row td {
+    padding: 0 6px 10px;
+}
+
+.simple-option-notice-row .simple-option-notice-spacer {
+    padding: 0;
+}
+
+.simple-option-notice > span:last-child {
+    display: inline-flex;
+    align-items: center;
+    min-height: 18px;
+    padding-top: 1px;
+}
+
+.simple-option-notice-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border-radius: 50%;
+    background: #22c55e;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+@media (max-width: 600px) {
+    .simple-option-result {
+        min-width: 128px;
+        gap: 6px;
+    }
+
+    .simple-option-total-input {
+        width: 68px;
+        flex-basis: 68px;
+        padding-inline: 6px;
+    }
+
+    .simple-option-status-copy span,
+    .simple-option-status-copy strong {
+        font-size: 11px;
+    }
+}

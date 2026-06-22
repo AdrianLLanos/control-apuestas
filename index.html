@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Personal de Apuestas</title>
+
+<link rel="stylesheet" href="Style.css?v=7.6">
+<link rel="stylesheet" href="estilos/simple.css?v=1.0">
+<link rel="stylesheet" href="estilos/combinada.css?v=1.0">
+<link rel="stylesheet" href="estilos/crear-apuesta-combinada.css?v=1.0">
+<link rel="stylesheet" href="estilos/crear-apuesta-simple.css?v=1.0">
+<link rel="stylesheet" href="estilos/simple-option-bet.css?v=2.2">
+<link rel="stylesheet" href="estilos/patente.css?v=1.3">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- FORMULARIO -->
+  <div class="formulario-global">
+    <h2>➕ Agregar Nueva Apuesta</h2>
+
+    <div class="top-controls">
+      <div class="casa-select-group">
+        <div class="casa-select-stack">
+          <label class="casa-bankroll-label" for="casaApuesta">Casa de apuestas</label>
+          <select id="casaApuesta" onchange="window.cambiarCasaFormulario(this.value)">
+            <option value="casa_principal">Casa principal</option>
+          </select>
+          <label class="casa-filter-label" for="filtroCasa">Filtrar por casa</label>
+          <select id="filtroCasa" onchange="window.cambiarFiltroCasa(this.value)">
+            <option value="todas">Todas las casas</option>
+          </select>
+        </div>
+        <input type="number" id="bankroll" placeholder="Bankroll inicial" autocomplete="off">
+        <button id="btnBankroll">Guardar</button>
+        <div class="casa-delete-group">
+          <select id="casaEliminar">
+            <option value="">Casa a eliminar</option>
+          </select>
+          <button type="button" id="btnEliminarCasa">Eliminar casa</button>
+        </div>
+      </div>
+      <div class="casa-create-group">
+        <input type="text" id="nuevaCasa" placeholder="Nueva casa de apuestas" autocomplete="off">
+        <button type="button" id="btnCrearCasa">Crear casa</button>
+      </div>
+    </div>
+
+    <!-- Fila de campos numéricos -->
+    <div class="form-group">
+      <input type="date" id="fecha" autocomplete="off">
+      <input type="number" id="importe" placeholder="Importe" step="0.01" autocomplete="off">
+      <select id="resultado">
+        <option value="pendiente">Pendiente</option>
+        <option value="ganada">Ganada</option>
+        <option value="perdida">Perdida</option>
+        <option value="nula">Nula</option>
+      </select>
+    </div>
+
+    <!-- Tarjeta principal -->
+    <div id="tarjetaApuesta" class="tarjeta-apuesta" style="margin-top:12px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <select id="tipoApuesta" class="tipo-select-badge simple">
+          <option value="simple">SIMPLE</option>
+          <option value="combinada">COMBINADA</option>
+          <option value="patente">PATENTE</option>
+          <option value="crear_apuesta">CREAR APUESTA COMBINADA</option>
+          <option value="crear_apuesta_simple">CREAR APUESTA SIMPLE</option>
+          <option value="simple_option_bet">SIMPLE OPTION BET</option>
+        </select>
+        <span class="tarjeta-label">Detalle de la apuesta</span>
+      </div>
+
+      <!-- ── CAMPOS SIMPLE (visibles por defecto) ── -->
+      <div id="camposSimple" style="display:flex; flex-direction:column; gap:8px;">
+        <div id="eventosSimpleContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarPartidoSimple">➕ Agregar partido</button>
+      </div>
+
+      <!-- ── CAMPOS COMBINADA (ocultos por defecto) ── -->
+      <div id="camposCombinada" style="display:none; flex-direction:column; gap:8px;">
+        <input type="text" id="evento"
+          placeholder="Nombre de la combinada (Ej: Combinada MLB)"
+          class="evento-principal-input">
+        <div id="eventosContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarCampo">➕ Agregar partido</button>
+      </div>
+
+      <!-- ── CAMPOS CREAR APUESTA COMBINADA (ocultos por defecto) ── -->
+      <div id="camposPatente" style="display:none; flex-direction:column; gap:8px;">
+        <input type="text" id="eventoPatente"
+          placeholder="Nombre de la patente (Ej: Patente MLB)"
+          class="evento-principal-input">
+        <div id="eventosPatenteContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarSeleccionPatente">+ Agregar seleccion</button>
+      </div>
+
+      <div id="camposCrearApuesta" style="display:none; flex-direction:column; gap:8px;">
+        <div id="eventosCrearContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarPartidoCrear">➕ Agregar partido</button>
+      </div>
+
+      <!-- ── CAMPOS CREAR APUESTA SIMPLE (ocultos por defecto) ── -->
+      <div id="camposCrearApuestaSimple" style="display:none; flex-direction:column; gap:8px;">
+        <div id="eventosCrearSimpleContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarPartidoCrearSimple">➕ Agregar partido</button>
+      </div>
+
+      <div id="camposSimpleOptionBet" style="display:none; flex-direction:column; gap:8px;">
+        <div id="eventosSimpleOptionContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarPartidoSimpleOption">+ Agregar partido</button>
+      </div>
+    </div>
+
+
+    <div class="btn-group">
+      <button id="btnAgregar">Agregar</button>
+      <button id="btnEliminarTodo" class="eliminar">Eliminar Todo</button>
+    </div>
+
+  </div>
+
+  <!-- 👇 CONTENIDO DINÁMICO -->
+  <div id="contenido">
+    <div class="skeleton-box">
+      <div class="skeleton-title shimmer"></div>
+      <div class="skeleton-text shimmer" style="width: 40%;"></div>
+      <div class="skeleton-table shimmer"></div>
+    </div>
+    <div class="skeleton-box" style="opacity: 0.6;">
+      <div class="skeleton-title shimmer"></div>
+      <div class="skeleton-text shimmer" style="width: 30%;"></div>
+      <div class="skeleton-table shimmer"></div>
+    </div>
+  </div>
+
+
+</div>
+
+<!-- Modal de Validación Elegante -->
+<div id="val-modal" class="custom-modal-backdrop" style="display: none;">
+  <div class="custom-modal-content">
+    <div class="custom-modal-header">
+      <span class="custom-modal-icon">⚠️</span>
+      <h3 class="custom-modal-title">Campos Requeridos</h3>
+    </div>
+    <div class="custom-modal-body">
+      <p>Por favor, completa los siguientes campos para continuar:</p>
+      <ul id="val-modal-list" class="custom-modal-list">
+        <!-- Se llenará dinámicamente -->
+      </ul>
+    </div>
+    <div class="custom-modal-footer">
+      <button id="val-modal-close" class="custom-modal-btn">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<div id="casa-confirm-modal" class="custom-modal-backdrop" style="display: none;">
+  <div class="custom-modal-content casa-confirm-content">
+    <div class="custom-modal-header">
+      <span id="casa-confirm-icon" class="custom-modal-icon">⚠️</span>
+      <h3 id="casa-confirm-title" class="custom-modal-title">Eliminar casa</h3>
+    </div>
+    <div class="custom-modal-body">
+      <p id="casa-confirm-message"></p>
+      <strong id="casa-confirm-name" class="casa-confirm-name"></strong>
+    </div>
+    <div class="custom-modal-footer casa-confirm-footer">
+      <button type="button" id="casa-confirm-cancel" class="custom-modal-btn custom-modal-btn-secondary">Cancelar</button>
+      <button type="button" id="casa-confirm-ok" class="custom-modal-btn custom-modal-btn-danger">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<button id="btnArriba">↑ NUEVA APUESTA</button>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module" src="script/main.js?v=9.4"></script>
+
+</body>
+</html>
