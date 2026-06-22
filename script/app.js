@@ -578,6 +578,24 @@ function calcularEstadisticas() {
   };
 }
 
+function limpiarUndefinedFirestore(valor) {
+  if (Array.isArray(valor)) {
+    return valor
+      .filter(item => item !== undefined)
+      .map(item => limpiarUndefinedFirestore(item));
+  }
+
+  if (valor && typeof valor === "object") {
+    return Object.fromEntries(
+      Object.entries(valor)
+        .filter(([, item]) => item !== undefined)
+        .map(([clave, item]) => [clave, limpiarUndefinedFirestore(item)])
+    );
+  }
+
+  return valor;
+}
+
 function getSelectionsFromJugada(jugada) {
   if (typeof jugada !== "object" || !jugada) {
     return [{ titulo: "", jugada: jugada || "", estado: "pendiente" }];
@@ -2580,13 +2598,17 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
       return siguiente;
     });
 
+    const equiposMlb = detectarEquiposMlb(ev);
     const jugadaActualizada = {
       ...jugada,
-      autoMlb: jugada.autoMlb || (detectarEquiposMlb(ev).length >= 2
-        ? { deporte: "mlb", equipos: detectarEquiposMlb(ev).slice(0, 2) }
-        : undefined),
       selections
     };
+
+    if (jugada.autoMlb) {
+      jugadaActualizada.autoMlb = jugada.autoMlb;
+    } else if (equiposMlb.length >= 2) {
+      jugadaActualizada.autoMlb = { deporte: "mlb", equipos: equiposMlb.slice(0, 2) };
+    }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoMlb?.mercado === "total_carreras")?.autoMlb;
@@ -2665,7 +2687,7 @@ async function sincronizarResultadosMlb() {
       const updateData = aplicarResultadoMlbApuesta(apuesta, juegosPorFecha.get(fecha) || []);
       if (!updateData) continue;
 
-      await updateDoc(doc(db, "apuestas", apuesta.id), updateData);
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       actualizadas++;
     }
 
@@ -3009,9 +3031,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     const equipos = extraerEquiposEventoFutbol(ev);
     const jugadaActualizada = {
       ...jugada,
-      autoFutbol: jugada.autoFutbol || (equipos.length >= 2 ? { deporte: "futbol", equipos } : undefined),
       selections
     };
+
+    if (jugada.autoFutbol) {
+      jugadaActualizada.autoFutbol = jugada.autoFutbol;
+    } else if (equipos.length >= 2) {
+      jugadaActualizada.autoFutbol = { deporte: "futbol", equipos };
+    }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoFutbol?.mercado === "total_goles")?.autoFutbol;
@@ -3090,7 +3117,7 @@ async function sincronizarResultadosFutbol() {
       const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosPorFecha.get(fecha) || []);
       if (!updateData) continue;
 
-      await updateDoc(doc(db, "apuestas", apuesta.id), updateData);
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       actualizadas++;
     }
 
