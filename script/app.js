@@ -798,10 +798,10 @@ function escucharApuestas() {
       const totalPags = Math.ceil(diasUnicos.length / porPagina);
       paginaActual = totalPags || 1;
 
-      // Sincronizar en vivo inicialmente
+      // Sincronizar inicialmente de forma silenciosa
       setTimeout(() => {
-        sincronizarFutbolEnVivo().catch(e => console.warn("Error en sincronización en vivo inicial:", e));
-        sincronizarMlbEnVivo().catch(e => console.warn("Error en sincronización MLB en vivo inicial:", e));
+        sincronizarResultadosFutbol(true).catch(e => console.warn("Error en sincronización de fútbol inicial:", e));
+        sincronizarResultadosMlb(true).catch(e => console.warn("Error en sincronización MLB inicial:", e));
       }, 1000);
     }
 
@@ -3064,7 +3064,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
   };
 }
 
-async function sincronizarResultadosMlb() {
+async function sincronizarResultadosMlb(silencioso = false) {
   const candidatas = apuestas.filter(a =>
     apuestaPareceMlb(a) &&
     ((a.resultado || "pendiente") === "pendiente" || !apuestaTieneMarcadorMlb(a)) &&
@@ -3073,13 +3073,17 @@ async function sincronizarResultadosMlb() {
   );
 
   if (candidatas.length === 0) {
-    setMlbSyncStatus("No hay apuestas MLB para sincronizar.", "");
+    if (!silencioso) {
+      setMlbSyncStatus("No hay apuestas MLB para sincronizar.", "");
+    }
     return;
   }
 
   const btn = document.getElementById("btnSincronizarMlb");
-  if (btn) btn.disabled = true;
-  setMlbSyncStatus("Sincronizando resultados MLB...", "");
+  if (!silencioso) {
+    if (btn) btn.disabled = true;
+    setMlbSyncStatus("Sincronizando resultados MLB...", "");
+  }
 
   try {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
@@ -3118,15 +3122,19 @@ async function sincronizarResultadosMlb() {
       actualizadas++;
     }
 
-    setMlbSyncStatus(
-      `MLB sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
-      actualizadas > 0 ? "success" : ""
-    );
+    if (!silencioso) {
+      setMlbSyncStatus(
+        `MLB sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
+        actualizadas > 0 ? "success" : ""
+      );
+    }
   } catch (e) {
     console.error("Error sincronizando MLB:", e);
-    setMlbSyncStatus(`No se pudo sincronizar MLB: ${e.message}`, "error");
+    if (!silencioso) {
+      setMlbSyncStatus(`No se pudo sincronizar MLB: ${e.message}`, "error");
+    }
   } finally {
-    if (btn) btn.disabled = false;
+    if (!silencioso && btn) btn.disabled = false;
   }
 }
 
@@ -3800,7 +3808,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
   };
 }
 
-async function sincronizarResultadosFutbol() {
+async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatas = apuestas.filter(a =>
     apuestaPareceFutbol(a) &&
     (
@@ -3814,13 +3822,17 @@ async function sincronizarResultadosFutbol() {
   );
 
   if (candidatas.length === 0) {
-    setFootballSyncStatus("No hay apuestas de fútbol para sincronizar.", "");
+    if (!silencioso) {
+      setFootballSyncStatus("No hay apuestas de fútbol para sincronizar.", "");
+    }
     return;
   }
 
   const btn = document.getElementById("btnSincronizarFutbol");
-  if (btn) btn.disabled = true;
-  setFootballSyncStatus("Sincronizando resultados de fútbol...", "");
+  if (!silencioso) {
+    if (btn) btn.disabled = true;
+    setFootballSyncStatus("Sincronizando resultados de fútbol...", "");
+  }
 
   try {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
@@ -3847,89 +3859,23 @@ async function sincronizarResultadosFutbol() {
       actualizadas++;
     }
 
-    setFootballSyncStatus(
-      `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
-      actualizadas > 0 ? "success" : ""
-    );
+    if (!silencioso) {
+      setFootballSyncStatus(
+        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
+        actualizadas > 0 ? "success" : ""
+      );
+    }
   } catch (e) {
     console.error("Error sincronizando fútbol:", e);
-    setFootballSyncStatus(`No se pudo sincronizar fútbol: ${e.message}`, "error");
+    if (!silencioso) {
+      setFootballSyncStatus(`No se pudo sincronizar fútbol: ${e.message}`, "error");
+    }
   } finally {
-    if (btn) btn.disabled = false;
+    if (!silencioso && btn) btn.disabled = false;
   }
 }
 
-/* =========================
-   SINCRONIZACIÓN AUTOMÁTICA FÚTBOL EN VIVO (cada 20 min)
- ========================= */
 
-function juegoFutbolEnVivo(game) {
-  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
-  return (
-    !juegoFutbolFinalizado(game) &&
-    !juegoFutbolNoIniciado(game) &&
-    status.state === "in"
-  );
-}
-
-async function sincronizarFutbolEnVivo() {
-  // Solo apuestas de fútbol pendientes o con corners activos
-  const candidatasBase = apuestas.filter(a =>
-    apuestaPareceFutbol(a) &&
-    (
-      (a.resultado || "pendiente") === "pendiente" ||
-      !apuestaTieneMarcadorFutbol(a) ||
-      apuestaTieneMercadoCornersFutbol(a) ||
-      apuestaTieneCornersFutbolIncompletos(a)
-    ) &&
-    Array.isArray(a.jugadas) &&
-    a.jugadas.length > 0
-  );
-
-  if (candidatasBase.length === 0) return;
-
-  // Cargar los juegos de las fechas involucradas
-  const fechas = [...new Set(candidatasBase.map(a => a.fecha || a.dia).filter(Boolean))];
-  const juegosPorFecha = new Map();
-  for (const fecha of fechas) {
-    const fechasBusqueda = getFechasCercanas(fecha);
-    const juegos = [];
-    for (const fechaBusqueda of fechasBusqueda) {
-      juegos.push(...await cargarJuegosFutbolPorFecha(fechaBusqueda));
-    }
-    juegosPorFecha.set(fecha, juegos);
-  }
-
-  // Filtrar solo las apuestas que tienen al menos un partido EN VIVO ahora mismo
-  const candidatasEnVivo = candidatasBase.filter(apuesta => {
-    const fecha = apuesta.fecha || apuesta.dia;
-    const juegos = juegosPorFecha.get(fecha) || [];
-    return (apuesta.jugadas || []).some(jugada => {
-      if (typeof jugada !== "object" || !jugada) return false;
-      const ev = jugada.ev || jugada.evento || apuesta.evento || "";
-      return getSelectionsFromJugada(jugada).some(sel => {
-        const autoFutbol = sel.autoFutbol || crearAutoFutbolSeleccion({ evento: ev, titulo: sel.titulo || "", jugada: sel.jugada || "" });
-        if (!autoFutbol?.equipos) return false;
-        const game = buscarJuegoFutbol(juegos, autoFutbol.equipos);
-        return game ? juegoFutbolEnVivo(game) : false;
-      });
-    });
-  });
-
-  if (candidatasEnVivo.length === 0) return;
-
-  // Sincronizar silenciosamente las apuestas en vivo
-  for (const apuesta of candidatasEnVivo) {
-    try {
-      const fecha = apuesta.fecha || apuesta.dia;
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosPorFecha.get(fecha) || []);
-      if (!updateData) continue;
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
-    } catch (e) {
-      console.warn("Auto-sync fútbol en vivo - error en apuesta:", apuesta.id, e.message);
-    }
-  }
-}
 
 let _autoSyncFutbolIntervalId = null;
 
@@ -3938,94 +3884,14 @@ function startAutoSyncFutbol() {
   const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
   _autoSyncFutbolIntervalId = setInterval(async () => {
     try {
-      await sincronizarFutbolEnVivo();
+      await sincronizarResultadosFutbol(true);
     } catch (e) {
-      console.warn("Auto-sync fútbol en vivo - error general:", e.message);
+      console.warn("Auto-sync fútbol - error general:", e.message);
     }
   }, INTERVALO_MS);
 }
 
-/* =========================
-   SINCRONIZACIÓN AUTOMÁTICA MLB EN VIVO (cada 20 min)
- ========================= */
 
-function juegoMlbEnVivo(game) {
-  const abstractState = game?.status?.abstractGameState || "";
-  const detailedState = game?.status?.detailedState || "";
-  return (
-    !juegoMlbFinalizado(game) &&
-    (abstractState === "Live" || /\b(in progress|en progreso|en vivo)\b/i.test(detailedState))
-  );
-}
-
-async function sincronizarMlbEnVivo() {
-  // Solo apuestas de MLB pendientes o sin marcador
-  const candidatasBase = apuestas.filter(a =>
-    apuestaPareceMlb(a) &&
-    (
-      (a.resultado || "pendiente") === "pendiente" ||
-      !apuestaTieneMarcadorMlb(a)
-    ) &&
-    Array.isArray(a.jugadas) &&
-    a.jugadas.length > 0
-  );
-
-  if (candidatasBase.length === 0) return;
-
-  // Cargar los juegos de las fechas involucradas
-  const fechas = [...new Set(candidatasBase.map(a => a.fecha || a.dia).filter(Boolean))];
-  const juegosPorFecha = new Map();
-  const juegosEspnPorFecha = new Map();
-  for (const fecha of fechas) {
-    const fechasBusqueda = getFechasCercanas(fecha);
-    const juegos = [];
-    const juegosEspn = [];
-    for (const fechaBusqueda of fechasBusqueda) {
-      juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
-      try {
-        juegosEspn.push(...await cargarJuegosEspnMlbPorFecha(fechaBusqueda));
-      } catch (e) {
-        console.warn("Auto-sync MLB en vivo - no se pudo cargar ESPN MLB:", fechaBusqueda, e.message);
-      }
-    }
-    juegosPorFecha.set(fecha, juegos);
-    juegosEspnPorFecha.set(fecha, juegosEspn);
-  }
-
-  // Filtrar solo las apuestas que tienen al menos un partido EN VIVO ahora mismo
-  const candidatasEnVivo = candidatasBase.filter(apuesta => {
-    const fecha = apuesta.fecha || apuesta.dia;
-    const juegos = juegosPorFecha.get(fecha) || [];
-    return (apuesta.jugadas || []).some(jugada => {
-      if (typeof jugada !== "object" || !jugada) return false;
-      const ev = jugada.ev || jugada.evento || apuesta.evento || "";
-      return getSelectionsFromJugada(jugada).some(sel => {
-        const autoMlb = sel.autoMlb || crearAutoMlbSeleccion({ evento: ev, titulo: sel.titulo || "", jugada: sel.jugada || "" });
-        if (!autoMlb?.equipos) return false;
-        const game = buscarJuegoMlb(juegos, autoMlb.equipos);
-        return game ? juegoMlbEnVivo(game) : false;
-      });
-    });
-  });
-
-  if (candidatasEnVivo.length === 0) return;
-
-  // Sincronizar silenciosamente las apuestas en vivo
-  for (const apuesta of candidatasEnVivo) {
-    try {
-      const fecha = apuesta.fecha || apuesta.dia;
-      const updateData = aplicarResultadoMlbApuesta(
-        apuesta,
-        juegosPorFecha.get(fecha) || [],
-        juegosEspnPorFecha.get(fecha) || []
-      );
-      if (!updateData) continue;
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
-    } catch (e) {
-      console.warn("Auto-sync MLB en vivo - error en apuesta:", apuesta.id, e.message);
-    }
-  }
-}
 
 let _autoSyncMlbIntervalId = null;
 
@@ -4034,9 +3900,9 @@ function startAutoSyncMlb() {
   const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
   _autoSyncMlbIntervalId = setInterval(async () => {
     try {
-      await sincronizarMlbEnVivo();
+      await sincronizarResultadosMlb(true);
     } catch (e) {
-      console.warn("Auto-sync MLB en vivo - error general:", e.message);
+      console.warn("Auto-sync MLB - error general:", e.message);
     }
   }, INTERVALO_MS);
 }
