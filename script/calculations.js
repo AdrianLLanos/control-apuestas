@@ -120,6 +120,11 @@ function getPatenteSelections(jugadas = []) {
   });
 }
 
+function getCuotaAplicablePatente(item) {
+  if (item.estado === "nula") return 1;
+  return item.cuota > 0 ? item.cuota : 0;
+}
+
 function forEachPatenteCombination(items, callback) {
   const combo = [];
 
@@ -145,11 +150,11 @@ export function calcularCuotaMaximaPatente(jugadas = []) {
   const selecciones = getPatenteSelections(jugadas);
   const totalCombinaciones = contarCombinacionesPatente(selecciones.length);
   if (!totalCombinaciones) return 0;
-  if (selecciones.some(item => item.cuota <= 0)) return 0;
+  if (selecciones.some(item => getCuotaAplicablePatente(item) <= 0)) return 0;
 
   let sumaProductos = 0;
   forEachPatenteCombination(selecciones, combo => {
-    const producto = combo.reduce((acc, item) => acc * item.cuota, 1);
+    const producto = combo.reduce((acc, item) => acc * getCuotaAplicablePatente(item), 1);
     sumaProductos += producto;
   });
 
@@ -191,11 +196,10 @@ export function calcularDetallePatente(apuesta) {
       retorno += importePorCombinacion;
       return;
     }
-    if (ganadas < 2) return;
+    if (ganadas < 1) return;
 
     const producto = combo.reduce((acc, item) => {
-      const cuota = item.estado === "nula" ? 1 : item.cuota;
-      return acc * (cuota > 0 ? cuota : 0);
+      return acc * getCuotaAplicablePatente(item);
     }, 1);
 
     retorno += importePorCombinacion * producto;

@@ -184,6 +184,43 @@ button {
     font-weight: 600;
 }
 
+.bet-status-message {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.25;
+    font-weight: 700;
+    color: #93c5fd;
+    text-decoration: none;
+    opacity: 1;
+}
+
+.bet-status-message--refund {
+    color: #86efac;
+}
+
+.bet-status-message strong {
+    color: inherit;
+    font-weight: 800;
+}
+
+.bet-status-refund {
+    display: inline-flex;
+    align-items: center;
+    min-height: 18px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.16);
+    border: 1px solid rgba(34, 197, 94, 0.38);
+    color: #86efac;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: lowercase;
+}
+
 /* eliminar tabla */
 .btn-eliminar-tabla {
     background: #ff3b3b !important;

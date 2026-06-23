@@ -700,6 +700,12 @@ function recalcularCuotaCombinada(jugadas = []) {
   return tieneCuotas ? parseFloat(cuotaTotal.toFixed(2)) : 0;
 }
 
+function debeRecalcularCuotaCombinada(tipoApuesta) {
+  return tipoApuesta === "combinada" ||
+    tipoApuesta === "crear_apuesta" ||
+    tipoApuesta === "crear_apuesta_simple";
+}
+
 /* =========================
    FIREBASE LIVE
  ========================= */
@@ -761,6 +767,15 @@ function escucharApuestas() {
         if (Object.keys(updateData).length > 0) {
           updateDoc(doc(db, "apuestas", a.id), updateData)
             .catch(err => console.error("Error al auto-corregir patente:", err));
+        }
+      }
+
+      if (debeRecalcularCuotaCombinada(a.tipoApuesta) && Array.isArray(a.jugadas) && a.jugadas.length > 0) {
+        const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
+        if (cuotaRecalculada > 0 && formatDecimal(a.cuota) !== formatDecimal(cuotaRecalculada)) {
+          a.cuota = cuotaRecalculada;
+          updateDoc(doc(db, "apuestas", a.id), { cuota: cuotaRecalculada })
+            .catch(err => console.error("Error al auto-corregir cuota combinada:", err));
         }
       }
 
@@ -2384,6 +2399,12 @@ async function cambiarEstado(id, nuevoEstado) {
       if (a.tipoApuesta === "patente") {
         a.cuota = calcularCuotaMaximaPatente(a.jugadas);
         updatedCuota = a.cuota;
+      } else if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
+        const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
+        if (cuotaRecalculada > 0) {
+          a.cuota = cuotaRecalculada;
+          updatedCuota = a.cuota;
+        }
       }
     }
   }
@@ -2502,6 +2523,77 @@ function apuestaTieneMarcadorMlb(apuesta) {
   );
 }
 
+function normalizarEstadoExternoTexto(...partes) {
+  return partes
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function detectarEstadoEspecialTexto({ estado = "", motivo = "", clima = "", proveedor = "" } = {}) {
+  const texto = normalizarEstadoExternoTexto(estado, motivo, clima);
+  if (!texto) return null;
+
+  const esCancelado = /\b(cancelled|canceled|cancelado|cancelada|abandoned|abandonado|abandonada)\b/.test(texto);
+  const esPospuesto = /\b(postponed|pospuesto|pospuesta|aplazado|aplazada)\b/.test(texto);
+  const esRetrasado = /\b(delayed|delay|retrasado|retrasada|demorado|demorada|weather delay|rain delay)\b/.test(texto);
+  const esSuspendido = /\b(suspended|suspendido|suspendida)\b/.test(texto);
+  if (!esCancelado && !esPospuesto && !esRetrasado && !esSuspendido) return null;
+
+  const motivoOriginal = motivo || clima || "";
+  const motivoNormalizado = normalizarEstadoExternoTexto(motivoOriginal, clima);
+  const motivoLimpio = /\b(rain|weather|clima|climatic|inclement|wet grounds|thunder|lightning|storm)\b/.test(motivoNormalizado)
+    ? "Por Condiciones Climaticas"
+    : motivoOriginal;
+  const tipo = esCancelado ? "cancelado" : esPospuesto ? "pospuesto" : esSuspendido ? "suspendido" : "retrasado";
+  const labelBase = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
+  return {
+    tipo,
+    proveedor,
+    accion: (esCancelado || esPospuesto) ? "nula" : "pendiente",
+    motivo: motivoLimpio,
+    estado: labelBase,
+    reembolso: esCancelado || esPospuesto,
+    label: motivoLimpio ? `${labelBase}: ${motivoLimpio}` : labelBase
+  };
+}
+
+function getEstadoEspecialMlb(game) {
+  const status = game?.status || {};
+  return detectarEstadoEspecialTexto({
+    proveedor: "mlb_stats_api",
+    estado: [
+      status.abstractGameState,
+      status.detailedState,
+      status.statusCode,
+      status.codedGameState
+    ].filter(Boolean).join(" "),
+    motivo: status.reason || "",
+    clima: status.reason || ""
+  });
+}
+
+function getEstadoEspecialEspn(event, proveedor = "espn") {
+  const status = event?.status?.type || event?.competitions?.[0]?.status?.type || {};
+  const notes = event?.competitions?.[0]?.notes?.headline || event?.notes?.headline || "";
+  const weather = event?.weather?.displayValue || "";
+  return detectarEstadoEspecialTexto({
+    proveedor,
+    estado: [
+      status.name,
+      status.description,
+      status.detail,
+      status.shortDetail,
+      event?.status?.displayClock
+    ].filter(Boolean).join(" "),
+    motivo: notes,
+    clima: weather
+  });
+}
+
 async function cargarJuegosMlbPorFecha(fecha) {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore`;
   const response = await fetch(url);
@@ -2511,6 +2603,16 @@ async function cargarJuegosMlbPorFecha(fecha) {
 
   const data = await response.json();
   return (data.dates || []).flatMap(d => d.games || []);
+}
+
+async function cargarJuegosEspnMlbPorFecha(fecha) {
+  const date = String(fecha).replace(/-/g, "");
+  const url = `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx`;
+  const response = await fetch(url);
+  if (!response.ok) return [];
+
+  const data = await response.json();
+  return data.events || [];
 }
 
 function buscarJuegoMlb(juegos = [], equipos = []) {
@@ -2523,6 +2625,18 @@ function buscarJuegoMlb(juegos = [], equipos = []) {
       game?.teams?.away?.team?.name
     ].map(normalizarClaveMlb);
     return buscados.every(equipo => nombres.includes(equipo));
+  }) || null;
+}
+
+function buscarJuegoEspnMlb(juegos = [], equipos = []) {
+  if (!Array.isArray(equipos) || equipos.length < 2) return null;
+  const buscados = equipos.map(normalizarClaveMlb);
+
+  return juegos.find(event => {
+    const nombres = (event?.competitions?.[0]?.competitors || [])
+      .map(item => item?.team?.displayName || item?.team?.name || item?.team?.shortDisplayName || item?.team?.abbreviation || "")
+      .map(normalizarClaveMlb);
+    return buscados.every(equipo => nombres.some(nombre => nombre === equipo || nombre.includes(equipo) || equipo.includes(nombre)));
   }) || null;
 }
 
@@ -2627,7 +2741,7 @@ function evaluarAutoMlb(autoMlb, game) {
   return null;
 }
 
-function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
+function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   let huboCambio = false;
   let huboCambioMetadata = false;
@@ -2647,6 +2761,31 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
 
       if (!autoMlbOriginal) huboCambioMetadata = true;
       const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos);
+      const estadoEspecial = getEstadoEspecialMlb(game) || getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard");
+      if (estadoEspecial) {
+        const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
+        if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
+        if (
+          autoMlb.estadoJuego !== estadoEspecial.label ||
+          autoMlb.estadoEspecial?.tipo !== estadoEspecial.tipo ||
+          autoMlb.estadoEspecial?.motivo !== estadoEspecial.motivo
+        ) {
+          huboCambioMetadata = true;
+        }
+        return {
+          ...sel,
+          estado: siguienteEstado,
+          autoMlb: {
+            ...autoMlb,
+            gamePk: game?.gamePk ?? autoMlb.gamePk,
+            espnId: espnGame?.id ?? autoMlb.espnId,
+            estadoJuego: estadoEspecial.label,
+            estadoEspecial,
+            marcador: autoMlb.marcador
+          }
+        };
+      }
       if (!game) return { ...sel, autoMlb };
 
       const evaluacion = evaluarAutoMlb(autoMlb, game);
@@ -2665,6 +2804,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
             ...autoMlb,
             gamePk: game.gamePk,
             estadoJuego,
+            estadoEspecial: null,
             marcador: marcadorTexto,
             totalCarreras: marcador?.total
           }
@@ -2678,6 +2818,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
           ...autoMlb,
           gamePk: game.gamePk,
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
+          estadoEspecial: null,
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           totalCarreras: evaluacion.marcador.total,
           sincronizadoEn: Date.now()
@@ -2734,7 +2875,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
     cuota = calcularCuotaMaximaPatente(nuevasJugadas);
   } else if (apuesta.tipoApuesta === "simple_option_bet") {
     cuota = calcularCuotaSimpleOptionBet(apuestaTemp) || apuesta.cuota;
-  } else if (apuesta.tipoApuesta !== "simple") {
+  } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
     const cuotaRecalculada = recalcularCuotaCombinada(nuevasJugadas);
     if (cuotaRecalculada > 0) cuota = cuotaRecalculada;
   }
@@ -2771,13 +2912,21 @@ async function sincronizarResultadosMlb() {
   try {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
     const juegosPorFecha = new Map();
+    const juegosEspnPorFecha = new Map();
     for (const fecha of fechas) {
       const fechasBusqueda = getFechasCercanas(fecha);
       const juegos = [];
+      const juegosEspn = [];
       for (const fechaBusqueda of fechasBusqueda) {
         juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
+        try {
+          juegosEspn.push(...await cargarJuegosEspnMlbPorFecha(fechaBusqueda));
+        } catch (e) {
+          console.warn("No se pudo cargar ESPN MLB:", fechaBusqueda, e);
+        }
       }
       juegosPorFecha.set(fecha, juegos);
+      juegosEspnPorFecha.set(fecha, juegosEspn);
     }
 
     let actualizadas = 0;
@@ -2786,7 +2935,11 @@ async function sincronizarResultadosMlb() {
     for (const apuesta of candidatas) {
       revisadas++;
       const fecha = apuesta.fecha || apuesta.dia;
-      const updateData = aplicarResultadoMlbApuesta(apuesta, juegosPorFecha.get(fecha) || []);
+      const updateData = aplicarResultadoMlbApuesta(
+        apuesta,
+        juegosPorFecha.get(fecha) || [],
+        juegosEspnPorFecha.get(fecha) || []
+      );
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
@@ -2808,12 +2961,20 @@ async function sincronizarResultadosMlb() {
 function getAutoMlbMarcadorHtml(selection = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
-  if (!marcador) return "";
+  const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
     ? ` · Carreras: ${escapeHtml(totalCarreras)}`
     : "";
-  return `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`;
+  const marcadorHtml = marcador
+    ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`
+    : "";
+
+  if (estadoEspecialHtml) return `${marcadorHtml}${estadoEspecialHtml}`;
+  if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
+    return `<div class="auto-mlb-score">${escapeHtml(autoMlb.estadoJuego)}</div>`;
+  }
+  return marcadorHtml;
 }
 
 const FOOTBALL_LEAGUES = [
@@ -3246,6 +3407,32 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         continue;
       }
 
+      const estadoEspecial = getEstadoEspecialEspn(game, "espn_soccer_scoreboard");
+      if (estadoEspecial) {
+        const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
+        if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
+        if (
+          autoFutbol.estadoJuego !== estadoEspecial.label ||
+          autoFutbol.estadoEspecial?.tipo !== estadoEspecial.tipo ||
+          autoFutbol.estadoEspecial?.motivo !== estadoEspecial.motivo
+        ) {
+          huboCambioMetadata = true;
+        }
+        selections.push({
+          ...sel,
+          estado: siguienteEstado,
+          autoFutbol: {
+            ...autoFutbol,
+            id: game.id,
+            liga: game.leagueLabel,
+            estadoJuego: estadoEspecial.label,
+            estadoEspecial,
+            marcador: autoFutbol.marcador
+          }
+        });
+        continue;
+      }
+
       const summary = autoFutbol.mercado === "total_corners" ? await cargarResumenFutbol(game) : null;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
@@ -3277,6 +3464,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             id: game.id,
             liga: game.leagueLabel,
             estadoJuego,
+            estadoEspecial: null,
             marcador: marcadorTexto,
             totalCorners,
             cornersEquipo: cornersEquipo || null
@@ -3293,6 +3481,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           id: game.id,
           liga: game.leagueLabel,
           estadoJuego: game?.status?.type?.detail || game?.status?.type?.description || "Final",
+          estadoEspecial: null,
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
@@ -3360,7 +3549,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     cuota = calcularCuotaMaximaPatente(nuevasJugadas);
   } else if (apuesta.tipoApuesta === "simple_option_bet") {
     cuota = calcularCuotaSimpleOptionBet(apuestaTemp) || apuesta.cuota;
-  } else if (apuesta.tipoApuesta !== "simple" && apuesta.tipoApuesta !== "simple_option_bet") {
+  } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
     const cuotaRecalculada = recalcularCuotaCombinada(nuevasJugadas);
     if (cuotaRecalculada > 0) cuota = cuotaRecalculada;
   }
@@ -3438,8 +3627,15 @@ async function sincronizarResultadosFutbol() {
 
 function getAutoFutbolMarcadorHtml(selection = {}) {
   const futbolAuto = selection?.autoFutbol || {};
+  const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
+  if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
+
   if (futbolAuto.mercado === "total_corners") {
     const marcador = futbolAuto.marcador;
+    if (marcador && estadoEspecialHtml) {
+      return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
+    }
+
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
@@ -3471,6 +3667,13 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
   }
 
   const marcadorActual = futbolAuto.marcador;
+  if (estadoEspecialHtml) {
+    const marcadorHtml = marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "";
+    return `${marcadorHtml}${estadoEspecialHtml}`;
+  }
+  if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
+    return `<div class="auto-mlb-score">${escapeHtml(futbolAuto.estadoJuego)}</div>`;
+  }
   if (!marcadorActual) return "";
   return `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>`;
 }
@@ -3631,16 +3834,8 @@ async function guardarEdicion(id) {
       if (nuevasJugadas.length > 0) {
         nuevasJugadas[0].c = nuevaCuota;
       }
-    } else if (nuevoTipo === "combinada" || nuevoTipo === "crear_apuesta" || nuevoTipo === "crear_apuesta_simple") {
-      let cuotaCalculada = 1;
-      let tieneCuotas = false;
-      nuevasJugadas.forEach(j => {
-        if (j.c > 0) {
-          cuotaCalculada *= j.c;
-          tieneCuotas = true;
-        }
-      });
-      nuevaCuota = tieneCuotas ? parseFloat(cuotaCalculada.toFixed(2)) : 0;
+    } else if (debeRecalcularCuotaCombinada(nuevoTipo)) {
+      nuevaCuota = recalcularCuotaCombinada(nuevasJugadas);
     } else {
       const cuotaEl = document.getElementById(`edit-cuota-${id}`);
       if (cuotaEl) {
@@ -3896,6 +4091,25 @@ function getEstadoSeleccionIconHtml(estado = "pendiente") {
   return `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:${item.bg}; color:${item.color}; font-size:12px; cursor:pointer; transition:background-color 160ms ease, color 160ms ease, transform 160ms ease;" title="${item.title}">${item.symbol}</span>`;
 }
 
+function getEstadoEspecialApuestaHtml(auto = {}) {
+  const estadoEspecial = auto?.estadoEspecial;
+  if (!estadoEspecial) return "";
+
+  const estado = estadoEspecial.estado || estadoEspecial.tipo || "Estado";
+  const razon = estadoEspecial.motivo || "";
+  const reembolsoHtml = estadoEspecial.reembolso
+    ? `<span class="bet-status-refund">Reembolso</span>`
+    : "";
+
+  return `
+    <div class="bet-status-message ${estadoEspecial.reembolso ? "bet-status-message--refund" : ""}">
+      <span>Estado: <strong>${escapeHtml(estado)}</strong></span>
+      ${razon ? `<span>Razon: <strong>${escapeHtml(razon)}</strong></span>` : ""}
+      ${reembolsoHtml}
+    </div>
+  `;
+}
+
 function actualizarSeleccionEstadoDom(apuesta, matchIndex, selIndex) {
   const selection = apuesta?.jugadas?.[matchIndex]?.selections?.[selIndex];
   if (!selection) return;
@@ -4103,8 +4317,9 @@ function _render() {
               iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
+              const tieneEstadoEspecial = Boolean(sel.autoMlb?.estadoEspecial || sel.autoFutbol?.estadoEspecial);
               let styleMod = "";
-              if (jEstado === "nula") styleMod = "text-decoration: line-through; opacity: 0.6;";
+              if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
               // En multi-slot, la primera selección de cada slot muestra el nombre del partido
               const formattedEvText = formatTextWithCorners(evText);
@@ -4210,8 +4425,9 @@ function _render() {
 
               const estadoIcon = (isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
+              const tieneEstadoEspecial = Boolean(sel.autoMlb?.estadoEspecial || sel.autoFutbol?.estadoEspecial);
               let styleMod = "";
-              if (jEstado === "nula") styleMod = "text-decoration: line-through; opacity: 0.6;";
+              if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
@@ -5266,9 +5482,13 @@ window.calcularCuotaEditCombinada = function (id) {
 
   if (tipoApuesta === "patente") {
     const jugadas = [];
-    document.querySelectorAll(`.edit-jugada-slot-${id}`).forEach(slot => {
+    const apuestaOriginal = apuestas.find(a => a.id === id);
+    document.querySelectorAll(`.edit-jugada-slot-${id}`).forEach((slot, index) => {
       const c = parseFloat(slot.querySelector(".edit-jugada-cuota-input")?.value);
-      jugadas.push({ c: c || 0, selections: [{ estado: "ganada" }] });
+      const estado = apuestaOriginal?.jugadas?.[index]
+        ? determinarEstadoJugada(apuestaOriginal.jugadas[index])
+        : "ganada";
+      jugadas.push({ c: c || 0, selections: [{ estado }] });
     });
 
     const cuotaMain = document.getElementById(`edit-cuota-${id}`);
@@ -5280,8 +5500,13 @@ window.calcularCuotaEditCombinada = function (id) {
 
   let total = 1;
   let hasVal = false;
-  document.querySelectorAll(`.edit-jugada-slot-${id} .edit-jugada-cuota-input`).forEach(input => {
-    const val = parseFloat(input.value);
+  const apuestaOriginal = apuestas.find(a => a.id === id);
+  document.querySelectorAll(`.edit-jugada-slot-${id}`).forEach((slot, index) => {
+    const input = slot.querySelector(".edit-jugada-cuota-input");
+    const estado = apuestaOriginal?.jugadas?.[index]
+      ? determinarEstadoJugada(apuestaOriginal.jugadas[index])
+      : "ganada";
+    const val = estado === "nula" ? 1 : parseFloat(input?.value);
     if (!isNaN(val) && val > 0) {
       total *= val;
       hasVal = true;
@@ -5377,7 +5602,7 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
   const overallResultado = recalcularResultadoApuesta(apuesta);
   const nuevaCuotaTotal = recalcularCuotaCombinada(apuesta.jugadas);
   apuesta.resultado = overallResultado;
-  if (apuesta.tipoApuesta !== 'simple' && nuevaCuotaTotal > 0) {
+  if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta) && nuevaCuotaTotal > 0) {
     apuesta.cuota = nuevaCuotaTotal;
   }
 
