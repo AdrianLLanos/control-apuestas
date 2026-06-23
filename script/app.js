@@ -2912,6 +2912,12 @@ function apuestaTieneCornersFutbolIncompletos(apuesta) {
   );
 }
 
+function apuestaTieneMercadoCornersFutbol(apuesta) {
+  return (apuesta?.jugadas || []).some(j =>
+    (j?.selections || []).some(sel => sel?.autoFutbol?.mercado === "total_corners")
+  );
+}
+
 function fechaEspn(fecha = "") {
   return String(fecha).replace(/-/g, "");
 }
@@ -3377,6 +3383,7 @@ async function sincronizarResultadosFutbol() {
     (
       (a.resultado || "pendiente") === "pendiente" ||
       !apuestaTieneMarcadorFutbol(a) ||
+      apuestaTieneMercadoCornersFutbol(a) ||
       apuestaTieneCornersFutbolIncompletos(a)
     ) &&
     Array.isArray(a.jugadas) &&
