@@ -1287,7 +1287,7 @@ function enriquecerJugadasAutoMlb(jugadas = [], deporte = "") {
 }
 
 function normalizarClaveFutbol(value = "") {
-  return String(value)
+  const normalizado = String(value)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -1296,6 +1296,7 @@ function normalizarClaveFutbol(value = "") {
     .replace(/\b(fc|cf|club|deportivo|the)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  return aplicarAliasFutbol(normalizado);
 }
 
 function extraerEquiposEventoFutbol(evento = "") {
@@ -1373,6 +1374,17 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
       mercado: "ambos_marcan",
       equipos,
       seleccion: detectarSiNo(textoCompleto) || "si"
+    };
+  }
+
+  if (/\bempate\b/.test(normalizado) && (/\bo\b/.test(normalizado) || /\//.test(textoCompleto))) {
+    const seleccionEquipo = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
+    return {
+      deporte: "futbol",
+      mercado: "doble_oportunidad",
+      equipos,
+      seleccionEquipo,
+      incluyeEmpate: true
     };
   }
 
@@ -2732,6 +2744,10 @@ function getAutoMlbMarcadorHtml(selection = {}) {
 
 const FOOTBALL_LEAGUES = [
   { slug: "fifa.world", label: "FIFA" },
+  { slug: "fifa.friendly", label: "Amistosos internacionales" },
+  { slug: "fifa.worldq", label: "Eliminatorias mundialistas" },
+  { slug: "uefa.euro", label: "Eurocopa" },
+  { slug: "uefa.nations", label: "UEFA Nations League" },
   { slug: "uefa.champions", label: "Champions League" },
   { slug: "uefa.europa", label: "Europa League" },
   { slug: "eng.1", label: "Premier League" },
@@ -2742,6 +2758,46 @@ const FOOTBALL_LEAGUES = [
   { slug: "conmebol.libertadores", label: "Libertadores" },
   { slug: "conmebol.sudamericana", label: "Sudamericana" }
 ];
+
+const FOOTBALL_TEAM_ALIASES = [
+  ["francia", "france"],
+  ["irak", "iraq"],
+  ["alemania", "germany"],
+  ["espana", "spain"],
+  ["inglaterra", "england"],
+  ["paises bajos", "netherlands"],
+  ["holanda", "netherlands"],
+  ["belgica", "belgium"],
+  ["suiza", "switzerland"],
+  ["croacia", "croatia"],
+  ["marruecos", "morocco"],
+  ["japon", "japan"],
+  ["corea del sur", "south korea"],
+  ["estados unidos", "united states"],
+  ["eeuu", "united states"],
+  ["mexico", "mexico"],
+  ["brasil", "brazil"],
+  ["argentina", "argentina"],
+  ["uruguay", "uruguay"],
+  ["colombia", "colombia"],
+  ["chile", "chile"],
+  ["peru", "peru"],
+  ["ecuador", "ecuador"],
+  ["bolivia", "bolivia"],
+  ["paraguay", "paraguay"],
+  ["venezuela", "venezuela"]
+];
+
+function aplicarAliasFutbol(normalizado = "") {
+  let texto = normalizado;
+  FOOTBALL_TEAM_ALIASES
+    .sort((a, b) => b[0].length - a[0].length)
+    .forEach(([alias, oficial]) => {
+      const pattern = new RegExp(`(^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g");
+      texto = texto.replace(pattern, (_, prefix) => `${prefix}${oficial}`);
+    });
+  return texto.replace(/\s+/g, " ").trim();
+}
 
 function setFootballSyncStatus(message = "", type = "") {
   const el = document.getElementById("footballSyncStatus");
@@ -2774,6 +2830,17 @@ function apuestaTieneMarcadorFutbol(apuesta) {
 
 function fechaEspn(fecha = "") {
   return String(fecha).replace(/-/g, "");
+}
+
+function getFechasCercanas(fecha = "") {
+  const base = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return [fecha].filter(Boolean);
+
+  return [-1, 0, 1].map(offset => {
+    const date = new Date(base);
+    date.setDate(base.getDate() + offset);
+    return date.toISOString().slice(0, 10);
+  });
 }
 
 async function cargarJuegosFutbolPorFecha(fecha) {
@@ -2921,6 +2988,20 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
     if (marcador.home === marcador.away) {
       return { estado: autoFutbol.seleccion === "empate" ? "ganada" : "perdida", marcador };
     }
+
+    const ganador = marcador.home > marcador.away ? marcador.homeTeam : marcador.awayTeam;
+    return {
+      estado: normalizarClaveFutbol(ganador).includes(normalizarClaveFutbol(autoFutbol.seleccionEquipo)) ||
+        normalizarClaveFutbol(autoFutbol.seleccionEquipo).includes(normalizarClaveFutbol(ganador))
+        ? "ganada"
+        : "perdida",
+      marcador
+    };
+  }
+
+  if (autoFutbol.mercado === "doble_oportunidad") {
+    if (!finalizado) return null;
+    if (marcador.home === marcador.away) return { estado: "ganada", marcador };
 
     const ganador = marcador.home > marcador.away ? marcador.homeTeam : marcador.awayTeam;
     return {
@@ -3151,7 +3232,12 @@ async function sincronizarResultadosFutbol() {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
-      juegosPorFecha.set(fecha, await cargarJuegosFutbolPorFecha(fecha));
+      const fechasBusqueda = getFechasCercanas(fecha);
+      const juegos = [];
+      for (const fechaBusqueda of fechasBusqueda) {
+        juegos.push(...await cargarJuegosFutbolPorFecha(fechaBusqueda));
+      }
+      juegosPorFecha.set(fecha, juegos);
     }
 
     let actualizadas = 0;
