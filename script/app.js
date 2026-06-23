@@ -1234,6 +1234,20 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     }
   }
 
+  if (/\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado)) {
+    const linea = extraerNumeroJugada(textoCompleto);
+    const tipoTotal = detectarLadoTotal(textoCompleto);
+    if (linea !== null && tipoTotal) {
+      return {
+        deporte: "mlb",
+        mercado: "total_carreras",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        tipoTotal,
+        linea
+      };
+    }
+  }
+
   if (tienePalabraMercado(normalizado, ["ambos", "anotan", "marcan"])) {
     const seleccion = detectarSiNo(textoCompleto) || "si";
     return {
@@ -2707,7 +2721,12 @@ async function sincronizarResultadosMlb() {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
-      juegosPorFecha.set(fecha, await cargarJuegosMlbPorFecha(fecha));
+      const fechasBusqueda = getFechasCercanas(fecha);
+      const juegos = [];
+      for (const fechaBusqueda of fechasBusqueda) {
+        juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
+      }
+      juegosPorFecha.set(fecha, juegos);
     }
 
     let actualizadas = 0;
