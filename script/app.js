@@ -2581,6 +2581,14 @@ function esEstadoJuegoReembolso(estadoJuego = "") {
   return /\b(postponed|pospuesto|pospuesta|aplazado|aplazada|cancelled|canceled|cancelado|cancelada|abandoned|abandonado|abandonada)\b/.test(normalizado);
 }
 
+function getRazonReembolsoLegacy(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  if (/\b(postponed|pospuesto|pospuesta|aplazado|aplazada|rain|weather|clima|inclement|wet grounds|thunder|lightning|storm)\b/.test(normalizado)) {
+    return "Por Condiciones Climaticas";
+  }
+  return "Partido cancelado";
+}
+
 function getEstadoEspecialMlb(game) {
   const status = game?.status || {};
   return detectarEstadoEspecialTexto({
@@ -2612,6 +2620,19 @@ function getEstadoEspecialEspn(event, proveedor = "espn") {
     motivo: notes,
     clima: weather
   });
+}
+
+function combinarEstadoEspecial(estadoPrincipal, estadoRespaldo) {
+  if (!estadoPrincipal) return estadoRespaldo || null;
+  if (!estadoRespaldo?.motivo || estadoPrincipal.motivo) return estadoPrincipal;
+
+  const motivo = estadoRespaldo.motivo;
+  return {
+    ...estadoPrincipal,
+    motivo,
+    label: motivo ? `${estadoPrincipal.estado || estadoPrincipal.tipo}: ${motivo}` : estadoPrincipal.label,
+    proveedor: `${estadoPrincipal.proveedor}+${estadoRespaldo.proveedor}`
+  };
 }
 
 async function cargarJuegosMlbPorFecha(fecha) {
@@ -2782,7 +2803,10 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       if (!autoMlbOriginal) huboCambioMetadata = true;
       const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos);
       const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos);
-      const estadoEspecial = getEstadoEspecialMlb(game) || getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard");
+      const estadoEspecial = combinarEstadoEspecial(
+        getEstadoEspecialMlb(game),
+        getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard")
+      );
       if (estadoEspecial) {
         const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
         if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
@@ -4148,9 +4172,7 @@ function getEstadoJuegoLegacyHtml(estadoJuego = "") {
       estadoEspecial: {
         reembolso: true,
         estado: "Reembolso",
-        motivo: /rain|weather|clima|inclement|wet grounds|thunder|lightning|storm/i.test(estadoJuego)
-          ? "Por Condiciones Climaticas"
-          : "Partido cancelado"
+        motivo: getRazonReembolsoLegacy(estadoJuego)
       }
     });
   }
