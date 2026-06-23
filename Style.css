@@ -184,6 +184,12 @@ button {
     font-weight: 600;
 }
 
+.auto-mlb-score--status {
+    color: #86efac;
+    text-decoration: none;
+    opacity: 1;
+}
+
 .bet-status-message {
     display: flex;
     align-items: center;

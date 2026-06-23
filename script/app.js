@@ -2561,6 +2561,21 @@ function detectarEstadoEspecialTexto({ estado = "", motivo = "", clima = "", pro
   };
 }
 
+function getEstadoJuegoTraducido(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  if (/\b(postponed|pospuesto|pospuesta|aplazado|aplazada)\b/.test(normalizado)) return "Aplazado";
+  if (/\b(cancelled|canceled|cancelado|cancelada)\b/.test(normalizado)) return "Cancelado";
+  if (/\b(abandoned|abandonado|abandonada)\b/.test(normalizado)) return "Abandonado";
+  if (/\b(suspended|suspendido|suspendida)\b/.test(normalizado)) return "Suspendido";
+  if (/\b(delayed|delay|retrasado|retrasada|demorado|demorada)\b/.test(normalizado)) return "Retrasado";
+  return estadoJuego;
+}
+
+function tieneEstadoJuegoEspecial(auto = {}) {
+  return Boolean(auto?.estadoEspecial) ||
+    /postpon|pospuest|aplaz|cancel|abandon|retras|delay|suspend/i.test(auto?.estadoJuego || "");
+}
+
 function getEstadoEspecialMlb(game) {
   const status = game?.status || {};
   return detectarEstadoEspecialTexto({
@@ -2972,7 +2987,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
 
   if (estadoEspecialHtml) return `${marcadorHtml}${estadoEspecialHtml}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
-    return `<div class="auto-mlb-score">${escapeHtml(autoMlb.estadoJuego)}</div>`;
+    return `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(getEstadoJuegoTraducido(autoMlb.estadoJuego))}</div>`;
   }
   return marcadorHtml;
 }
@@ -3672,7 +3687,7 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
-    return `<div class="auto-mlb-score">${escapeHtml(futbolAuto.estadoJuego)}</div>`;
+    return `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(getEstadoJuegoTraducido(futbolAuto.estadoJuego))}</div>`;
   }
   if (!marcadorActual) return "";
   return `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>`;
@@ -4317,7 +4332,7 @@ function _render() {
               iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
-              const tieneEstadoEspecial = Boolean(sel.autoMlb?.estadoEspecial || sel.autoFutbol?.estadoEspecial);
+              const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
               let styleMod = "";
               if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
@@ -4425,7 +4440,7 @@ function _render() {
 
               const estadoIcon = (isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
-              const tieneEstadoEspecial = Boolean(sel.autoMlb?.estadoEspecial || sel.autoFutbol?.estadoEspecial);
+              const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
               let styleMod = "";
               if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
