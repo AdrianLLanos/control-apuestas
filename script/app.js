@@ -2656,6 +2656,11 @@ function normalizarEstadoExternoTexto(...partes) {
 }
 
 function detectarEstadoEspecialTexto({ estado = "", motivo = "", clima = "", proveedor = "" } = {}) {
+  // Convertir a strings para evitar problemas con números u otros tipos
+  motivo = String(motivo || "").trim();
+  clima = String(clima || "").trim();
+  estado = String(estado || "").trim();
+  
   const texto = normalizarEstadoExternoTexto(estado, motivo, clima);
   if (!texto) return null;
 
@@ -2667,7 +2672,8 @@ function detectarEstadoEspecialTexto({ estado = "", motivo = "", clima = "", pro
 
   const motivoOriginal = motivo || clima || "";
   const motivoNormalizado = normalizarEstadoExternoTexto(motivoOriginal, clima);
-  const motivoLimpio = /\b(rain|weather|clima|climatic|inclement|wet grounds|thunder|lightning|storm)\b/.test(motivoNormalizado)
+  // Si el motivo es un número o está vacío pero se detectó estado especial por clima, usar "Por Condiciones Climáticas"
+  const motivoLimpio = /\b(rain|weather|clima|climatic|inclement|wet grounds|thunder|lightning|storm|delay)\b/.test(motivoNormalizado) || (!motivoOriginal && esRetrasado)
     ? "Por Condiciones Climaticas"
     : motivoOriginal;
   const tipo = esCancelado ? "cancelado" : esPospuesto ? "pospuesto" : esSuspendido ? "suspendido" : "retrasado";
@@ -2729,8 +2735,11 @@ function getEstadoEspecialMlb(game) {
 
 function getEstadoEspecialEspn(event, proveedor = "espn") {
   const status = event?.status?.type || event?.competitions?.[0]?.status?.type || {};
-  const notes = event?.competitions?.[0]?.notes?.headline || event?.notes?.headline || "";
-  const weather = event?.weather?.displayValue || "";
+  const notesArray = event?.competitions?.[0]?.notes;
+  const notes = (Array.isArray(notesArray) && notesArray[0]?.headline) 
+    ? String(notesArray[0].headline).trim()
+    : (notesArray?.headline || event?.notes?.headline || "");
+  const weather = String(event?.weather?.displayValue || "").trim();
   return detectarEstadoEspecialTexto({
     proveedor,
     estado: [
