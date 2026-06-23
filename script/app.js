@@ -1067,6 +1067,12 @@ function extraerSiNo(texto = "") {
   return capitalizarMercado(texto);
 }
 
+function formatearLineaTotalAuto(auto = {}) {
+  const linea = Number(auto.linea);
+  if (Number.isNaN(linea)) return "";
+  return `${auto.tipoTotal === "under" ? "Menos de" : "Más de"} ${String(linea).replace(",", ".")}`;
+}
+
 function limpiarEquipoGanador(texto = "", evento = "") {
   let equipo = String(texto)
     .replace(/\b(equipo\s+)?ganador\b/ig, "")
@@ -1106,6 +1112,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const tituloActual = limpiarEspaciosMercado(seleccion.titulo || "");
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
+  const autoMlb = seleccion.autoMlb || null;
+  if (autoMlb?.mercado === "total_carreras") {
+    return {
+      titulo: autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Total carreras",
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
 
