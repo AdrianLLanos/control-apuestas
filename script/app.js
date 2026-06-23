@@ -1340,7 +1340,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
 function enriquecerJugadasAutoMlb(jugadas = [], deporte = "") {
   if (deporte !== "mlb") return jugadas;
 
-  return jugadas.map(jugada => {
+  const enriquecidas = jugadas.map(jugada => {
     if (typeof jugada !== "object" || !jugada) return jugada;
 
     const ev = jugada.ev || jugada.evento || "";
@@ -1359,6 +1359,62 @@ function enriquecerJugadasAutoMlb(jugadas = [], deporte = "") {
       ...jugada,
       autoMlb: equipos.length >= 2 ? { deporte: "mlb", equipos: equipos.slice(0, 2) } : jugada.autoMlb,
       selections
+    };
+  });
+
+  return repararTotalesEquipoMlbPartidos(enriquecidas);
+}
+
+function getEquipoGanadorSeleccionMlb(selection = {}) {
+  const autoMlb = selection?.autoMlb || {};
+  return autoMlb.mercado === "ganador_partido" ? autoMlb.seleccionEquipo || "" : "";
+}
+
+function esTotalCarrerasMlbSinEquipo(selection = {}) {
+  const autoMlb = selection?.autoMlb || {};
+  return autoMlb.mercado === "total_carreras" && !autoMlb.seleccionEquipo;
+}
+
+function aplicarEquipoATotalCarrerasMlb(selection = {}, equipo = "") {
+  if (!equipo) return selection;
+  const autoMlb = {
+    ...(selection.autoMlb || {}),
+    seleccionEquipo: equipo
+  };
+
+  return {
+    ...selection,
+    titulo: `Carreras de ${equipo}`,
+    jugada: formatearLineaTotalAuto(autoMlb) || selection.jugada || "",
+    autoMlb
+  };
+}
+
+function repararTotalesEquipoMlbPartidos(jugadas = []) {
+  return jugadas.map(jugada => {
+    if (typeof jugada !== "object" || !jugada || !Array.isArray(jugada.selections)) return jugada;
+
+    const reparadas = [];
+    jugada.selections.forEach(selection => {
+      const anterior = reparadas[reparadas.length - 1];
+      const equipoAnterior = getEquipoGanadorSeleccionMlb(anterior);
+      const totalSinEquipo = esTotalCarrerasMlbSinEquipo(selection);
+      const yaHabiaGanadorMismoEquipo = equipoAnterior && reparadas
+        .slice(0, -1)
+        .some(sel => normalizarClaveMlb(getEquipoGanadorSeleccionMlb(sel)) === normalizarClaveMlb(equipoAnterior));
+
+      if (totalSinEquipo && equipoAnterior && yaHabiaGanadorMismoEquipo) {
+        reparadas.pop();
+        reparadas.push(aplicarEquipoATotalCarrerasMlb(selection, equipoAnterior));
+        return;
+      }
+
+      reparadas.push(selection);
+    });
+
+    return {
+      ...jugada,
+      selections: reparadas
     };
   });
 }
@@ -2823,9 +2879,10 @@ function evaluarAutoMlb(autoMlb, game) {
 }
 
 function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
-  const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
+  const jugadasBase = normalizarJugadasConEstado(apuesta.jugadas || []);
+  const jugadas = repararTotalesEquipoMlbPartidos(jugadasBase);
   let huboCambio = false;
-  let huboCambioMetadata = false;
+  let huboCambioMetadata = JSON.stringify(jugadasBase) !== JSON.stringify(jugadas);
 
   const nuevasJugadas = jugadas.map(jugada => {
     if (typeof jugada !== "object" || !jugada) return jugada;
