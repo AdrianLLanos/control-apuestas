@@ -3020,6 +3020,46 @@ function getMarcadorFutbol(game) {
   };
 }
 
+function getCornersEquipoFutbol(summary, marcador = null) {
+  const teams = summary?.boxscore?.teams || [];
+  if (!Array.isArray(teams) || teams.length === 0) return null;
+
+  const cornersEquipos = teams.map(teamInfo => {
+    const stat = (teamInfo.statistics || []).find(item => item.name === "wonCorners");
+    const value = Number(stat?.value ?? stat?.displayValue);
+    if (!stat || Number.isNaN(value)) return null;
+
+    return {
+      name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
+      shortName: teamInfo.team?.shortDisplayName || teamInfo.team?.name || "",
+      abbreviation: teamInfo.team?.abbreviation || "",
+      corners: value
+    };
+  }).filter(Boolean);
+
+  if (cornersEquipos.length === 0) return null;
+
+  const total = cornersEquipos.reduce((sum, team) => sum + team.corners, 0);
+  let home = null;
+  let away = null;
+
+  if (marcador) {
+    home = cornersEquipos.find(team => scoreEquipoFutbol(marcador.homeTeam, team) >= 0.45) || null;
+    away = cornersEquipos.find(team => scoreEquipoFutbol(marcador.awayTeam, team) >= 0.45) || null;
+  }
+
+  if ((!home || !away) && cornersEquipos.length >= 2) {
+    home = home || cornersEquipos[0];
+    away = away || cornersEquipos.find(team => team !== home) || cornersEquipos[1];
+  }
+
+  return {
+    total,
+    home: home ? { name: home.name, corners: home.corners } : null,
+    away: away ? { name: away.name, corners: away.corners } : null
+  };
+}
+
 function getScoreEquipoMarcadorFutbol(equipo = "", marcador) {
   if (!marcador) return null;
   const homeScore = scoreEquipoFutbol(equipo, { name: marcador.homeTeam });
@@ -3034,21 +3074,7 @@ function getScoreEquipoMarcadorFutbol(equipo = "", marcador) {
 }
 
 function getTotalCornersFutbol(summary) {
-  const teams = summary?.boxscore?.teams || [];
-  if (!Array.isArray(teams) || teams.length === 0) return null;
-
-  let total = 0;
-  let encontrados = 0;
-  teams.forEach(teamInfo => {
-    const stat = (teamInfo.statistics || []).find(item => item.name === "wonCorners");
-    if (!stat) return;
-    const value = Number(stat.value ?? stat.displayValue);
-    if (Number.isNaN(value)) return;
-    total += value;
-    encontrados++;
-  });
-
-  return encontrados > 0 ? total : null;
+  return getCornersEquipoFutbol(summary)?.total ?? null;
 }
 
 function evaluarAutoFutbol(autoFutbol, game, summary = null) {
@@ -3132,20 +3158,22 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   }
 
   if (autoFutbol.mercado === "total_corners") {
-    const totalCorners = getTotalCornersFutbol(summary);
+    const cornersEquipo = getCornersEquipoFutbol(summary, marcador);
+    const totalCorners = cornersEquipo?.total ?? null;
     const linea = Number(autoFutbol.linea);
     if (totalCorners === null || Number.isNaN(linea)) return null;
     if (!finalizado) {
-      if (autoFutbol.tipoTotal === "over" && totalCorners > linea) return { estado: "ganada", marcador, totalCorners };
-      if (autoFutbol.tipoTotal === "under" && totalCorners > linea) return { estado: "perdida", marcador, totalCorners };
+      if (autoFutbol.tipoTotal === "over" && totalCorners > linea) return { estado: "ganada", marcador, totalCorners, cornersEquipo };
+      if (autoFutbol.tipoTotal === "under" && totalCorners > linea) return { estado: "perdida", marcador, totalCorners, cornersEquipo };
       return null;
     }
-    if (totalCorners === linea) return { estado: "nula", marcador, totalCorners };
+    if (totalCorners === linea) return { estado: "nula", marcador, totalCorners, cornersEquipo };
     const ganaOver = totalCorners > linea;
     return {
       estado: (autoFutbol.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida",
       marcador,
-      totalCorners
+      totalCorners,
+      cornersEquipo
     };
   }
 
@@ -3195,12 +3223,18 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         const marcadorTexto = marcador
           ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
           : autoFutbol.marcador;
-        const totalCorners = autoFutbol.mercado === "total_corners" ? getTotalCornersFutbol(summary) : autoFutbol.totalCorners;
+        const cornersEquipo = autoFutbol.mercado === "total_corners"
+          ? getCornersEquipoFutbol(summary, marcador)
+          : autoFutbol.cornersEquipo;
+        const totalCorners = autoFutbol.mercado === "total_corners"
+          ? cornersEquipo?.total ?? autoFutbol.totalCorners
+          : autoFutbol.totalCorners;
         if (
           autoFutbol.id !== game.id ||
           autoFutbol.estadoJuego !== estadoJuego ||
           autoFutbol.marcador !== marcadorTexto ||
-          autoFutbol.totalCorners !== totalCorners
+          autoFutbol.totalCorners !== totalCorners ||
+          JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null)
         ) {
           huboCambioMetadata = true;
         }
@@ -3212,7 +3246,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             liga: game.leagueLabel,
             estadoJuego,
             marcador: marcadorTexto,
-            totalCorners
+            totalCorners,
+            cornersEquipo: cornersEquipo || null
           }
         });
         continue;
@@ -3228,6 +3263,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           estadoJuego: game?.status?.type?.detail || game?.status?.type?.description || "Final",
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
+          cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           sincronizadoEn: Date.now()
         }
       };
@@ -3355,29 +3391,34 @@ async function sincronizarResultadosFutbol() {
 
 function getAutoFutbolMarcadorHtml(selection = {}) {
   const futbolAuto = selection?.autoFutbol || {};
-  const cornersActual = futbolAuto.totalCorners;
   if (futbolAuto.mercado === "total_corners") {
-    return cornersActual !== undefined && cornersActual !== null
-      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(cornersActual)}</div>`
+    const marcador = futbolAuto.marcador;
+    const totalCorners = futbolAuto.totalCorners;
+    const cornersEquipo = futbolAuto.cornersEquipo;
+    const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
+    const totalHtml = totalCorners !== undefined && totalCorners !== null
+      ? ` &middot; Corners: ${escapeHtml(totalCorners)}`
+      : "";
+
+    if (cornersEquipo?.home && cornersEquipo?.away) {
+      const awayName = cornersEquipo.away.name || "Visitante";
+      const homeName = cornersEquipo.home.name || "Local";
+      const detalle = `${awayName} ${cornersEquipo.away.corners} - ${cornersEquipo.home.corners} ${homeName}`;
+      return `<div class="auto-mlb-score">${escapeHtml(detalle)}${totalHtml}${liga}</div>`;
+    }
+
+    if (marcador) {
+      return `<div class="auto-mlb-score">${escapeHtml(marcador)}${totalHtml}${liga}</div>`;
+    }
+
+    return totalCorners !== undefined && totalCorners !== null
+      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>`
       : "";
   }
 
   const marcadorActual = futbolAuto.marcador;
   if (!marcadorActual) return "";
   return `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>`;
-
-  const marcador = selection?.autoFutbol?.marcador;
-  if (!marcador) return "";
-  const estadoJuego = selection.autoFutbol.estadoJuego || "Final";
-  const liga = selection.autoFutbol.liga ? ` · ${escapeHtml(selection.autoFutbol.liga)}` : "";
-  const totalCorners = selection.autoFutbol.totalCorners;
-  if (totalCorners !== undefined && totalCorners !== null) {
-    return `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>`;
-  }
-  const corners = totalCorners !== undefined && totalCorners !== null
-    ? ` · Corners: ${escapeHtml(selection.autoFutbol.totalCorners)}`
-    : "";
-  return `<div class="auto-mlb-score">${escapeHtml(estadoJuego)} · ${escapeHtml(marcador)}${corners}${liga}</div>`;
 }
 
 /* =========================
