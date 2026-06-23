@@ -2576,6 +2576,11 @@ function tieneEstadoJuegoEspecial(auto = {}) {
     /postpon|pospuest|aplaz|cancel|abandon|retras|delay|suspend/i.test(auto?.estadoJuego || "");
 }
 
+function esEstadoJuegoReembolso(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  return /\b(postponed|pospuesto|pospuesta|aplazado|aplazada|cancelled|canceled|cancelado|cancelada|abandoned|abandonado|abandonada)\b/.test(normalizado);
+}
+
 function getEstadoEspecialMlb(game) {
   const status = game?.status || {};
   return detectarEstadoEspecialTexto({
@@ -2987,7 +2992,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
 
   if (estadoEspecialHtml) return `${marcadorHtml}${estadoEspecialHtml}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
-    return `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(getEstadoJuegoTraducido(autoMlb.estadoJuego))}</div>`;
+    return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
   }
   return marcadorHtml;
 }
@@ -3687,7 +3692,7 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
-    return `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(getEstadoJuegoTraducido(futbolAuto.estadoJuego))}</div>`;
+    return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
   if (!marcadorActual) return "";
   return `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>`;
@@ -4110,19 +4115,47 @@ function getEstadoEspecialApuestaHtml(auto = {}) {
   const estadoEspecial = auto?.estadoEspecial;
   if (!estadoEspecial) return "";
 
+  if (estadoEspecial.reembolso) {
+    const razon = estadoEspecial.motivo || "Partido cancelado";
+    return `
+      <div class="bet-status-message bet-status-message--refund">
+        <div class="bet-status-line bet-status-line--refund">
+          <span class="bet-status-check" aria-hidden="true">&#10003;</span>
+          <span>Estado: <strong>Reembolso con cuota de 1.00</strong></span>
+        </div>
+        <div class="bet-status-line bet-status-line--reason">
+          <span>Razon: <strong>${escapeHtml(razon)}</strong></span>
+        </div>
+      </div>
+    `;
+  }
+
   const estado = estadoEspecial.estado || estadoEspecial.tipo || "Estado";
   const razon = estadoEspecial.motivo || "";
-  const reembolsoHtml = estadoEspecial.reembolso
-    ? `<span class="bet-status-refund">Reembolso</span>`
-    : "";
 
   return `
-    <div class="bet-status-message ${estadoEspecial.reembolso ? "bet-status-message--refund" : ""}">
-      <span>Estado: <strong>${escapeHtml(estado)}</strong></span>
+    <div class="bet-status-message">
+      <div class="bet-status-line"><span>Estado: <strong>${escapeHtml(estado)}</strong></span></div>
       ${razon ? `<span>Razon: <strong>${escapeHtml(razon)}</strong></span>` : ""}
-      ${reembolsoHtml}
     </div>
   `;
+}
+
+function getEstadoJuegoLegacyHtml(estadoJuego = "") {
+  if (!estadoJuego) return "";
+  if (esEstadoJuegoReembolso(estadoJuego)) {
+    return getEstadoEspecialApuestaHtml({
+      estadoEspecial: {
+        reembolso: true,
+        estado: "Reembolso",
+        motivo: /rain|weather|clima|inclement|wet grounds|thunder|lightning|storm/i.test(estadoJuego)
+          ? "Por Condiciones Climaticas"
+          : "Partido cancelado"
+      }
+    });
+  }
+
+  return `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(getEstadoJuegoTraducido(estadoJuego))}</div>`;
 }
 
 function actualizarSeleccionEstadoDom(apuesta, matchIndex, selIndex) {
@@ -4135,8 +4168,9 @@ function actualizarSeleccionEstadoDom(apuesta, matchIndex, selIndex) {
   const estado = selection.estado || "pendiente";
 
   if (wrapper) {
-    wrapper.style.textDecoration = estado === "nula" ? "line-through" : "";
-    wrapper.style.opacity = estado === "nula" ? "0.6" : "";
+    const tieneEstadoEspecial = tieneEstadoJuegoEspecial(selection.autoMlb) || tieneEstadoJuegoEspecial(selection.autoFutbol);
+    wrapper.style.textDecoration = estado === "nula" && !tieneEstadoEspecial ? "line-through" : "";
+    wrapper.style.opacity = estado === "nula" && !tieneEstadoEspecial ? "0.6" : "";
   }
   if (icon) {
     icon.innerHTML = getEstadoSeleccionIconHtml(estado);

@@ -192,9 +192,9 @@ button {
 
 .bet-status-message {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
     margin-top: 4px;
     font-size: 11px;
     line-height: 1.25;
@@ -213,18 +213,35 @@ button {
     font-weight: 800;
 }
 
-.bet-status-refund {
+.bet-status-line {
     display: inline-flex;
     align-items: center;
-    min-height: 18px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(34, 197, 94, 0.16);
-    border: 1px solid rgba(34, 197, 94, 0.38);
+    flex-wrap: wrap;
+    gap: 5px;
+    text-decoration: none;
+    opacity: 1;
+}
+
+.bet-status-line--refund {
     color: #86efac;
-    font-size: 10px;
+}
+
+.bet-status-line--reason {
+    color: #f8fafc;
+}
+
+.bet-status-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    min-height: 18px;
+    border-radius: 50%;
+    background: #22c55e;
+    color: white;
+    font-size: 12px;
     font-weight: 900;
-    text-transform: lowercase;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.35);
 }
 
 /* eliminar tabla */
