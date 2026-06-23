@@ -236,6 +236,7 @@ button {
     justify-content: center;
     width: 18px;
     min-height: 18px;
+    transform: translateY(-1px);
     border-radius: 50%;
     background: #22c55e;
     color: white;
