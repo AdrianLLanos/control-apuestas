@@ -2449,6 +2449,15 @@ async function agregarApuesta() {
 
   // Forzar renderizado para sincronizar la interfaz
   render();
+
+  // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
+  if (dia === obtenerFechaActualLocal()) {
+    if (deporte === "mlb") {
+      sincronizarResultadosMlb(true).catch(e => console.warn("Auto-sync MLB post-agregar:", e.message));
+    } else if (deporte === "futbol") {
+      sincronizarResultadosFutbol(true).catch(e => console.warn("Auto-sync Fútbol post-agregar:", e.message));
+    }
+  }
 }
 
 /* =========================
@@ -2784,6 +2793,37 @@ function formatFechaJuego(fechaJuegoStr) {
   }
 }
 
+// Compara dos fechas (YYYY-MM-DD) y devuelve true si están dentro de 36 horas
+// de diferencia, tolerando el desfase UTC vs hora local.
+function sonFechasCercanas(fechaA, fechaB) {
+  if (!fechaA || !fechaB) return false;
+  if (fechaA === fechaB) return true;
+  try {
+    const a = new Date(`${fechaA}T12:00:00`);
+    const b = new Date(`${fechaB}T12:00:00`);
+    return Math.abs(a - b) <= 36 * 60 * 60 * 1000;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Convierte un ISO string UTC de la API a { fecha, hora } en hora local del usuario.
+function obtenerFechaHoraLocalDesdeIso(dateStr) {
+  if (!dateStr) return { fecha: "", hora: "" };
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return { fecha: "", hora: "" };
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return { fecha: `${yyyy}-${mm}-${dd}`, hora: `${hh}:${min}` };
+  } catch (e) {
+    return { fecha: "", hora: "" };
+  }
+}
+
 async function cargarJuegosMlbPorFecha(fecha) {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore`;
   const response = await fetch(url);
@@ -2812,7 +2852,7 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
   return juegos.find(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalJuego(game);
-      if (fechaJuego && fechaJuego !== fechaBet) return false;
+      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
     }
     const nombres = [
       game?.teams?.home?.team?.name,
@@ -2829,7 +2869,7 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
   return juegos.find(event => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(event);
-      if (fechaJuego && fechaJuego !== fechaBet) return false;
+      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
     }
     const nombres = (event?.competitions?.[0]?.competitors || [])
       .map(item => item?.team?.displayName || item?.team?.name || item?.team?.shortDisplayName || item?.team?.abbreviation || "")
@@ -3103,6 +3143,23 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
   if (!huboCambio && !huboCambioMetadata) return null;
 
+  // Extraer hora y fecha local desde el primer juego MLB encontrado
+  const primerJuego = juegosFecha.find(game => {
+    const equiposApuesta = nuevasJugadas
+      .flatMap(j => (j?.autoMlb?.equipos || []))
+      .filter(Boolean);
+    if (equiposApuesta.length < 2) return false;
+    const nombres = [
+      game?.teams?.home?.team?.name,
+      game?.teams?.away?.team?.name
+    ].map(normalizarClaveMlb);
+    return equiposApuesta.map(normalizarClaveMlb).every(eq => nombres.includes(eq));
+  });
+  const isoJuego = primerJuego?.gameDate || primerJuego?.date || "";
+  const horaFechaLocal = obtenerFechaHoraLocalDesdeIso(isoJuego);
+  const horaExtraida = horaFechaLocal.hora;
+  const fechaExtraida = horaFechaLocal.fecha;
+
   const apuestaTemp = {
     ...apuesta,
     jugadas: nuevasJugadas
@@ -3119,7 +3176,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     if (cuotaRecalculada > 0) cuota = cuotaRecalculada;
   }
 
-  return {
+  const updatePayload = {
     jugadas: nuevasJugadas,
     resultado,
     cuota,
@@ -3129,15 +3186,29 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       ultimaRevision: Date.now()
     }
   };
+
+  // Guardar hora/fecha local si la API la devuelve y la apuesta no la tiene
+  if (horaExtraida && !apuesta.hora) {
+    updatePayload.hora = horaExtraida;
+  }
+  if (fechaExtraida && fechaExtraida !== (apuesta.fecha || apuesta.dia)) {
+    updatePayload.fecha = fechaExtraida;
+    updatePayload.dia = fechaExtraida;
+  }
+
+  return updatePayload;
 }
 
 async function sincronizarResultadosMlb(silencioso = false) {
-  const candidatas = apuestas.filter(a =>
-    apuestaPareceMlb(a) &&
-    ((a.resultado || "pendiente") === "pendiente" || !apuestaTieneMarcadorMlb(a)) &&
-    Array.isArray(a.jugadas) &&
-    a.jugadas.length > 0
-  );
+  const hoy = obtenerFechaActualLocal();
+  const candidatas = apuestas.filter(a => {
+    if (!apuestaPareceMlb(a)) return false;
+    if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    if ((a.resultado || "pendiente") !== "pendiente" && apuestaTieneMarcadorMlb(a)) return false;
+    // En modo automático/silencioso, solo procesar apuestas de hoy
+    if (silencioso && (a.fecha || a.dia) !== hoy) return false;
+    return true;
+  });
 
   if (candidatas.length === 0) {
     if (!silencioso) {
@@ -3421,7 +3492,7 @@ function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
   juegos.forEach(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(game);
-      if (fechaJuego && fechaJuego !== fechaBet) return;
+      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return;
     }
 
     const competitors = getCompetidoresFutbol(game);
@@ -3870,6 +3941,22 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
 
   if (!huboCambio && !huboCambioMetadata) return null;
 
+  // Extraer hora y fecha local desde el primer juego de fútbol encontrado
+  const primerJuegoFutbol = juegosFecha.find(game => {
+    const equiposApuesta = nuevasJugadas
+      .flatMap(j => (j?.autoFutbol?.equipos || []))
+      .filter(Boolean);
+    if (equiposApuesta.length < 2) return false;
+    const competitors = getCompetidoresFutbol(game);
+    const scoreA = Math.max(...competitors.map(c => scoreEquipoFutbol(equiposApuesta[0], c)));
+    const scoreB = Math.max(...competitors.map(c => scoreEquipoFutbol(equiposApuesta[1], c)));
+    return scoreA >= 0.45 && scoreB >= 0.45;
+  });
+  const isoJuegoFutbol = primerJuegoFutbol?.date || primerJuegoFutbol?.competitions?.[0]?.date || "";
+  const horaFechaLocalFutbol = obtenerFechaHoraLocalDesdeIso(isoJuegoFutbol);
+  const horaExtraidaFutbol = horaFechaLocalFutbol.hora;
+  const fechaExtraidaFutbol = horaFechaLocalFutbol.fecha;
+
   const apuestaTemp = {
     ...apuesta,
     jugadas: nuevasJugadas
@@ -3886,7 +3973,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     if (cuotaRecalculada > 0) cuota = cuotaRecalculada;
   }
 
-  return {
+  const updatePayloadFutbol = {
     jugadas: nuevasJugadas,
     resultado,
     cuota,
@@ -3896,20 +3983,34 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       ultimaRevision: Date.now()
     }
   };
+
+  // Guardar hora/fecha local si la API la devuelve y la apuesta no la tiene
+  if (horaExtraidaFutbol && !apuesta.hora) {
+    updatePayloadFutbol.hora = horaExtraidaFutbol;
+  }
+  if (fechaExtraidaFutbol && fechaExtraidaFutbol !== (apuesta.fecha || apuesta.dia)) {
+    updatePayloadFutbol.fecha = fechaExtraidaFutbol;
+    updatePayloadFutbol.dia = fechaExtraidaFutbol;
+  }
+
+  return updatePayloadFutbol;
 }
 
 async function sincronizarResultadosFutbol(silencioso = false) {
-  const candidatas = apuestas.filter(a =>
-    apuestaPareceFutbol(a) &&
-    (
-      (a.resultado || "pendiente") === "pendiente" ||
+  const hoy = obtenerFechaActualLocal();
+  const candidatas = apuestas.filter(a => {
+    if (!apuestaPareceFutbol(a)) return false;
+    if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
+    const necesitaSincronizar = tieneResultadoPendiente ||
       !apuestaTieneMarcadorFutbol(a) ||
       apuestaTieneMercadoCornersFutbol(a) ||
-      apuestaTieneCornersFutbolIncompletos(a)
-    ) &&
-    Array.isArray(a.jugadas) &&
-    a.jugadas.length > 0
-  );
+      apuestaTieneCornersFutbolIncompletos(a);
+    if (!necesitaSincronizar) return false;
+    // En modo automático/silencioso, solo procesar apuestas de hoy
+    if (silencioso && (a.fecha || a.dia) !== hoy) return false;
+    return true;
+  });
 
   if (candidatas.length === 0) {
     if (!silencioso) {
@@ -4306,6 +4407,15 @@ async function guardarEdicion(id) {
     updateData.resultado = nuevoResultado;
 
     await updateDoc(doc(db, "apuestas", id), updateData);
+
+    // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
+    if (nuevoFecha === obtenerFechaActualLocal()) {
+      if (nuevoDeporte === "mlb") {
+        sincronizarResultadosMlb(true).catch(e => console.warn("Auto-sync MLB post-edición:", e.message));
+      } else if (nuevoDeporte === "futbol") {
+        sincronizarResultadosFutbol(true).catch(e => console.warn("Auto-sync Fútbol post-edición:", e.message));
+      }
+    }
 
   } catch (e) {
     console.error(e);
