@@ -13,7 +13,7 @@ export const MLB_TEAMS = [
   { name: "Colorado Rockies", logo: "colorado-rockies.svg", aliases: ["Colorado Rockies", "Rockies", "COL"] },
   { name: "Detroit Tigers", logo: "detroit-tigers.svg", aliases: ["Detroit Tigers", "Tigers", "DET"] },
   { name: "Houston Astros", logo: "houston-astros.svg", aliases: ["Houston Astros", "Astros", "HOU"] },
-  { name: "Kansas City Royals", logo: "kansas-city-royals.svg", aliases: ["Kansas City Royals", "Royals", "KC", "KAN"] },
+  { name: "Kansas City Royals", logo: "kansas-city-royals.svg", aliases: ["Kansas City Royals", "Royals", "KC"] },
   { name: "Los Angeles Angels", logo: "los-angeles-angels.svg", aliases: ["Los Angeles Angels", "LA Angels", "Angels", "LAA"] },
   { name: "Los Angeles Dodgers", logo: "los-angeles-dodgers.svg", aliases: ["Los Angeles Dodgers", "LA Dodgers", "Dodgers", "LAD"] },
   { name: "Miami Marlins", logo: "miami-marlins.svg", aliases: ["Miami Marlins", "Marlins", "MIA"] },
@@ -220,7 +220,7 @@ function crearLogoHtml(entry) {
     return `<span class="${chipClass}"><span class="country-flag-mark"><span class="country-flag-fallback" aria-hidden="true">${fallback}</span><img src="${logoSrc}" class="mlb-team-logo country-flag-logo" alt="${safeName}" width="26" height="26" loading="lazy" decoding="async" onload="this.classList.add('is-loaded');" onerror="this.style.display='none';"></span><span>${safeName}</span></span>`;
   }
 
-  return `<span class="${chipClass}"><img src="${logoSrc}" class="mlb-team-logo" alt="${safeName}" width="26" height="26" loading="lazy" decoding="async"><span>${safeName}</span></span>`;
+  return `<span class="${chipClass}"><img src="${logoSrc}" class="mlb-team-logo" alt="" width="26" height="26" loading="lazy" decoding="async" onerror="this.style.display='none';"><span>${safeName}</span></span>`;
 }
 
 function formatPlainTextWithMlbSeparators(value) {
