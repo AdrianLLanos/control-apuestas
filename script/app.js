@@ -797,6 +797,12 @@ function escucharApuestas() {
       const diasUnicos = [...new Set(apuestas.map(a => a.dia))];
       const totalPags = Math.ceil(diasUnicos.length / porPagina);
       paginaActual = totalPags || 1;
+
+      // Sincronizar en vivo inicialmente
+      setTimeout(() => {
+        sincronizarFutbolEnVivo().catch(e => console.warn("Error en sincronización en vivo inicial:", e));
+        sincronizarMlbEnVivo().catch(e => console.warn("Error en sincronización MLB en vivo inicial:", e));
+      }, 1000);
     }
 
     const omitirRenderSnapshot = renderSilenciosoApuestas.size > 0;
@@ -3369,6 +3375,67 @@ function getMarcadorFutbol(game) {
   };
 }
 
+function reordenarMarcadorTextoFutbol(marcadorTexto, equipos) {
+  if (!marcadorTexto || !equipos || equipos.length < 2) return marcadorTexto;
+
+  const match = marcadorTexto.match(/^(.+?)\s+(\d+)\s*-\s*(\d+)\s+(.+)$/);
+  if (!match) return marcadorTexto;
+
+  const teamLeft = match[1].trim();
+  const scoreLeft = match[2];
+  const scoreRight = match[3];
+  const teamRight = match[4].trim();
+
+  const eq0 = equipos[0];
+  const scoreEq0Left = scoreEquipoFutbol(eq0, { name: teamLeft });
+  const scoreEq0Right = scoreEquipoFutbol(eq0, { name: teamRight });
+
+  if (scoreEq0Left >= scoreEq0Right) {
+    return `${teamLeft} ${scoreLeft} - ${scoreRight} ${teamRight}`;
+  } else {
+    return `${teamRight} ${scoreRight} - ${scoreLeft} ${teamLeft}`;
+  }
+}
+
+function obtenerMarcadorTextoFutbol(marcador, equipos) {
+  if (!marcador) return "";
+  const eq0 = equipos?.[0];
+  const eq1 = equipos?.[1];
+  if (!eq0 || !eq1) {
+    return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
+  }
+  const scoreEq0Home = scoreEquipoFutbol(eq0, { name: marcador.homeTeam });
+  const scoreEq0Away = scoreEquipoFutbol(eq0, { name: marcador.awayTeam });
+  if (scoreEq0Home >= scoreEq0Away) {
+    return `${marcador.homeTeam} ${marcador.home} - ${marcador.away} ${marcador.awayTeam}`;
+  } else {
+    return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
+  }
+}
+
+function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
+  if (!cornersEquipo?.home || !cornersEquipo?.away) return "";
+  const awayName = cornersEquipo.away.name || "Visitante";
+  const homeName = cornersEquipo.home.name || "Local";
+  const awayCorners = cornersEquipo.away.corners;
+  const homeCorners = cornersEquipo.home.corners;
+
+  const eq0 = equipos?.[0];
+  const eq1 = equipos?.[1];
+  if (!eq0 || !eq1) {
+    return `${escapeHtml(awayName)} ${escapeHtml(awayCorners)} - ${escapeHtml(homeCorners)} ${escapeHtml(homeName)}`;
+  }
+
+  const scoreEq0Home = scoreEquipoFutbol(eq0, { name: homeName });
+  const scoreEq0Away = scoreEquipoFutbol(eq0, { name: awayName });
+
+  if (scoreEq0Home >= scoreEq0Away) {
+    return `${escapeHtml(homeName)} ${escapeHtml(homeCorners)} - ${escapeHtml(awayCorners)} ${escapeHtml(awayName)}`;
+  } else {
+    return `${escapeHtml(awayName)} ${escapeHtml(awayCorners)} - ${escapeHtml(homeCorners)} ${escapeHtml(homeName)}`;
+  }
+}
+
 function getCornersInicialesFutbol(marcador = null) {
   if (!marcador) return null;
   return {
@@ -3606,7 +3673,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         const estadoJuego = game?.status?.type?.detail || game?.status?.type?.description || "";
         const marcador = getMarcadorFutbol(game);
         const marcadorTexto = marcador
-          ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
+          ? obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos)
           : autoFutbol.marcador;
         const cornersEquipo = autoFutbol.mercado === "total_corners"
           ? getCornersEquipoFutbol(summary, marcador) ||
@@ -3649,7 +3716,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           liga: game.leagueLabel,
           estadoJuego: game?.status?.type?.detail || game?.status?.type?.description || "Final",
           estadoEspecial: null,
-          marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
+          marcador: obtenerMarcadorTextoFutbol(evaluacion.marcador, autoFutbol.equipos),
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           sincronizadoEn: Date.now()
@@ -3792,13 +3859,198 @@ async function sincronizarResultadosFutbol() {
   }
 }
 
+/* =========================
+   SINCRONIZACIÓN AUTOMÁTICA FÚTBOL EN VIVO (cada 20 min)
+ ========================= */
+
+function juegoFutbolEnVivo(game) {
+  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  return (
+    !juegoFutbolFinalizado(game) &&
+    !juegoFutbolNoIniciado(game) &&
+    status.state === "in"
+  );
+}
+
+async function sincronizarFutbolEnVivo() {
+  // Solo apuestas de fútbol pendientes o con corners activos
+  const candidatasBase = apuestas.filter(a =>
+    apuestaPareceFutbol(a) &&
+    (
+      (a.resultado || "pendiente") === "pendiente" ||
+      !apuestaTieneMarcadorFutbol(a) ||
+      apuestaTieneMercadoCornersFutbol(a) ||
+      apuestaTieneCornersFutbolIncompletos(a)
+    ) &&
+    Array.isArray(a.jugadas) &&
+    a.jugadas.length > 0
+  );
+
+  if (candidatasBase.length === 0) return;
+
+  // Cargar los juegos de las fechas involucradas
+  const fechas = [...new Set(candidatasBase.map(a => a.fecha || a.dia).filter(Boolean))];
+  const juegosPorFecha = new Map();
+  for (const fecha of fechas) {
+    const fechasBusqueda = getFechasCercanas(fecha);
+    const juegos = [];
+    for (const fechaBusqueda of fechasBusqueda) {
+      juegos.push(...await cargarJuegosFutbolPorFecha(fechaBusqueda));
+    }
+    juegosPorFecha.set(fecha, juegos);
+  }
+
+  // Filtrar solo las apuestas que tienen al menos un partido EN VIVO ahora mismo
+  const candidatasEnVivo = candidatasBase.filter(apuesta => {
+    const fecha = apuesta.fecha || apuesta.dia;
+    const juegos = juegosPorFecha.get(fecha) || [];
+    return (apuesta.jugadas || []).some(jugada => {
+      if (typeof jugada !== "object" || !jugada) return false;
+      const ev = jugada.ev || jugada.evento || apuesta.evento || "";
+      return getSelectionsFromJugada(jugada).some(sel => {
+        const autoFutbol = sel.autoFutbol || crearAutoFutbolSeleccion({ evento: ev, titulo: sel.titulo || "", jugada: sel.jugada || "" });
+        if (!autoFutbol?.equipos) return false;
+        const game = buscarJuegoFutbol(juegos, autoFutbol.equipos);
+        return game ? juegoFutbolEnVivo(game) : false;
+      });
+    });
+  });
+
+  if (candidatasEnVivo.length === 0) return;
+
+  // Sincronizar silenciosamente las apuestas en vivo
+  for (const apuesta of candidatasEnVivo) {
+    try {
+      const fecha = apuesta.fecha || apuesta.dia;
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosPorFecha.get(fecha) || []);
+      if (!updateData) continue;
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+    } catch (e) {
+      console.warn("Auto-sync fútbol en vivo - error en apuesta:", apuesta.id, e.message);
+    }
+  }
+}
+
+let _autoSyncFutbolIntervalId = null;
+
+function startAutoSyncFutbol() {
+  if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
+  const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
+  _autoSyncFutbolIntervalId = setInterval(async () => {
+    try {
+      await sincronizarFutbolEnVivo();
+    } catch (e) {
+      console.warn("Auto-sync fútbol en vivo - error general:", e.message);
+    }
+  }, INTERVALO_MS);
+}
+
+/* =========================
+   SINCRONIZACIÓN AUTOMÁTICA MLB EN VIVO (cada 20 min)
+ ========================= */
+
+function juegoMlbEnVivo(game) {
+  const abstractState = game?.status?.abstractGameState || "";
+  const detailedState = game?.status?.detailedState || "";
+  return (
+    !juegoMlbFinalizado(game) &&
+    (abstractState === "Live" || /\b(in progress|en progreso|en vivo)\b/i.test(detailedState))
+  );
+}
+
+async function sincronizarMlbEnVivo() {
+  // Solo apuestas de MLB pendientes o sin marcador
+  const candidatasBase = apuestas.filter(a =>
+    apuestaPareceMlb(a) &&
+    (
+      (a.resultado || "pendiente") === "pendiente" ||
+      !apuestaTieneMarcadorMlb(a)
+    ) &&
+    Array.isArray(a.jugadas) &&
+    a.jugadas.length > 0
+  );
+
+  if (candidatasBase.length === 0) return;
+
+  // Cargar los juegos de las fechas involucradas
+  const fechas = [...new Set(candidatasBase.map(a => a.fecha || a.dia).filter(Boolean))];
+  const juegosPorFecha = new Map();
+  const juegosEspnPorFecha = new Map();
+  for (const fecha of fechas) {
+    const fechasBusqueda = getFechasCercanas(fecha);
+    const juegos = [];
+    const juegosEspn = [];
+    for (const fechaBusqueda of fechasBusqueda) {
+      juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
+      try {
+        juegosEspn.push(...await cargarJuegosEspnMlbPorFecha(fechaBusqueda));
+      } catch (e) {
+        console.warn("Auto-sync MLB en vivo - no se pudo cargar ESPN MLB:", fechaBusqueda, e.message);
+      }
+    }
+    juegosPorFecha.set(fecha, juegos);
+    juegosEspnPorFecha.set(fecha, juegosEspn);
+  }
+
+  // Filtrar solo las apuestas que tienen al menos un partido EN VIVO ahora mismo
+  const candidatasEnVivo = candidatasBase.filter(apuesta => {
+    const fecha = apuesta.fecha || apuesta.dia;
+    const juegos = juegosPorFecha.get(fecha) || [];
+    return (apuesta.jugadas || []).some(jugada => {
+      if (typeof jugada !== "object" || !jugada) return false;
+      const ev = jugada.ev || jugada.evento || apuesta.evento || "";
+      return getSelectionsFromJugada(jugada).some(sel => {
+        const autoMlb = sel.autoMlb || crearAutoMlbSeleccion({ evento: ev, titulo: sel.titulo || "", jugada: sel.jugada || "" });
+        if (!autoMlb?.equipos) return false;
+        const game = buscarJuegoMlb(juegos, autoMlb.equipos);
+        return game ? juegoMlbEnVivo(game) : false;
+      });
+    });
+  });
+
+  if (candidatasEnVivo.length === 0) return;
+
+  // Sincronizar silenciosamente las apuestas en vivo
+  for (const apuesta of candidatasEnVivo) {
+    try {
+      const fecha = apuesta.fecha || apuesta.dia;
+      const updateData = aplicarResultadoMlbApuesta(
+        apuesta,
+        juegosPorFecha.get(fecha) || [],
+        juegosEspnPorFecha.get(fecha) || []
+      );
+      if (!updateData) continue;
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+    } catch (e) {
+      console.warn("Auto-sync MLB en vivo - error en apuesta:", apuesta.id, e.message);
+    }
+  }
+}
+
+let _autoSyncMlbIntervalId = null;
+
+function startAutoSyncMlb() {
+  if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
+  const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
+  _autoSyncMlbIntervalId = setInterval(async () => {
+    try {
+      await sincronizarMlbEnVivo();
+    } catch (e) {
+      console.warn("Auto-sync MLB en vivo - error general:", e.message);
+    }
+  }, INTERVALO_MS);
+}
+
 function getAutoFutbolMarcadorHtml(selection = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
   if (futbolAuto.mercado === "total_corners") {
-    const marcador = futbolAuto.marcador;
+    let marcador = futbolAuto.marcador;
+    if (marcador) {
+      marcador = reordenarMarcadorTextoFutbol(marcador, futbolAuto.equipos);
+    }
     if (marcador && estadoEspecialHtml) {
       return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
     }
@@ -3808,8 +4060,6 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
-      const awayName = cornersEquipo.away.name || "Visitante";
-      const homeName = cornersEquipo.home.name || "Local";
       const awayCorners = Number(cornersEquipo.away.corners);
       const homeCorners = Number(cornersEquipo.home.corners);
       const totalMostrado = !Number.isNaN(awayCorners) && !Number.isNaN(homeCorners)
@@ -3818,8 +4068,8 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
       const totalHtml = totalMostrado !== undefined && totalMostrado !== null
         ? ` &middot; Corners: ${escapeHtml(totalMostrado)}`
         : "";
-      const detalle = `${awayName} ${escapeHtml(cornersEquipo.away.corners)} - ${escapeHtml(cornersEquipo.home.corners)} ${homeName}`;
-      return `<div class="auto-mlb-score">${escapeHtml(detalle)}${totalHtml}${liga}</div>`;
+      const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>`;
     }
 
     const estadoPrevio = /\b(programado|scheduled|pre-game|pre game|not started|por comenzar|no iniciado|previo)\b/i.test(futbolAuto.estadoJuego || "");
@@ -3833,7 +4083,10 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
       : "";
   }
 
-  const marcadorActual = futbolAuto.marcador;
+  let marcadorActual = futbolAuto.marcador;
+  if (marcadorActual) {
+    marcadorActual = reordenarMarcadorTextoFutbol(marcadorActual, futbolAuto.equipos);
+  }
   if (estadoEspecialHtml) {
     const marcadorHtml = marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "";
     return `${marcadorHtml}${estadoEspecialHtml}`;
@@ -5225,6 +5478,8 @@ window.addEventListener("DOMContentLoaded", () => {
   if (btnSincronizarFutbol) {
     btnSincronizarFutbol.onclick = sincronizarResultadosFutbol;
   }
+  startAutoSyncFutbol();
+  startAutoSyncMlb();
   document.addEventListener("input", (e) => {
     if (!e.target?.matches?.(".jugada-ev-input, .evento-principal-input")) return;
     const deporteSelect = document.getElementById("deporte");
