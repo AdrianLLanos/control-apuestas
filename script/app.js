@@ -2008,6 +2008,7 @@ window.agregarSeleccionAlSlotCrearSimple = function (btn) {
    ========================= */
 async function agregarApuesta() {
   const fecha = document.getElementById("fecha").value;
+  const hora = document.getElementById("hora")?.value || "";
   const tipoApuesta = document.getElementById("tipoApuesta").value;
   const deporte = getDeporteFormulario();
   const isCombinada = tipoApuesta === "combinada";
@@ -2275,7 +2276,7 @@ async function agregarApuesta() {
         saves.push(addDoc(collection(db, "apuestas"), {
           ...datosCasa,
           deporte,
-          fecha, dia,
+          fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "simple",
@@ -2314,7 +2315,7 @@ async function agregarApuesta() {
         saves.push(addDoc(collection(db, "apuestas"), {
           ...datosCasa,
           deporte,
-          fecha, dia,
+          fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "simple_option_bet",
@@ -2351,7 +2352,7 @@ async function agregarApuesta() {
         saves.push(addDoc(collection(db, "apuestas"), {
           ...datosCasa,
           deporte,
-          fecha, dia,
+          fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "crear_apuesta_simple",
@@ -2368,7 +2369,7 @@ async function agregarApuesta() {
         deporte,
         fecha, evento, jugadas, tipoApuesta, cuota, importe,
         resultado,
-        dia,
+        dia, hora,
         creadoEn: Date.now()
       });
     }
@@ -2389,6 +2390,8 @@ async function agregarApuesta() {
   // ── Reset form ──
   document.getElementById("importe").value = "";
   document.getElementById("fecha").value = obtenerFechaActualLocal();
+  const inputHora = document.getElementById("hora");
+  if (inputHora) inputHora.value = "";
   document.getElementById("resultado").value = "pendiente";
 
   // Reset to SIMPLE
@@ -2730,6 +2733,57 @@ function combinarEstadoEspecial(estadoPrincipal, estadoRespaldo) {
   };
 }
 
+function obtenerFechaLocalJuego(game) {
+  if (game?.officialDate) return game.officialDate;
+  const dateStr = game?.gameDate || game?.date;
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  } catch (e) {
+    return "";
+  }
+}
+
+function obtenerFechaLocalEvent(event) {
+  const dateStr = event?.date || event?.competitions?.[0]?.date;
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  } catch (e) {
+    return "";
+  }
+}
+
+function formatFechaJuego(fechaJuegoStr) {
+  if (!fechaJuegoStr) return "";
+  try {
+    const d = new Date(fechaJuegoStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const hoy = new Date();
+    const esHoy = d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate();
+    
+    const hora = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (esHoy) {
+      return `Hoy a las ${hora}`;
+    }
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dia}/${mes} a las ${hora}`;
+  } catch (e) {
+    return "";
+  }
+}
+
 async function cargarJuegosMlbPorFecha(fecha) {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore`;
   const response = await fetch(url);
@@ -2751,11 +2805,15 @@ async function cargarJuegosEspnMlbPorFecha(fecha) {
   return data.events || [];
 }
 
-function buscarJuegoMlb(juegos = [], equipos = []) {
+function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
   return juegos.find(game => {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalJuego(game);
+      if (fechaJuego && fechaJuego !== fechaBet) return false;
+    }
     const nombres = [
       game?.teams?.home?.team?.name,
       game?.teams?.away?.team?.name
@@ -2764,11 +2822,15 @@ function buscarJuegoMlb(juegos = [], equipos = []) {
   }) || null;
 }
 
-function buscarJuegoEspnMlb(juegos = [], equipos = []) {
+function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
   return juegos.find(event => {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalEvent(event);
+      if (fechaJuego && fechaJuego !== fechaBet) return false;
+    }
     const nombres = (event?.competitions?.[0]?.competitors || [])
       .map(item => item?.team?.displayName || item?.team?.name || item?.team?.shortDisplayName || item?.team?.abbreviation || "")
       .map(normalizarClaveMlb);
@@ -2885,6 +2947,7 @@ function evaluarAutoMlb(autoMlb, game) {
 }
 
 function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+  const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadasBase = normalizarJugadasConEstado(apuesta.jugadas || []);
   const jugadas = repararTotalesEquipoMlbPartidos(jugadasBase);
   let huboCambio = false;
@@ -2924,8 +2987,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       ) {
         huboCambioMetadata = true;
       }
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos);
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet);
       const estadoEspecial = combinarEstadoEspecial(
         getEstadoEspecialMlb(game),
         getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard")
@@ -2936,7 +2999,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         if (
           autoMlb.estadoJuego !== estadoEspecial.label ||
           autoMlb.estadoEspecial?.tipo !== estadoEspecial.tipo ||
-          autoMlb.estadoEspecial?.motivo !== estadoEspecial.motivo
+          autoMlb.estadoEspecial?.motivo !== estadoEspecial.motivo ||
+          autoMlb.fechaJuego !== (game?.gameDate || autoMlb.fechaJuego)
         ) {
           huboCambioMetadata = true;
         }
@@ -2949,7 +3013,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
             espnId: espnGame?.id ?? autoMlb.espnId,
             estadoJuego: estadoEspecial.label,
             estadoEspecial,
-            marcador: autoMlb.marcador
+            marcador: autoMlb.marcador,
+            fechaJuego: game?.gameDate || autoMlb.fechaJuego
           }
         };
       }
@@ -2965,7 +3030,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         const marcadorTexto = marcador
           ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
           : autoMlb.marcador;
-        if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== estadoJuego || autoMlb.marcador !== marcadorTexto) {
+        if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== estadoJuego || autoMlb.marcador !== marcadorTexto || autoMlb.fechaJuego !== game.gameDate) {
           huboCambioMetadata = true;
         }
         return {
@@ -2976,7 +3041,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
             estadoJuego,
             estadoEspecial: null,
             marcador: marcadorTexto,
-            totalCarreras: totalObjetivo
+            totalCarreras: totalObjetivo,
+            fechaJuego: game.gameDate
           }
         };
       }
@@ -2992,12 +3058,13 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           estadoEspecial: null,
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           totalCarreras: totalObjetivo,
+          fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
         }
       };
 
       if ((sel.estado || "pendiente") !== evaluacion.estado) huboCambio = true;
-      if (autoMlb.sincronizadoEn === undefined) huboCambioMetadata = true;
+      if (autoMlb.sincronizadoEn === undefined || autoMlb.fechaJuego !== game.gameDate) huboCambioMetadata = true;
       return siguiente;
     });
 
@@ -3015,7 +3082,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoMlb?.mercado === "total_carreras")?.autoMlb;
-      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos) : null;
+      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet) : null;
       const marcador = game ? getMarcadorMlb(game) : null;
       const finalizado = game ? juegoMlbFinalizado(game) : false;
       const totalObjetivo = getTotalCarrerasObjetivoMlb(totalAuto, marcador);
@@ -3151,11 +3218,19 @@ function getAutoMlbMarcadorHtml(selection = {}) {
     ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`
     : "";
 
+  let horaHtml = "";
+  if (autoMlb.fechaJuego && (!marcador || /preview|sched/i.test(autoMlb.estadoJuego))) {
+    const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
+    if (formattedTime) {
+      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
+    }
+  }
+
   if (estadoEspecialHtml) return `${marcadorHtml}${estadoEspecialHtml}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
   }
-  return marcadorHtml;
+  return marcadorHtml || horaHtml;
 }
 
 const FOOTBALL_LEAGUES = [
@@ -3339,11 +3414,16 @@ function scoreEquipoFutbol(equipoApuesta = "", competitor = {}) {
   return matches / Math.max(objetivoTokens.length, 1);
 }
 
-function buscarJuegoFutbol(juegos = [], equipos = []) {
+function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
 
   let mejor = { game: null, score: 0 };
   juegos.forEach(game => {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalEvent(game);
+      if (fechaJuego && fechaJuego !== fechaBet) return;
+    }
+
     const competitors = getCompetidoresFutbol(game);
     if (competitors.length < 2) return;
 
@@ -3615,6 +3695,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
 }
 
 async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
+  const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   let huboCambio = false;
   let huboCambioMetadata = false;
@@ -3643,7 +3724,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       }
 
       if (!autoOriginal) huboCambioMetadata = true;
-      const game = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos);
+      const game = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       if (!game) {
         selections.push({ ...sel, autoFutbol });
         continue;
@@ -3653,10 +3734,12 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       if (estadoEspecial) {
         const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
         if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
+        const targetFechaJuego = game.date || game.competitions?.[0]?.date;
         if (
           autoFutbol.estadoJuego !== estadoEspecial.label ||
           autoFutbol.estadoEspecial?.tipo !== estadoEspecial.tipo ||
-          autoFutbol.estadoEspecial?.motivo !== estadoEspecial.motivo
+          autoFutbol.estadoEspecial?.motivo !== estadoEspecial.motivo ||
+          autoFutbol.fechaJuego !== targetFechaJuego
         ) {
           huboCambioMetadata = true;
         }
@@ -3669,7 +3752,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             liga: game.leagueLabel,
             estadoJuego: estadoEspecial.label,
             estadoEspecial,
-            marcador: autoFutbol.marcador
+            marcador: autoFutbol.marcador,
+            fechaJuego: targetFechaJuego || autoFutbol.fechaJuego
           }
         });
         continue;
@@ -3690,12 +3774,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         const totalCorners = autoFutbol.mercado === "total_corners"
           ? cornersEquipo?.total ?? autoFutbol.totalCorners
           : autoFutbol.totalCorners;
+        const targetFechaJuego = game.date || game.competitions?.[0]?.date;
         if (
           autoFutbol.id !== game.id ||
           autoFutbol.estadoJuego !== estadoJuego ||
           autoFutbol.marcador !== marcadorTexto ||
           autoFutbol.totalCorners !== totalCorners ||
-          JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null)
+          JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null) ||
+          autoFutbol.fechaJuego !== targetFechaJuego
         ) {
           huboCambioMetadata = true;
         }
@@ -3709,12 +3795,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             estadoEspecial: null,
             marcador: marcadorTexto,
             totalCorners,
-            cornersEquipo: cornersEquipo || null
+            cornersEquipo: cornersEquipo || null,
+            fechaJuego: targetFechaJuego
           }
         });
         continue;
       }
 
+      const targetFechaJuego = game.date || game.competitions?.[0]?.date;
       const siguiente = {
         ...sel,
         estado: evaluacion.estado,
@@ -3727,6 +3815,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           marcador: obtenerMarcadorTextoFutbol(evaluacion.marcador, autoFutbol.equipos),
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
+          fechaJuego: targetFechaJuego,
           sincronizadoEn: Date.now()
         }
       };
@@ -3739,7 +3828,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         autoFutbol.estadoJuego !== siguiente.autoFutbol.estadoJuego ||
         autoFutbol.marcador !== siguiente.autoFutbol.marcador ||
         autoFutbol.totalCorners !== siguiente.autoFutbol.totalCorners ||
-        JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null)
+        JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null) ||
+        autoFutbol.fechaJuego !== targetFechaJuego
       ) {
         huboCambioMetadata = true;
       }
@@ -3760,7 +3850,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoFutbol?.mercado === "total_goles")?.autoFutbol;
-      const game = totalAuto ? buscarJuegoFutbol(juegosFecha, totalAuto.equipos) : null;
+      const game = totalAuto ? buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet) : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
       const finalizado = game ? juegoFutbolFinalizado(game) : false;
       const totalIrreversible = marcador && totalAuto && (
@@ -3957,11 +4047,18 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     const marcadorHtml = marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "";
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
+  let horaHtml = "";
+  if (futbolAuto.fechaJuego && (!marcadorActual || /preview|sched/i.test(futbolAuto.estadoJuego))) {
+    const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
+    if (formattedTime) {
+      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
+    }
+  }
+
   if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
-  if (!marcadorActual) return "";
-  return `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>`;
+  return (marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "") || horaHtml;
 }
 
 /* =========================
@@ -4004,8 +4101,13 @@ async function guardarEdicion(id) {
     const nuevoImporteVal = document.getElementById(`edit-importe-${id}`).value.trim();
     const nuevoImporte = parseFloat(nuevoImporteVal);
     const nuevaCasa = getCasaPorId(document.getElementById(`edit-casa-${id}`)?.value || CASA_DEFAULT_ID);
+    const nuevoFecha = document.getElementById(`edit-fecha-${id}`).value;
+    const nuevoHora = document.getElementById(`edit-hora-${id}`)?.value || "";
 
     let errores = [];
+    if (!nuevoFecha) {
+      errores.push("Rellena la fecha.");
+    }
 
     if (!nuevoImporteVal || isNaN(nuevoImporte) || nuevoImporte <= 0) {
       errores.push("Rellena el importe (debe ser mayor a 0).");
@@ -4176,6 +4278,9 @@ async function guardarEdicion(id) {
       apuestas[index].resultado = nuevoResultado;
       apuestas[index].casaId = nuevaCasa.id;
       apuestas[index].casaNombre = nuevaCasa.nombre;
+      apuestas[index].fecha = nuevoFecha;
+      apuestas[index].dia = nuevoFecha;
+      apuestas[index].hora = nuevoHora;
     }
 
     render();
@@ -4193,7 +4298,10 @@ async function guardarEdicion(id) {
       jugadas: nuevasJugadas,
       deporte: nuevoDeporte,
       casaId: nuevaCasa.id,
-      casaNombre: nuevaCasa.nombre
+      casaNombre: nuevaCasa.nombre,
+      fecha: nuevoFecha,
+      dia: nuevoFecha,
+      hora: nuevoHora
     };
     updateData.resultado = nuevoResultado;
 
@@ -4584,7 +4692,10 @@ function _render() {
       }
 
       const [year, month, day] = a.fecha.split("-");
-      const fechaFormateada = `${day}/${month}/${year}`;
+      let fechaFormateada = `${day}/${month}/${year}`;
+      if (a.hora) {
+        fechaFormateada += `<br><span style="font-size:11px; color:#cbd5e1; font-weight:500;">${a.hora}</span>`;
+      }
 
       let celdaEvento = "";
       if (a.jugadas && a.jugadas.length > 0) {
@@ -4940,6 +5051,14 @@ function _render() {
                   style="background:#1e293b; color:white; border:1px solid #334155; border-radius:8px; padding:9px 12px; font-size:16px; font-weight:600; width:100%; box-sizing:border-box; display:${isMulti ? 'block' : 'none'};">
                 ${jugadasEditHtml}
                 <div class="apuesta-edit-meta">
+                  <label class="apuesta-edit-field">
+                    <span>Fecha</span>
+                    <input type="date" id="edit-fecha-${a.id}" value="${a.fecha || a.dia || ''}">
+                  </label>
+                  <label class="apuesta-edit-field">
+                    <span>Hora</span>
+                    <input type="time" id="edit-hora-${a.id}" value="${a.hora || ''}">
+                  </label>
                   <label class="apuesta-edit-field">
                     <span>Casa</span>
                     ${casaApuestaEdit}
