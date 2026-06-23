@@ -1220,6 +1220,21 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
 
   if (equiposTexto.length < 2) return null;
 
+  if (tienePalabraMercado(normalizado, ["handicap", "handi", "hcap"]) || /\b(runline|spread)\b/.test(normalizado) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
+    const linea = extraerNumeroConSigno(textoCompleto);
+    const equiposJugada = detectarEquiposMlb(textoCompleto);
+    const seleccionEquipo = equiposJugada[0] || null;
+    if (linea !== null && seleccionEquipo) {
+      return {
+        deporte: "mlb",
+        mercado: "handicap",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        seleccionEquipo,
+        linea
+      };
+    }
+  }
+
   if (tienePalabraMercado(normalizado, ["carrera", "carreras", "run", "runs"])) {
     const linea = extraerNumeroJugada(textoCompleto);
     const tipoTotal = detectarLadoTotal(textoCompleto);
@@ -2525,6 +2540,21 @@ function getMarcadorMlb(game) {
   };
 }
 
+function getScoreEquipoMarcadorMlb(equipo = "", marcador) {
+  if (!marcador) return null;
+  const objetivo = normalizarClaveMlb(equipo);
+  const home = normalizarClaveMlb(marcador.homeTeam);
+  const away = normalizarClaveMlb(marcador.awayTeam);
+
+  if (objetivo && (home === objetivo || home.includes(objetivo) || objetivo.includes(home))) {
+    return { seleccionado: marcador.home, rival: marcador.away, nombre: marcador.homeTeam };
+  }
+  if (objetivo && (away === objetivo || away.includes(objetivo) || objetivo.includes(away))) {
+    return { seleccionado: marcador.away, rival: marcador.home, nombre: marcador.awayTeam };
+  }
+  return null;
+}
+
 function juegoMlbFinalizado(game) {
   const state = game?.status?.abstractGameState || "";
   const detail = game?.status?.detailedState || "";
@@ -2546,6 +2576,19 @@ function evaluarAutoMlb(autoMlb, game) {
     const ganador = homeWon ? marcador.homeTeam : marcador.awayTeam;
     return {
       estado: normalizarClaveMlb(ganador) === normalizarClaveMlb(autoMlb.seleccionEquipo) ? "ganada" : "perdida",
+      marcador
+    };
+  }
+
+  if (autoMlb.mercado === "handicap") {
+    if (!finalizado) return null;
+    const linea = Number(autoMlb.linea);
+    const equipo = getScoreEquipoMarcadorMlb(autoMlb.seleccionEquipo, marcador);
+    if (Number.isNaN(linea) || !equipo) return null;
+    const ajustado = equipo.seleccionado + linea;
+    if (ajustado === equipo.rival) return { estado: "nula", marcador };
+    return {
+      estado: ajustado > equipo.rival ? "ganada" : "perdida",
       marcador
     };
   }
@@ -2767,7 +2810,9 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   const marcador = autoMlb.marcador;
   if (!marcador) return "";
   const totalCarreras = Number(autoMlb.totalCarreras);
-  const carrerasHtml = Number.isNaN(totalCarreras) ? "" : ` · Carreras: ${escapeHtml(totalCarreras)}`;
+  const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
+    ? ` · Carreras: ${escapeHtml(totalCarreras)}`
+    : "";
   return `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`;
 }
 
