@@ -2919,6 +2919,38 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
   }) || null;
 }
 
+function formatMarcadorSegunEvento(evento = "", marcador) {
+  if (!marcador) return null;
+  
+  // Extraer equipos del evento en el orden que aparecen
+  const equiposEvento = extraerEquiposEvento(evento);
+  if (equiposEvento.length < 2) {
+    // Si no podemos extraer, usar el formato por defecto
+    return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
+  }
+  
+  const [equipo1Evento, equipo2Evento] = equiposEvento.slice(0, 2);
+  const equipo1Norm = normalizarClaveMlb(equipo1Evento);
+  const equipo2Norm = normalizarClaveMlb(equipo2Evento);
+  const homeNorm = normalizarClaveMlb(marcador.homeTeam);
+  const awayNorm = normalizarClaveMlb(marcador.awayTeam);
+  
+  // Determinar qué equipo del evento corresponde a home/away en el marcador
+  const equipo1EsHome = homeNorm === equipo1Norm || homeNorm.includes(equipo1Norm) || equipo1Norm.includes(homeNorm);
+  const equipo1EsAway = awayNorm === equipo1Norm || awayNorm.includes(equipo1Norm) || equipo1Norm.includes(awayNorm);
+  
+  if (equipo1EsHome) {
+    // equipo1 es home, equipo2 es away
+    return `${marcador.homeTeam} ${marcador.home} - ${marcador.away} ${marcador.awayTeam}`;
+  } else if (equipo1EsAway) {
+    // equipo1 es away, equipo2 es home
+    return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
+  }
+  
+  // Fallback: formato por defecto
+  return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
+}
+
 function getMarcadorMlb(game) {
   const home = Number(game?.teams?.home?.score ?? game?.linescore?.teams?.home?.runs);
   const away = Number(game?.teams?.away?.score ?? game?.linescore?.teams?.away?.runs);
@@ -3109,7 +3141,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           ? getTotalCarrerasObjetivoMlb(autoMlb, marcador)
           : marcador?.total;
         const marcadorTexto = marcador
-          ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
+          ? formatMarcadorSegunEvento(ev, marcador)
           : autoMlb.marcador;
         if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== estadoJuego || autoMlb.marcador !== marcadorTexto || autoMlb.fechaJuego !== game.gameDate) {
           huboCambioMetadata = true;
@@ -3137,7 +3169,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           gamePk: game.gamePk,
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           estadoEspecial: null,
-          marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
+          marcador: formatMarcadorSegunEvento(ev, evaluacion.marcador),
           totalCarreras: totalObjetivo,
           fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
