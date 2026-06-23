@@ -4132,7 +4132,7 @@ function getEstadoSeleccionIconHtml(estado = "pendiente") {
     pendiente: { bg: "#334155", color: "#cbd5e1", title: "Pendiente", symbol: "&#9203;" }
   };
   const item = config[estado] || config.pendiente;
-  return `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:${item.bg}; color:${item.color}; font-size:12px; cursor:pointer; transition:background-color 160ms ease, color 160ms ease, transform 160ms ease;" title="${item.title}">${item.symbol}</span>`;
+  return `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:${item.bg}; color:${item.color}; font-size:12px; cursor:pointer; transform:translateY(-2px); transition:background-color 160ms ease, color 160ms ease, transform 160ms ease;" title="${item.title}">${item.symbol}</span>`;
 }
 
 function getEstadoEspecialApuestaHtml(auto = {}) {
@@ -4373,19 +4373,7 @@ function _render() {
 
             selections.forEach((sel, selIndex) => {
               const jEstado = sel.estado || "pendiente";
-
-              let iconHtml = "";
-              if (jEstado === "ganada") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#22c55e; color:white; font-size:12px; cursor:pointer;" title="Ganada">✔</span>`;
-              } else if (jEstado === "perdida") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#ef4444; color:white; font-size:12px; cursor:pointer;" title="Perdida">✖</span>`;
-              } else if (jEstado === "nula") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#64748b; color:white; font-size:12px; cursor:pointer;" title="Nula">➖</span>`;
-              } else {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#334155; color:#cbd5e1; font-size:12px; cursor:pointer;" title="Pendiente">⏳</span>`;
-              }
-
-              iconHtml = getEstadoSeleccionIconHtml(jEstado);
+              const iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
               const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
@@ -4482,18 +4470,7 @@ function _render() {
 
             const selectionsHtml = selections.map((sel, selIndex) => {
               const jEstado = sel.estado || "pendiente";
-
-              let iconHtml = "";
-              if (jEstado === "ganada") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#22c55e; color:white; font-size:12px; cursor:pointer;" title="Ganada">✔</span>`;
-              } else if (jEstado === "perdida") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#ef4444; color:white; font-size:12px; cursor:pointer;" title="Perdida">✖</span>`;
-              } else if (jEstado === "nula") {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#64748b; color:white; font-size:12px; cursor:pointer;" title="Nula">➖</span>`;
-              } else {
-                iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#334155; color:#cbd5e1; font-size:12px; cursor:pointer;" title="Pendiente">⏳</span>`;
-              }
-
+              const iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = (isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
               const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
