@@ -149,6 +149,17 @@ function getCasasParaEdicion(apuesta) {
   return disponibles;
 }
 
+function normalizarFechaDeApuesta(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (!fecha) return apuesta;
+  const normalized = String(fecha);
+  if (apuesta.fecha !== normalized || apuesta.dia !== normalized) {
+    apuesta.fecha = normalized;
+    apuesta.dia = normalized;
+  }
+  return apuesta;
+}
+
 async function asegurarCasaPrincipal() {
   const casaRef = doc(db, "casas", CASA_DEFAULT_ID);
   const casaSnap = await getDoc(casaRef);
@@ -721,7 +732,7 @@ function escucharApuestas() {
     }
 
     if (!apuestasSnapshotRecibido) {
-      apuestas = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+      apuestas = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
       apuestasSnapshotRecibido = true;
     } else {
       snapshot.docChanges().forEach(change => {
@@ -731,10 +742,16 @@ function escucharApuestas() {
           return;
         }
 
-        const apuesta = { ...change.doc.data(), id };
+        const apuesta = normalizarFechaDeApuesta({ ...change.doc.data(), id });
         const index = apuestas.findIndex(item => item.id === id);
         if (index >= 0) apuestas[index] = apuesta;
         else apuestas.push(apuesta);
+
+        if (apuesta.fecha && apuesta.dia && apuesta.fecha !== apuesta.dia) {
+          const fechaNormalizada = apuesta.fecha;
+          updateDoc(doc(db, "apuestas", apuesta.id), { fecha: fechaNormalizada, dia: fechaNormalizada })
+            .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
+        }
       });
     }
 
@@ -1363,7 +1380,7 @@ function enriquecerJugadasAutoMlb(jugadas = [], deporte = "") {
 
     return {
       ...jugada,
-      autoMlb: equipos.length >= 2 ? { deporte: "mlb", equipos: equipos.slice(0, 2) } : jugada.autoMlb,
+      autoMlb: equipos.length >= 2 ? { deporte: "mlb", equipos: equipos.slice(0, 2) } : (jugada.autoMlb ?? null),
       selections
     };
   });
@@ -1569,7 +1586,7 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
 
     return {
       ...jugada,
-      autoFutbol: equipos.length >= 2 ? { deporte: "futbol", equipos } : jugada.autoFutbol,
+      autoFutbol: equipos.length >= 2 ? { deporte: "futbol", equipos } : (jugada.autoFutbol ?? null),
       selections
     };
   });
@@ -2008,7 +2025,7 @@ window.agregarSeleccionAlSlotCrearSimple = function (btn) {
    ========================= */
 async function agregarApuesta() {
   const fecha = document.getElementById("fecha").value;
-  const hora = document.getElementById("hora")?.value || "";
+  const hora = "";
   const tipoApuesta = document.getElementById("tipoApuesta").value;
   const deporte = getDeporteFormulario();
   const isCombinada = tipoApuesta === "combinada";
@@ -2233,11 +2250,13 @@ async function agregarApuesta() {
   ultimoDiaAgregadoTime = Date.now();
   ultimoDiaAgregadoIntentos = 0;
   const resultado = document.getElementById("resultado").value;
-  const casa = getCasaPorId(casaFormularioId);
+  const casaSeleccionada = document.getElementById("casaApuesta")?.value || casaFormularioId;
+  const casa = getCasaPorId(casaSeleccionada);
   const datosCasa = {
     casaId: casa.id,
     casaNombre: casa.nombre
   };
+  casaFormularioId = casa.id;
   if (jugadas.length > 0) {
     jugadas = normalizarJugadasConEstado(jugadas);
     jugadas = enriquecerJugadasAuto(jugadas, deporte);
@@ -2273,7 +2292,7 @@ async function agregarApuesta() {
           [{ ev, c, estado: resultado, selections: [{ titulo: "", jugada: jug, estado: resultado }] }],
           deporte
         );
-        saves.push(addDoc(collection(db, "apuestas"), {
+        saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte,
           fecha, dia, hora,
@@ -2284,7 +2303,7 @@ async function agregarApuesta() {
           importe: importeSlot,
           resultado,
           creadoEn: Date.now() + idx
-        }));
+        })));
       });
       await Promise.all(saves);
     } else if (tipoApuesta === "simple_option_bet") {
@@ -2312,7 +2331,7 @@ async function agregarApuesta() {
         };
         const jugadasSlot = enriquecerJugadasAuto([jugada], deporte);
 
-        saves.push(addDoc(collection(db, "apuestas"), {
+        saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte,
           fecha, dia, hora,
@@ -2323,7 +2342,7 @@ async function agregarApuesta() {
           importe: importeSlot,
           resultado: "pendiente",
           creadoEn: Date.now() + idx
-        }));
+        })));
       });
       await Promise.all(saves);
     } else if (tipoApuesta === "crear_apuesta_simple") {
@@ -2349,7 +2368,7 @@ async function agregarApuesta() {
           deporte
         );
 
-        saves.push(addDoc(collection(db, "apuestas"), {
+        saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte,
           fecha, dia, hora,
@@ -2360,18 +2379,18 @@ async function agregarApuesta() {
           importe: importeSlot,
           resultado,
           creadoEn: Date.now() + idx
-        }));
+        })));
       });
       await Promise.all(saves);
     } else {
-      await addDoc(collection(db, "apuestas"), {
+      await addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
         ...datosCasa,
         deporte,
         fecha, evento, jugadas, tipoApuesta, cuota, importe,
         resultado,
         dia, hora,
         creadoEn: Date.now()
-      });
+      }));
     }
   } catch (e) {
     console.error("Error al agregar la apuesta:", e);
@@ -2386,12 +2405,11 @@ async function agregarApuesta() {
   const diasUnicosPost = [...new Set([...getApuestasFiltradas().map(a => a.dia), dia])].sort((a, b) => new Date(a) - new Date(b));
   paginaActual = Math.ceil((diasUnicosPost.indexOf(dia) + 1) / porPagina) || 1;
   renderCasasControls();
+  render();
 
   // ── Reset form ──
   document.getElementById("importe").value = "";
   document.getElementById("fecha").value = obtenerFechaActualLocal();
-  const inputHora = document.getElementById("hora");
-  if (inputHora) inputHora.value = "";
   document.getElementById("resultado").value = "pendiente";
 
   // Reset to SIMPLE
@@ -2446,9 +2464,6 @@ async function agregarApuesta() {
   // Clear combinada fields
   document.getElementById("evento").value = "";
   document.getElementById("eventosContainer").querySelectorAll(".jugada-slot").forEach(s => s.remove());
-
-  // Forzar renderizado para sincronizar la interfaz
-  render();
 
   // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
   if (dia === obtenerFechaActualLocal()) {
@@ -2849,6 +2864,19 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
+  const exactMatch = juegos.find(game => {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalJuego(game);
+      if (fechaJuego && fechaJuego !== fechaBet) return false;
+    }
+    const nombres = [
+      game?.teams?.home?.team?.name,
+      game?.teams?.away?.team?.name
+    ].map(normalizarClaveMlb);
+    return buscados.every(equipo => nombres.includes(equipo));
+  });
+  if (exactMatch) return exactMatch;
+
   return juegos.find(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalJuego(game);
@@ -2865,6 +2893,18 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
 function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
+
+  const exactMatch = juegos.find(event => {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalEvent(event);
+      if (fechaJuego && fechaJuego !== fechaBet) return false;
+    }
+    const nombres = (event?.competitions?.[0]?.competitors || [])
+      .map(item => item?.team?.displayName || item?.team?.name || item?.team?.shortDisplayName || item?.team?.abbreviation || "")
+      .map(normalizarClaveMlb);
+    return buscados.every(equipo => nombres.some(nombre => nombre === equipo || nombre.includes(equipo) || equipo.includes(nombre)));
+  });
+  if (exactMatch) return exactMatch;
 
   return juegos.find(event => {
     if (fechaBet) {
@@ -3156,9 +3196,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     return equiposApuesta.map(normalizarClaveMlb).every(eq => nombres.includes(eq));
   });
   const isoJuego = primerJuego?.gameDate || primerJuego?.date || "";
-  const horaFechaLocal = obtenerFechaHoraLocalDesdeIso(isoJuego);
-  const horaExtraida = horaFechaLocal.hora;
-  const fechaExtraida = horaFechaLocal.fecha;
+  const { fecha: fechaExtraida } = obtenerFechaHoraLocalDesdeIso(isoJuego);
 
   const apuestaTemp = {
     ...apuesta,
@@ -3187,13 +3225,14 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     }
   };
 
-  // Guardar hora/fecha local si la API la devuelve y la apuesta no la tiene
-  if (horaExtraida && !apuesta.hora) {
-    updatePayload.hora = horaExtraida;
-  }
-  if (fechaExtraida && fechaExtraida !== (apuesta.fecha || apuesta.dia)) {
+  if ((!apuesta.fecha && !apuesta.dia) && fechaExtraida) {
     updatePayload.fecha = fechaExtraida;
     updatePayload.dia = fechaExtraida;
+  }
+
+  if (apuesta.fecha || apuesta.dia) {
+    delete updatePayload.fecha;
+    delete updatePayload.dia;
   }
 
   return updatePayload;
@@ -3953,9 +3992,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     return scoreA >= 0.45 && scoreB >= 0.45;
   });
   const isoJuegoFutbol = primerJuegoFutbol?.date || primerJuegoFutbol?.competitions?.[0]?.date || "";
-  const horaFechaLocalFutbol = obtenerFechaHoraLocalDesdeIso(isoJuegoFutbol);
-  const horaExtraidaFutbol = horaFechaLocalFutbol.hora;
-  const fechaExtraidaFutbol = horaFechaLocalFutbol.fecha;
+  const { fecha: fechaExtraidaFutbol } = obtenerFechaHoraLocalDesdeIso(isoJuegoFutbol);
 
   const apuestaTemp = {
     ...apuesta,
@@ -3984,13 +4021,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     }
   };
 
-  // Guardar hora/fecha local si la API la devuelve y la apuesta no la tiene
-  if (horaExtraidaFutbol && !apuesta.hora) {
-    updatePayloadFutbol.hora = horaExtraidaFutbol;
-  }
-  if (fechaExtraidaFutbol && fechaExtraidaFutbol !== (apuesta.fecha || apuesta.dia)) {
+  if ((!apuesta.fecha && !apuesta.dia) && fechaExtraidaFutbol) {
     updatePayloadFutbol.fecha = fechaExtraidaFutbol;
     updatePayloadFutbol.dia = fechaExtraidaFutbol;
+  }
+
+  if (apuesta.fecha || apuesta.dia) {
+    delete updatePayloadFutbol.fecha;
+    delete updatePayloadFutbol.dia;
   }
 
   return updatePayloadFutbol;
@@ -4072,7 +4110,7 @@ let _autoSyncFutbolIntervalId = null;
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
+  const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
   _autoSyncFutbolIntervalId = setInterval(async () => {
     try {
       await sincronizarResultadosFutbol(true);
@@ -4088,7 +4126,7 @@ let _autoSyncMlbIntervalId = null;
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 20 * 60 * 1000; // 20 minutos
+  const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
   _autoSyncMlbIntervalId = setInterval(async () => {
     try {
       await sincronizarResultadosMlb(true);
@@ -4406,7 +4444,7 @@ async function guardarEdicion(id) {
     };
     updateData.resultado = nuevoResultado;
 
-    await updateDoc(doc(db, "apuestas", id), updateData);
+    await updateDoc(doc(db, "apuestas", id), limpiarUndefinedFirestore(updateData));
 
     // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
     if (nuevoFecha === obtenerFechaActualLocal()) {
@@ -4757,9 +4795,14 @@ function _render() {
   const apuestasRender = getApuestasFiltradas();
   const dias = {};
   apuestasRender.forEach(a => {
-    if (!dias[a.dia]) dias[a.dia] = [];
-    dias[a.dia].push(a);
+    const diaKey = a.fecha || a.dia || "";
+    if (!dias[diaKey]) dias[diaKey] = [];
+    dias[diaKey].push(a);
   });
+
+  if (ultimoDiaAgregado && !dias[ultimoDiaAgregado]) {
+    dias[ultimoDiaAgregado] = [];
+  }
 
   const diasKeys = Object.keys(dias).sort(
     (a, b) => new Date(a) - new Date(b)
@@ -4768,7 +4811,10 @@ function _render() {
   const totalPaginas = Math.ceil(diasKeys.length / porPagina);
 
   if (paginaActual > totalPaginas) {
-    paginaActual = totalPaginas || 1;
+    const recienAgregado = ultimoDiaAgregadoTime && (Date.now() - ultimoDiaAgregadoTime < 2500);
+    if (!recienAgregado) {
+      paginaActual = totalPaginas || 1;
+    }
   }
 
   const inicio = (paginaActual - 1) * porPagina;
@@ -4801,8 +4847,9 @@ function _render() {
         ret += r;
       }
 
-      const [year, month, day] = a.fecha.split("-");
-      let fechaFormateada = `${day}/${month}/${year}`;
+      const fechaBase = a.fecha || a.dia || "";
+      const [year, month, day] = fechaBase ? fechaBase.split("-") : ["", "", ""];
+      let fechaFormateada = (day && month && year) ? `${day}/${month}/${year}` : (fechaBase || "—");
       if (a.hora) {
         fechaFormateada += `<br><span style="font-size:11px; color:#cbd5e1; font-weight:500;">${a.hora}</span>`;
       }
@@ -5326,7 +5373,7 @@ function _render() {
 
     html += `
       <div class="page" data-dia="${dia}">
-        <h2>${dias[dia][0].fecha.split("-").reverse().join("-")}</h2>
+        <h2>${(dias[dia][0].fecha || dias[dia][0].dia || "").split("-").reverse().join("-")}</h2>
 
         <p>Invertido: <span data-dia-inv="${dia}">$${inv.toFixed(2)}</span></p>
         <p>Retornado: <span data-dia-ret="${dia}">$${ret.toFixed(2)}</span></p>
@@ -5517,26 +5564,28 @@ function _render() {
   document.body.appendChild(btn);
 
   if (ultimoDiaAgregado) {
-    setTimeout(() => {
-      const elemento = document.querySelector(`[data-dia="${ultimoDiaAgregado}"]`);
-      if (elemento) {
-        const tabla = elemento.querySelector("table");
-        if (tabla) {
-          tabla.scrollIntoView({ behavior: "smooth", block: "center" });
-        } else {
-          elemento.scrollIntoView({ behavior: "smooth", block: "start" });
+      const intentarScroll = () => {
+        const elemento = document.querySelector(`[data-dia="${ultimoDiaAgregado}"]`);
+        if (elemento) {
+          const tabla = elemento.querySelector("table");
+          elemento.scrollIntoView({ block: "start" });
+          if (tabla) {
+            tabla.scrollIntoView({ block: "center" });
+          }
+          ultimoDiaAgregado = null;
+          ultimoDiaAgregadoIntentos = 0;
+          return;
         }
-        ultimoDiaAgregado = null;
-        ultimoDiaAgregadoIntentos = 0;
-        return;
-      }
 
-      ultimoDiaAgregadoIntentos++;
-      if (ultimoDiaAgregadoIntentos >= 10) {
-        ultimoDiaAgregado = null;
-        ultimoDiaAgregadoIntentos = 0;
-      }
-    }, 300);
+        ultimoDiaAgregadoIntentos++;
+        if (ultimoDiaAgregadoIntentos < 10) {
+          setTimeout(intentarScroll, 300);
+        } else {
+          ultimoDiaAgregado = null;
+          ultimoDiaAgregadoIntentos = 0;
+        }
+      };
+      setTimeout(intentarScroll, 300);
   }
 }
 
