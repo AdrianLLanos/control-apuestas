@@ -2506,11 +2506,13 @@ function juegoMlbFinalizado(game) {
 }
 
 function evaluarAutoMlb(autoMlb, game) {
-  if (!autoMlb || !juegoMlbFinalizado(game)) return null;
+  if (!autoMlb) return null;
   const marcador = getMarcadorMlb(game);
   if (!marcador) return null;
+  const finalizado = juegoMlbFinalizado(game);
 
   if (autoMlb.mercado === "ganador_partido") {
+    if (!finalizado) return null;
     const homeWon = marcador.home > marcador.away;
     const awayWon = marcador.away > marcador.home;
     if (!homeWon && !awayWon) return { estado: "nula", marcador };
@@ -2525,6 +2527,11 @@ function evaluarAutoMlb(autoMlb, game) {
   if (autoMlb.mercado === "total_carreras") {
     const linea = Number(autoMlb.linea);
     if (Number.isNaN(linea)) return null;
+    if (!finalizado) {
+      if (autoMlb.tipoTotal === "over" && marcador.total > linea) return { estado: "ganada", marcador };
+      if (autoMlb.tipoTotal === "under" && marcador.total > linea) return { estado: "perdida", marcador };
+      return null;
+    }
     if (marcador.total === linea) return { estado: "nula", marcador };
     const ganaOver = marcador.total > linea;
     return {
@@ -2535,6 +2542,13 @@ function evaluarAutoMlb(autoMlb, game) {
 
   if (autoMlb.mercado === "ambos_equipos_anotan") {
     const ambosAnotaron = marcador.home > 0 && marcador.away > 0;
+    if (!finalizado && ambosAnotaron) {
+      return {
+        estado: autoMlb.seleccion === "no" ? "perdida" : "ganada",
+        marcador
+      };
+    }
+    if (!finalizado) return null;
     return {
       estado: (autoMlb.seleccion === "no" ? !ambosAnotaron : ambosAnotaron) ? "ganada" : "perdida",
       marcador
@@ -2587,7 +2601,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
         autoMlb: {
           ...autoMlb,
           gamePk: game.gamePk,
-          estadoJuego: game?.status?.detailedState || "Final",
+          estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           sincronizadoEn: Date.now()
         }
@@ -2613,8 +2627,14 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoMlb?.mercado === "total_carreras")?.autoMlb;
       const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos) : null;
-      const marcador = game && juegoMlbFinalizado(game) ? getMarcadorMlb(game) : null;
-      if (marcador && jugadaActualizada.resultadoTotal !== marcador.total) {
+      const marcador = game ? getMarcadorMlb(game) : null;
+      const finalizado = game ? juegoMlbFinalizado(game) : false;
+      const totalIrreversible = marcador && totalAuto && (
+        finalizado ||
+        (totalAuto.tipoTotal === "over" && marcador.total > Number(totalAuto.linea)) ||
+        (totalAuto.tipoTotal === "under" && marcador.total > Number(totalAuto.linea))
+      );
+      if (totalIrreversible && jugadaActualizada.resultadoTotal !== marcador.total) {
         jugadaActualizada.resultadoTotal = marcador.total;
         huboCambio = true;
       }
@@ -2891,11 +2911,13 @@ function getTotalCornersFutbol(summary) {
 }
 
 function evaluarAutoFutbol(autoFutbol, game, summary = null) {
-  if (!autoFutbol || !juegoFutbolFinalizado(game)) return null;
+  if (!autoFutbol) return null;
   const marcador = getMarcadorFutbol(game);
   if (!marcador) return null;
+  const finalizado = juegoFutbolFinalizado(game);
 
   if (autoFutbol.mercado === "ganador_partido") {
+    if (!finalizado) return null;
     if (marcador.home === marcador.away) {
       return { estado: autoFutbol.seleccion === "empate" ? "ganada" : "perdida", marcador };
     }
@@ -2911,6 +2933,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   }
 
   if (autoFutbol.mercado === "handicap") {
+    if (!finalizado) return null;
     const linea = Number(autoFutbol.linea);
     const equipo = getScoreEquipoMarcadorFutbol(autoFutbol.seleccionEquipo, marcador);
     if (Number.isNaN(linea) || !equipo) return null;
@@ -2925,6 +2948,11 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (autoFutbol.mercado === "total_goles") {
     const linea = Number(autoFutbol.linea);
     if (Number.isNaN(linea)) return null;
+    if (!finalizado) {
+      if (autoFutbol.tipoTotal === "over" && marcador.total > linea) return { estado: "ganada", marcador };
+      if (autoFutbol.tipoTotal === "under" && marcador.total > linea) return { estado: "perdida", marcador };
+      return null;
+    }
     if (marcador.total === linea) return { estado: "nula", marcador };
     const ganaOver = marcador.total > linea;
     return {
@@ -2935,6 +2963,13 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
 
   if (autoFutbol.mercado === "ambos_marcan") {
     const ambosMarcaron = marcador.home > 0 && marcador.away > 0;
+    if (!finalizado && ambosMarcaron) {
+      return {
+        estado: autoFutbol.seleccion === "no" ? "perdida" : "ganada",
+        marcador
+      };
+    }
+    if (!finalizado) return null;
     return {
       estado: (autoFutbol.seleccion === "no" ? !ambosMarcaron : ambosMarcaron) ? "ganada" : "perdida",
       marcador
@@ -2945,6 +2980,11 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
     const totalCorners = getTotalCornersFutbol(summary);
     const linea = Number(autoFutbol.linea);
     if (totalCorners === null || Number.isNaN(linea)) return null;
+    if (!finalizado) {
+      if (autoFutbol.tipoTotal === "over" && totalCorners > linea) return { estado: "ganada", marcador, totalCorners };
+      if (autoFutbol.tipoTotal === "under" && totalCorners > linea) return { estado: "perdida", marcador, totalCorners };
+      return null;
+    }
     if (totalCorners === linea) return { estado: "nula", marcador, totalCorners };
     const ganaOver = totalCorners > linea;
     return {
@@ -3016,7 +3056,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           ...autoFutbol,
           id: game.id,
           liga: game.leagueLabel,
-          estadoJuego: game?.status?.type?.detail || "Final",
+          estadoJuego: game?.status?.type?.detail || game?.status?.type?.description || "Final",
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           sincronizadoEn: Date.now()
@@ -3043,8 +3083,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoFutbol?.mercado === "total_goles")?.autoFutbol;
       const game = totalAuto ? buscarJuegoFutbol(juegosFecha, totalAuto.equipos) : null;
-      const marcador = game && juegoFutbolFinalizado(game) ? getMarcadorFutbol(game) : null;
-      if (marcador && jugadaActualizada.resultadoTotal !== marcador.total) {
+      const marcador = game ? getMarcadorFutbol(game) : null;
+      const finalizado = game ? juegoFutbolFinalizado(game) : false;
+      const totalIrreversible = marcador && totalAuto && (
+        finalizado ||
+        (totalAuto.tipoTotal === "over" && marcador.total > Number(totalAuto.linea)) ||
+        (totalAuto.tipoTotal === "under" && marcador.total > Number(totalAuto.linea))
+      );
+      if (totalIrreversible && jugadaActualizada.resultadoTotal !== marcador.total) {
         jugadaActualizada.resultadoTotal = marcador.total;
         huboCambio = true;
       }
