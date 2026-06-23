@@ -1073,14 +1073,17 @@ function extraerLineaTotal(texto = "", palabras = []) {
 
 function detectarEquipoTotalMlb(texto = "", evento = "") {
   const equiposTexto = detectarEquiposMlb(texto);
-  if (equiposTexto.length !== 1) return "";
-
-  const equiposEvento = detectarEquiposMlb(evento);
-  if (equiposEvento.length >= 2 && !equiposEvento.some(equipo => normalizarClaveMlb(equipo) === normalizarClaveMlb(equiposTexto[0]))) {
+  if (equiposTexto.length === 1) {
+    const equiposEvento = detectarEquiposMlb(evento);
+    if (equiposEvento.length < 2 || equiposEvento.some(equipo => normalizarClaveMlb(equipo) === normalizarClaveMlb(equiposTexto[0]))) {
+      return equiposTexto[0];
+    }
     return "";
   }
 
-  return equiposTexto[0];
+  const equiposEvento = detectarEquiposMlb(evento);
+  if (equiposEvento.length === 1) return equiposEvento[0];
+  return "";
 }
 
 function extraerSiNo(texto = "") {
@@ -1282,8 +1285,6 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
   const normalizado = normalizarTextoMercado(textoCompleto);
   const equiposEvento = detectarEquiposMlb(evento);
   const equiposTexto = detectarEquiposMlb(`${evento} ${textoCompleto}`);
-
-  if (equiposTexto.length < 2) return null;
 
   if (tienePalabraMercado(normalizado, ["handicap", "handi", "hcap"]) || /\b(runline|spread)\b/.test(normalizado) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
     const linea = extraerNumeroConSigno(textoCompleto);
@@ -3320,7 +3321,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   const marcador = autoMlb.marcador;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
-  const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras ${autoMlb.seleccionEquipo}` : "Carreras";
+  const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
     ? ` · ${escapeHtml(carrerasLabel)}: ${escapeHtml(totalCarreras)}`
     : "";
