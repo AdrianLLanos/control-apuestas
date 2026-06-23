@@ -2849,7 +2849,7 @@ async function cargarJuegosFutbolPorFecha(fecha) {
 
   for (const liga of FOOTBALL_LEAGUES) {
     try {
-      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${liga.slug}/scoreboard?dates=${encodeURIComponent(date)}`;
+      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${liga.slug}/scoreboard?dates=${encodeURIComponent(date)}&lang=es&region=mx`;
       const response = await fetch(url);
       if (!response.ok) continue;
 
@@ -2871,7 +2871,7 @@ async function cargarResumenFutbol(game) {
   if (footballSummaryCache.has(cacheKey)) return footballSummaryCache.get(cacheKey);
 
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${game.leagueSlug}/summary?event=${encodeURIComponent(game.id)}`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${game.leagueSlug}/summary?event=${encodeURIComponent(game.id)}&lang=es&region=mx`;
     const response = await fetch(url);
     if (!response.ok) return null;
     const data = await response.json();
