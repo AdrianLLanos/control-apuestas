@@ -3392,23 +3392,23 @@ async function sincronizarResultadosFutbol() {
 function getAutoFutbolMarcadorHtml(selection = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   if (futbolAuto.mercado === "total_corners") {
-    const marcador = futbolAuto.marcador;
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
-    const totalHtml = totalCorners !== undefined && totalCorners !== null
-      ? ` &middot; Corners: ${escapeHtml(totalCorners)}`
-      : "";
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
       const awayName = cornersEquipo.away.name || "Visitante";
       const homeName = cornersEquipo.home.name || "Local";
-      const detalle = `${awayName} ${cornersEquipo.away.corners} - ${cornersEquipo.home.corners} ${homeName}`;
+      const awayCorners = Number(cornersEquipo.away.corners);
+      const homeCorners = Number(cornersEquipo.home.corners);
+      const totalMostrado = !Number.isNaN(awayCorners) && !Number.isNaN(homeCorners)
+        ? awayCorners + homeCorners
+        : totalCorners;
+      const totalHtml = totalMostrado !== undefined && totalMostrado !== null
+        ? ` &middot; Corners: ${escapeHtml(totalMostrado)}`
+        : "";
+      const detalle = `${awayName} ${escapeHtml(cornersEquipo.away.corners)} - ${escapeHtml(cornersEquipo.home.corners)} ${homeName}`;
       return `<div class="auto-mlb-score">${escapeHtml(detalle)}${totalHtml}${liga}</div>`;
-    }
-
-    if (marcador) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)}${totalHtml}${liga}</div>`;
     }
 
     return totalCorners !== undefined && totalCorners !== null
