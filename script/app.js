@@ -2608,7 +2608,12 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
 
       const evaluacion = evaluarAutoMlb(autoMlb, game);
       if (!evaluacion) {
-        if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== (game?.status?.detailedState || game?.status?.abstractGameState || "")) {
+        const marcador = getMarcadorMlb(game);
+        const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
+        const marcadorTexto = marcador
+          ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
+          : autoMlb.marcador;
+        if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== estadoJuego || autoMlb.marcador !== marcadorTexto) {
           huboCambioMetadata = true;
         }
         return {
@@ -2616,7 +2621,9 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
           autoMlb: {
             ...autoMlb,
             gamePk: game.gamePk,
-            estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || ""
+            estadoJuego,
+            marcador: marcadorTexto,
+            totalCarreras: marcador?.total
           }
         };
       }
@@ -2629,6 +2636,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = []) {
           gamePk: game.gamePk,
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           marcador: `${evaluacion.marcador.awayTeam} ${evaluacion.marcador.away} - ${evaluacion.marcador.home} ${evaluacion.marcador.homeTeam}`,
+          totalCarreras: evaluacion.marcador.total,
           sincronizadoEn: Date.now()
         }
       };
@@ -2755,10 +2763,12 @@ async function sincronizarResultadosMlb() {
 }
 
 function getAutoMlbMarcadorHtml(selection = {}) {
-  const marcador = selection?.autoMlb?.marcador;
+  const autoMlb = selection?.autoMlb || {};
+  const marcador = autoMlb.marcador;
   if (!marcador) return "";
-  const estadoJuego = selection.autoMlb.estadoJuego || "Final";
-  return `<div class="auto-mlb-score">${escapeHtml(estadoJuego)} · ${escapeHtml(marcador)}</div>`;
+  const totalCarreras = Number(autoMlb.totalCarreras);
+  const carrerasHtml = Number.isNaN(totalCarreras) ? "" : ` · Carreras: ${escapeHtml(totalCarreras)}`;
+  return `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`;
 }
 
 const FOOTBALL_LEAGUES = [
@@ -3136,14 +3146,21 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = game?.status?.type?.detail || game?.status?.type?.description || "";
-        if (autoFutbol.id !== game.id || autoFutbol.estadoJuego !== estadoJuego) huboCambioMetadata = true;
+        const marcador = getMarcadorFutbol(game);
+        const marcadorTexto = marcador
+          ? `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`
+          : autoFutbol.marcador;
+        if (autoFutbol.id !== game.id || autoFutbol.estadoJuego !== estadoJuego || autoFutbol.marcador !== marcadorTexto) {
+          huboCambioMetadata = true;
+        }
         selections.push({
           ...sel,
           autoFutbol: {
             ...autoFutbol,
             id: game.id,
             liga: game.leagueLabel,
-            estadoJuego
+            estadoJuego,
+            marcador: marcadorTexto
           }
         });
         continue;
