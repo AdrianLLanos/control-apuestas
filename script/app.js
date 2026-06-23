@@ -2902,6 +2902,16 @@ function apuestaTieneMarcadorFutbol(apuesta) {
   );
 }
 
+function apuestaTieneCornersFutbolIncompletos(apuesta) {
+  return (apuesta?.jugadas || []).some(j =>
+    (j?.selections || []).some(sel => {
+      const auto = sel?.autoFutbol;
+      if (auto?.mercado !== "total_corners") return false;
+      return !(auto.cornersEquipo?.home && auto.cornersEquipo?.away);
+    })
+  );
+}
+
 function fechaEspn(fecha = "") {
   return String(fecha).replace(/-/g, "");
 }
@@ -3269,7 +3279,17 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       };
 
       if ((sel.estado || "pendiente") !== evaluacion.estado) huboCambio = true;
-      if (autoFutbol.sincronizadoEn === undefined) huboCambioMetadata = true;
+      if (
+        autoFutbol.sincronizadoEn === undefined ||
+        autoFutbol.id !== game.id ||
+        autoFutbol.liga !== game.leagueLabel ||
+        autoFutbol.estadoJuego !== siguiente.autoFutbol.estadoJuego ||
+        autoFutbol.marcador !== siguiente.autoFutbol.marcador ||
+        autoFutbol.totalCorners !== siguiente.autoFutbol.totalCorners ||
+        JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null)
+      ) {
+        huboCambioMetadata = true;
+      }
       selections.push(siguiente);
     }
 
@@ -3338,7 +3358,11 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
 async function sincronizarResultadosFutbol() {
   const candidatas = apuestas.filter(a =>
     apuestaPareceFutbol(a) &&
-    ((a.resultado || "pendiente") === "pendiente" || !apuestaTieneMarcadorFutbol(a)) &&
+    (
+      (a.resultado || "pendiente") === "pendiente" ||
+      !apuestaTieneMarcadorFutbol(a) ||
+      apuestaTieneCornersFutbolIncompletos(a)
+    ) &&
     Array.isArray(a.jugadas) &&
     a.jugadas.length > 0
   );
