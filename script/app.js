@@ -3363,6 +3363,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
     }
   } finally {
     if (!silencioso && btn) btn.disabled = false;
+    if (!silencioso) render();
   }
 }
 
@@ -3505,6 +3506,32 @@ function apuestaTieneMercadoCornersFutbol(apuesta) {
 
 function fechaEspn(fecha = "") {
   return String(fecha).replace(/-/g, "");
+}
+
+function buscarJuegoFutbolFallback(juegos = [], equipoTexto = "", fechaBet = "") {
+  if (!equipoTexto || !Array.isArray(juegos) || juegos.length === 0) return null;
+  const objetivo = normalizarClaveFutbol(equipoTexto);
+  if (!objetivo) return null;
+  for (const game of juegos) {
+    if (fechaBet) {
+      const fechaJuego = obtenerFechaLocalEvent(game);
+      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) continue;
+    }
+    const competitors = getCompetidoresFutbol(game);
+    for (const c of competitors) {
+      const opciones = [c.name, c.shortName, c.abbreviation].map(normalizarClaveFutbol).filter(Boolean);
+      if (opciones.some(op => op === objetivo || op.includes(objetivo) || objetivo.includes(op))) {
+        return game;
+      }
+      const objetivoTokens = objetivo.split(" ").filter(t => t.length >= 3);
+      const opcionesTokens = opciones.flatMap(op => op.split(" ").filter(t => t.length >= 3));
+      if (objetivoTokens.length && opcionesTokens.length) {
+        const matches = objetivoTokens.filter(token => opcionesTokens.includes(token)).length;
+        if (matches / Math.max(objetivoTokens.length, 1) >= 0.5) return game;
+      }
+    }
+  }
+  return null;
 }
 
 function getFechasCercanas(fecha = "") {
@@ -3887,6 +3914,22 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         jugada: sel.jugada || ""
       });
       if (!autoFutbol) {
+        const jugadaText = sel.jugada || sel.titulo || "";
+        if (jugadaText && juegosFecha.length > 0) {
+          const foundGame = buscarJuegoFutbolFallback(juegosFecha, jugadaText, fechaBet);
+          if (foundGame) {
+            const competidores = getCompetidoresFutbol(foundGame);
+            const nombresEquipos = competidores.map(c => c.name).filter(Boolean);
+            const foundEv = nombresEquipos.join(" vs ");
+            const nuevoAuto = crearAutoFutbolSeleccion({ evento: foundEv, titulo: sel.titulo || "", jugada: sel.jugada || "" });
+            if (nuevoAuto) {
+              autoFutbol = nuevoAuto;
+              huboCambioMetadata = true;
+            }
+          }
+        }
+      }
+      if (!autoFutbol) {
         selections.push(sel);
         continue;
       }
@@ -4159,6 +4202,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
   } finally {
     if (!silencioso && btn) btn.disabled = false;
+    if (!silencioso) render();
   }
 }
 
