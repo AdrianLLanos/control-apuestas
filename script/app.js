@@ -785,14 +785,23 @@ function escucharApuestas() {
           updateDoc(doc(db, "apuestas", a.id), updateData)
             .catch(err => console.error("Error al auto-corregir patente:", err));
         }
-      }
-
-      if (debeRecalcularCuotaCombinada(a.tipoApuesta) && Array.isArray(a.jugadas) && a.jugadas.length > 0) {
-        const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
-        if (cuotaRecalculada > 0 && formatDecimal(a.cuota) !== formatDecimal(cuotaRecalculada)) {
-          a.cuota = cuotaRecalculada;
-          updateDoc(doc(db, "apuestas", a.id), { cuota: cuotaRecalculada })
-            .catch(err => console.error("Error al auto-corregir cuota combinada:", err));
+      } else if (Array.isArray(a.jugadas) && a.jugadas.length > 0) {
+        const resultadoRecalculado = recalcularResultadoApuesta(a);
+        const updateData = {};
+        if (a.resultado !== resultadoRecalculado) {
+          a.resultado = resultadoRecalculado;
+          updateData.resultado = resultadoRecalculado;
+        }
+        if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
+          const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
+          if (cuotaRecalculada > 0 && formatDecimal(a.cuota) !== formatDecimal(cuotaRecalculada)) {
+            a.cuota = cuotaRecalculada;
+            updateData.cuota = cuotaRecalculada;
+          }
+        }
+        if (Object.keys(updateData).length > 0) {
+          updateDoc(doc(db, "apuestas", a.id), updateData)
+            .catch(err => console.error("Error al auto-corregir resultado:", err));
         }
       }
 
