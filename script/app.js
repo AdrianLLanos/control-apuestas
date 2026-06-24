@@ -5667,11 +5667,11 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnEliminarTodo").onclick = eliminarTodo;
   const btnSincronizarMlb = document.getElementById("btnSincronizarMlb");
   if (btnSincronizarMlb) {
-    btnSincronizarMlb.onclick = sincronizarResultadosMlb;
+    btnSincronizarMlb.onclick = () => sincronizarResultadosMlb();
   }
   const btnSincronizarFutbol = document.getElementById("btnSincronizarFutbol");
   if (btnSincronizarFutbol) {
-    btnSincronizarFutbol.onclick = sincronizarResultadosFutbol;
+    btnSincronizarFutbol.onclick = () => sincronizarResultadosFutbol();
   }
   startAutoSyncFutbol();
   startAutoSyncMlb();
