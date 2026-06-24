@@ -2996,9 +2996,17 @@ function getTotalCarrerasObjetivoMlb(autoMlb = {}, marcador) {
 }
 
 function juegoMlbFinalizado(game) {
-  const state = game?.status?.abstractGameState || "";
-  const detail = game?.status?.detailedState || "";
-  return state === "Final" || /\b(final|game over)\b/i.test(detail);
+  const state = String(game?.status?.abstractGameState || "").toLowerCase();
+  const detail = String(game?.status?.detailedState || "").toLowerCase();
+  return state === "final" || /\b(final|game over)\b/i.test(detail);
+}
+
+function juegoMlbEnCurso(game) {
+  const state = String(game?.status?.abstractGameState || "").toLowerCase();
+  const detail = String(game?.status?.detailedState || "").toLowerCase();
+  if (/\b(in progress|live)\b/.test(state)) return true;
+  if (/\b(pre-game|preview|scheduled|postponed|delayed|final|game over)\b/.test(state)) return false;
+  return /\b(top|bottom|inning|extra|half|inning\s*\d+)\b/.test(detail);
 }
 
 function evaluarAutoMlb(autoMlb, game) {
@@ -3115,7 +3123,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         getEstadoEspecialMlb(game),
         getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard")
       );
-      if (estadoEspecial) {
+      const ignorarRetrasadoActivo = estadoEspecial?.tipo === "retrasado" && juegoMlbEnCurso(game);
+      if (estadoEspecial && !ignorarRetrasadoActivo) {
         const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
         if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
         if (
