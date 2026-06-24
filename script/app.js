@@ -908,7 +908,7 @@ function limpiarEventoDuplicado(texto = "") {
   const limpio = limpiarEspaciosMercado(texto);
   if (!limpio) return "";
 
-  const partes = limpio.split(/(\s+(?:vs?\.?|versus|contra)\s+)/i);
+  const partes = limpio.split(/(\s+(?:vs?\.?|versus|contra|v|[-–—/])\s+)/i);
   if (partes.length < 3) return colapsarRepeticionFinalMercado(limpio);
 
   return limpiarEspaciosMercado(partes.map((parte, index) => {
@@ -1458,7 +1458,7 @@ function normalizarClaveFutbol(value = "") {
 
 function extraerEquiposEventoFutbol(evento = "") {
   const partes = limpiarEventoDuplicado(evento)
-    .split(/\s+(?:vs?\.?|versus|contra|v)\s+/i)
+    .split(/\s+(?:vs?\.?|versus|contra|v|[-–—/])\s+/i)
     .map(parte => limpiarEspaciosMercado(parte))
     .filter(Boolean);
   return partes.length >= 2 ? partes.slice(0, 2) : [];
@@ -3396,19 +3396,26 @@ function getAutoMlbMarcadorHtml(selection = {}) {
 
 const FOOTBALL_LEAGUES = [
   { slug: "fifa.world", label: "FIFA" },
+  { slug: "fifa.worldcup", label: "Copa Mundial" },
   { slug: "fifa.friendly", label: "Amistosos internacionales" },
   { slug: "fifa.worldq", label: "Eliminatorias mundialistas" },
   { slug: "uefa.euro", label: "Eurocopa" },
   { slug: "uefa.nations", label: "UEFA Nations League" },
   { slug: "uefa.champions", label: "Champions League" },
   { slug: "uefa.europa", label: "Europa League" },
+  { slug: "uefa.euroq", label: "Clasificatorios Eurocopa" },
   { slug: "eng.1", label: "Premier League" },
   { slug: "esp.1", label: "LaLiga" },
   { slug: "ita.1", label: "Serie A" },
   { slug: "ger.1", label: "Bundesliga" },
   { slug: "fra.1", label: "Ligue 1" },
   { slug: "conmebol.libertadores", label: "Libertadores" },
-  { slug: "conmebol.sudamericana", label: "Sudamericana" }
+  { slug: "conmebol.sudamericana", label: "Sudamericana" },
+  { slug: "conmebol.copa", label: "Copa América" },
+  { slug: "conmebol.recopa", label: "Recopa" },
+  { slug: "concacaf.goldcup", label: "Copa Oro" },
+  { slug: "concacaf.nations", label: "Concacaf Nations League" },
+  { slug: "concacaf.champions", label: "Concacaf Champions Cup" }
 ];
 
 const FOOTBALL_TEAM_ALIASES = [
