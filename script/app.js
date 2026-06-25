@@ -2859,6 +2859,17 @@ function esEstadoJuegoFinalizado(estadoJuego = "") {
   return /\b(final|finalizado|game over|match finished|full time|finished|ended|ft|aet|pen)\b/.test(normalizado);
 }
 
+function esEstadoFutbolMedioTiempo(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  return /\b(ht|halftime|half time|descanso|medio tiempo|entretiempo)\b/.test(normalizado);
+}
+
+function getPausaMedioTiempoHastaFutbol(estadoJuego = "", pausaActual = null) {
+  if (!esEstadoFutbolMedioTiempo(estadoJuego)) return null;
+  const pausaActualMs = Number(pausaActual) || 0;
+  return pausaActualMs > Date.now() ? pausaActualMs : Date.now() + FOOTBALL_HALFTIME_PAUSE_MS;
+}
+
 function getEstadoFinalizadoHtml(auto = {}) {
   return esEstadoJuegoFinalizado(auto?.estadoJuego)
     ? `<div class="auto-mlb-score auto-mlb-score--final">Finalizado</div>`
@@ -3046,6 +3057,13 @@ function apuestaTieneAutoFinalizado(apuesta = {}, key = "") {
 
 function apuestaYaFinalizadaYResuelta(apuesta = {}, key = "") {
   return (apuesta.resultado || "pendiente") !== "pendiente" && apuestaTieneAutoFinalizado(apuesta, key);
+}
+
+function apuestaFutbolPausadaPorMedioTiempo(apuesta = {}) {
+  return (apuesta.jugadas || []).some(jugada =>
+    Number(jugada?.autoFutbol?.pausaMedioTiempoHasta) > Date.now() ||
+    (jugada?.selections || []).some(sel => Number(sel?.autoFutbol?.pausaMedioTiempoHasta) > Date.now())
+  );
 }
 
 // Compara dos fechas (YYYY-MM-DD) y devuelve true si están dentro de 36 horas
@@ -3670,6 +3688,7 @@ const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 2 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
+const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const apiSportsFootballCache = new Map();
 
 const FOOTBALL_TEAM_ALIASES = [
@@ -4470,6 +4489,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
+        const pausaMedioTiempoHasta = getPausaMedioTiempoHastaFutbol(
+          estadoJuego,
+          autoFutbol.pausaMedioTiempoHasta
+        );
         const marcador = getMarcadorFutbol(game);
         const marcadorTexto = marcador
           ? obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos)
@@ -4488,7 +4511,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           autoFutbol.marcador !== marcadorTexto ||
           autoFutbol.totalCorners !== totalCorners ||
           JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null) ||
-          autoFutbol.fechaJuego !== targetFechaJuego
+          autoFutbol.fechaJuego !== targetFechaJuego ||
+          (autoFutbol.pausaMedioTiempoHasta || null) !== pausaMedioTiempoHasta
         ) {
           huboCambioMetadata = true;
         }
@@ -4503,13 +4527,19 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             marcador: marcadorTexto,
             totalCorners,
             cornersEquipo: cornersEquipo || null,
-            fechaJuego: targetFechaJuego
+            fechaJuego: targetFechaJuego,
+            pausaMedioTiempoHasta
           }
         });
         continue;
       }
 
       const targetFechaJuego = getFechaJuegoFutbol(game);
+      const estadoJuego = getEstadoJuegoFutbol(game) || "Final";
+      const pausaMedioTiempoHasta = getPausaMedioTiempoHastaFutbol(
+        estadoJuego,
+        autoFutbol.pausaMedioTiempoHasta
+      );
       const siguiente = {
         ...sel,
         estado: evaluacion.estado,
@@ -4517,12 +4547,13 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           ...autoFutbol,
           id: getIdJuegoFutbol(game),
           liga: getLigaJuegoFutbol(game),
-          estadoJuego: getEstadoJuegoFutbol(game) || "Final",
+          estadoJuego,
           estadoEspecial: null,
           marcador: obtenerMarcadorTextoFutbol(evaluacion.marcador, autoFutbol.equipos),
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           fechaJuego: targetFechaJuego,
+          pausaMedioTiempoHasta,
           sincronizadoEn: Date.now()
         }
       };
@@ -4536,7 +4567,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         autoFutbol.marcador !== siguiente.autoFutbol.marcador ||
         autoFutbol.totalCorners !== siguiente.autoFutbol.totalCorners ||
         JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null) ||
-        autoFutbol.fechaJuego !== targetFechaJuego
+        autoFutbol.fechaJuego !== targetFechaJuego ||
+        (autoFutbol.pausaMedioTiempoHasta || null) !== siguiente.autoFutbol.pausaMedioTiempoHasta
       ) {
         huboCambioMetadata = true;
       }
@@ -4638,6 +4670,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (!tieneResultadoPendiente) return false;
     if (!apuestaFutbolYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
