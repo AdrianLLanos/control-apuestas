@@ -3009,6 +3009,45 @@ function fechaJuegoYaPaso(fechaJuegoStr = "") {
   return Date.now() >= fechaJuego.getTime();
 }
 
+function getAutoMlbFechasJuego(apuesta = {}) {
+  return (apuesta.jugadas || []).flatMap(jugada => {
+    const fechas = [];
+    if (jugada?.autoMlb?.fechaJuego) fechas.push(jugada.autoMlb.fechaJuego);
+    (jugada?.selections || []).forEach(sel => {
+      if (sel?.autoMlb?.fechaJuego) fechas.push(sel.autoMlb.fechaJuego);
+    });
+    return fechas;
+  }).map(fecha => new Date(fecha)).filter(date => !Number.isNaN(date.getTime()));
+}
+
+function getInicioMlbApuesta(apuesta = {}) {
+  const fechasAuto = getAutoMlbFechasJuego(apuesta);
+  if (fechasAuto.length > 0) {
+    return new Date(Math.min(...fechasAuto.map(date => date.getTime())));
+  }
+  return parseFechaHoraLocal(apuesta.fecha || apuesta.dia, apuesta.hora || "");
+}
+
+function apuestaMlbYaDebeSincronizar(apuesta = {}) {
+  const inicio = getInicioMlbApuesta(apuesta);
+  if (inicio) return Date.now() >= inicio.getTime();
+
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (!fecha) return false;
+  return fecha < obtenerFechaActualLocal();
+}
+
+function apuestaTieneAutoFinalizado(apuesta = {}, key = "") {
+  return (apuesta.jugadas || []).some(jugada =>
+    esEstadoJuegoFinalizado(jugada?.[key]?.estadoJuego) ||
+    (jugada?.selections || []).some(sel => esEstadoJuegoFinalizado(sel?.[key]?.estadoJuego))
+  );
+}
+
+function apuestaYaFinalizadaYResuelta(apuesta = {}, key = "") {
+  return (apuesta.resultado || "pendiente") !== "pendiente" && apuestaTieneAutoFinalizado(apuesta, key);
+}
+
 // Compara dos fechas (YYYY-MM-DD) y devuelve true si están dentro de 36 horas
 // de diferencia, tolerando el desfase UTC vs hora local.
 function sonFechasCercanas(fechaA, fechaB) {
@@ -3485,7 +3524,9 @@ async function sincronizarResultadosMlb(silencioso = false) {
   const candidatas = apuestas.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if ((a.resultado || "pendiente") !== "pendiente" && apuestaTieneMarcadorMlb(a)) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
+    if ((a.resultado || "pendiente") !== "pendiente") return false;
+    if (!apuestaMlbYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
     if (silencioso && (a.fecha || a.dia) !== hoy) return false;
     return true;
@@ -3493,7 +3534,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
 
   if (candidatas.length === 0) {
     if (!silencioso) {
-      setMlbSyncStatus("No hay apuestas MLB para sincronizar.", "");
+      setMlbSyncStatus("No hay apuestas MLB ya iniciadas para sincronizar.", "");
     }
     return;
   }
@@ -4593,12 +4634,14 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
-    const necesitaSincronizar = tieneResultadoPendiente ||
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    const necesitaSincronizar = tieneResultadoPendiente && (
       !apuestaTieneMarcadorFutbol(a) ||
       apuestaTieneMercadoCornersFutbol(a) ||
-      apuestaTieneCornersFutbolIncompletos(a);
+      apuestaTieneCornersFutbolIncompletos(a)
+    );
     if (!necesitaSincronizar) return false;
-    if (!apuestaFutbolYaDebeSincronizar(a) && !puedeDescubrirInicioFutbol(a, silencioso)) return false;
+    if (!apuestaFutbolYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
     if (silencioso && (a.fecha || a.dia) !== hoy) return false;
     return true;
@@ -4635,9 +4678,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     for (const apuesta of candidatas) {
       revisadas++;
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
-      const esDescubrimientoHorario = !apuestaFutbolYaDebeSincronizar(apuesta) && puedeDescubrirInicioFutbol(apuesta, silencioso);
       const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosPorFecha.get(fecha) || []);
-      if (esDescubrimientoHorario) registrarIntentoDescubrirInicioFutbol(apuesta);
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
@@ -4667,7 +4708,7 @@ let _autoSyncFutbolIntervalId = null;
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
   _autoSyncFutbolIntervalId = setInterval(async () => {
     try {
       await sincronizarResultadosFutbol(true);
@@ -4683,7 +4724,7 @@ let _autoSyncMlbIntervalId = null;
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
   _autoSyncMlbIntervalId = setInterval(async () => {
     try {
       await sincronizarResultadosMlb(true);
