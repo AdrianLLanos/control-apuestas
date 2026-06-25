@@ -1095,6 +1095,24 @@ function detectarEquipoTotalMlb(texto = "", evento = "") {
   return "";
 }
 
+function obtenerNombreCortoMlb(equipo = "") {
+  const encontrado = MLB_TEAMS.find(team => normalizarClaveMlb(team.name) === normalizarClaveMlb(equipo));
+  if (!encontrado) return equipo;
+  return [...encontrado.aliases]
+    .filter(alias => alias.length > 2 && !/^[A-Z]{2,3}$/.test(alias))
+    .sort((a, b) => a.length - b.length)[0] || encontrado.name;
+}
+
+function formatearTituloTotalCarrerasMlb(equipo = "") {
+  return equipo ? `${obtenerNombreCortoMlb(equipo)} total carreras` : "Total carreras";
+}
+
+function esTotalCarrerasEquipoMlb(texto = "", evento = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  const tieneDireccionTotal = /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado);
+  return tieneDireccionTotal && extraerNumeroJugada(texto) !== null && Boolean(detectarEquipoTotalMlb(texto, evento));
+}
+
 function extraerSiNo(texto = "") {
   const normalizado = normalizarTextoMercado(texto);
   if (/\b(no|ninguno)\b/.test(normalizado)) return "No";
@@ -1150,7 +1168,7 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const autoMlb = seleccion.autoMlb || null;
   if (autoMlb?.mercado === "total_carreras") {
     return {
-      titulo: autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Total carreras",
+      titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
       jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
     };
   }
@@ -1168,8 +1186,16 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   if (tienePalabraMercado(normalizado, ["carrera", "carreras", "run", "runs"])) {
     const equipoTotal = detectarEquipoTotalMlb(textoCompleto, evento);
     return {
-      titulo: equipoTotal ? `Carreras de ${equipoTotal}` : "Total carreras",
+      titulo: formatearTituloTotalCarrerasMlb(equipoTotal),
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["carrera", "carreras", "run", "runs"])
+    };
+  }
+
+  if (esTotalCarrerasEquipoMlb(textoCompleto, evento)) {
+    const equipoTotal = detectarEquipoTotalMlb(textoCompleto, evento);
+    return {
+      titulo: formatearTituloTotalCarrerasMlb(equipoTotal),
+      jugada: extraerLineaTotal(jugadaActual || textoCompleto, [])
     };
   }
 
@@ -1440,7 +1466,7 @@ function aplicarEquipoATotalCarrerasMlb(selection = {}, equipo = "") {
 
   return {
     ...selection,
-    titulo: `Carreras de ${equipo}`,
+    titulo: formatearTituloTotalCarrerasMlb(equipo),
     jugada: formatearLineaTotalAuto(autoMlb) || selection.jugada || "",
     autoMlb
   };
