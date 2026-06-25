@@ -3666,7 +3666,7 @@ const API_SPORTS_FOOTBALL_KEY = "0f4bd89af94f37638906a3de25f55d91";
 const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
-const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 4 * 60 * 1000;
+const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 2 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
@@ -3919,7 +3919,7 @@ async function cargarJuegosFutbolPorFecha(fecha, options = {}) {
 
   const cacheKey = `fixtures:${fecha}`;
   const cached = apiSportsFootballCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < cacheMs) {
+  if (cacheMs > 0 && cached && Date.now() - cached.createdAt < cacheMs) {
     return cached.fixtures;
   }
 
