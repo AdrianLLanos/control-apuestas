@@ -2910,6 +2910,13 @@ function esEstadoJuegoPrevio(estadoJuego = "") {
   return /\b(preview|scheduled|pre game|pre-game|programado|previo|not started|no iniciado|por comenzar|warmup)\b/.test(normalizado);
 }
 
+function fechaJuegoYaPaso(fechaJuegoStr = "") {
+  if (!fechaJuegoStr) return false;
+  const fechaJuego = new Date(fechaJuegoStr);
+  if (Number.isNaN(fechaJuego.getTime())) return false;
+  return Date.now() >= fechaJuego.getTime();
+}
+
 // Compara dos fechas (YYYY-MM-DD) y devuelve true si están dentro de 36 horas
 // de diferencia, tolerando el desfase UTC vs hora local.
 function sonFechasCercanas(fechaA, fechaB) {
@@ -3462,7 +3469,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
 function getAutoMlbMarcadorHtml(selection = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
-  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego);
+  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
