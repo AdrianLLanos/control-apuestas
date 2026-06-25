@@ -1,1 +1,1 @@
-import "./script/main.js?v=8.8";
+import "./script/main.js?v=8.9";

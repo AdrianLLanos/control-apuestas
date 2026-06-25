@@ -1236,6 +1236,29 @@ function getDeporteFormulario() {
   return document.getElementById("deporte")?.value || "";
 }
 
+function inferirDeporteDesdeJugadas(deporteActual = "", jugadas = [], evento = "") {
+  if (deporteActual) return deporteActual;
+
+  const textos = [evento];
+  jugadas.forEach(jugada => {
+    if (typeof jugada === "string") {
+      textos.push(jugada);
+      return;
+    }
+    if (!jugada || typeof jugada !== "object") return;
+    textos.push(jugada.ev || jugada.evento || "");
+    getSelectionsFromJugada(jugada).forEach(sel => {
+      textos.push(sel.titulo || "", sel.jugada || "");
+    });
+  });
+
+  const combinado = textos.filter(Boolean).join(" ");
+  if (!combinado) return "";
+  if (detectarEquiposMlb(combinado).length > 0) return "mlb";
+  if (textos.some(texto => extraerEquiposEventoFutbol(texto).length >= 2)) return "futbol";
+  return "";
+}
+
 function normalizarClaveMlb(value = "") {
   return String(value)
     .toLowerCase()
@@ -2037,7 +2060,7 @@ async function agregarApuesta() {
   const fecha = document.getElementById("fecha").value;
   const hora = "";
   const tipoApuesta = document.getElementById("tipoApuesta").value;
-  const deporte = getDeporteFormulario();
+  let deporte = getDeporteFormulario();
   const isCombinada = tipoApuesta === "combinada";
   const isPatente = tipoApuesta === "patente";
   const isCrearApuesta = tipoApuesta === "crear_apuesta";
@@ -2268,6 +2291,7 @@ async function agregarApuesta() {
   };
   casaFormularioId = casa.id;
   if (jugadas.length > 0) {
+    deporte = inferirDeporteDesdeJugadas(deporte, jugadas, evento);
     jugadas = normalizarJugadasConEstado(jugadas);
     jugadas = enriquecerJugadasAuto(jugadas, deporte);
   }
@@ -2298,13 +2322,13 @@ async function agregarApuesta() {
           : importe;
 
         const c = parseFloat(slot.querySelector(".jugada-cuota-input").value.trim());
-        const jugadasSlot = enriquecerJugadasAuto(
-          [{ ev, c, estado: resultado, selections: [{ titulo: "", jugada: jug, estado: resultado }] }],
-          deporte
-        );
+        const jugadasBase = [{ ev, c, estado: resultado, selections: [{ titulo: "", jugada: jug, estado: resultado }] }];
+        const deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
+        if (!deporte && deporteSlot) deporte = deporteSlot;
+        const jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
-          deporte,
+          deporte: deporteSlot,
           fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
@@ -2339,11 +2363,13 @@ async function agregarApuesta() {
           estado: "pendiente",
           selections: [{ titulo: "", jugada: jug, estado: "pendiente" }]
         };
-        const jugadasSlot = enriquecerJugadasAuto([jugada], deporte);
+        const deporteSlot = inferirDeporteDesdeJugadas(deporte, [jugada], ev);
+        if (!deporte && deporteSlot) deporte = deporteSlot;
+        const jugadasSlot = enriquecerJugadasAuto([jugada], deporteSlot);
 
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
-          deporte,
+          deporte: deporteSlot,
           fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
@@ -2373,14 +2399,14 @@ async function agregarApuesta() {
           const val = inp.value.trim();
           if (val) selections.push(crearSeleccionDetectada(val, "pendiente", "", ev));
         });
-        const jugadasSlot = enriquecerJugadasAuto(
-          [{ ev, c, estado: resultado, selections: selections.map(sel => ({ ...sel, estado: resultado })) }],
-          deporte
-        );
+        const jugadasBase = [{ ev, c, estado: resultado, selections: selections.map(sel => ({ ...sel, estado: resultado })) }];
+        const deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
+        if (!deporte && deporteSlot) deporte = deporteSlot;
+        const jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
 
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
-          deporte,
+          deporte: deporteSlot,
           fecha, dia, hora,
           evento: ev,
           jugadas: jugadasSlot,
@@ -3404,6 +3430,14 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   return marcadorHtml || horaHtml;
 }
 
+function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}) {
+  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection) || getAutoFutbolMarcadorHtml(selection);
+  if (marcadorSeleccion) return marcadorSeleccion;
+  if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb });
+  if (jugada?.autoFutbol) return getAutoFutbolMarcadorHtml({ autoFutbol: jugada.autoFutbol });
+  return "";
+}
+
 const FOOTBALL_LEAGUES = [
   { slug: "fifa.world", label: "FIFA" },
   { slug: "fifa.worldcup", label: "Copa Mundial" },
@@ -3429,6 +3463,11 @@ const FOOTBALL_LEAGUES = [
 ];
 
 const FOOTBALL_TEAM_ALIASES = [
+  ["catar", "qatar"],
+  ["qatar", "qatar"],
+  ["bosnia y herzegovina", "bosnia herzegovina"],
+  ["bosnia and herzegovina", "bosnia herzegovina"],
+  ["bosnia-herzegovina", "bosnia herzegovina"],
   ["francia", "france"],
   ["irak", "iraq"],
   ["alemania", "germany"],
@@ -5015,7 +5054,7 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
-              const autoMlbMarcadorHtml = getAutoMlbMarcadorHtml(sel) || getAutoFutbolMarcadorHtml(sel);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j);
               allTimelineItems.push({
                 html: `
                   <div data-selection-wrap="${a.id}-${matchIndex}-${selIndex}" style="display:flex; flex-direction:column; gap:1px; ${styleMod}">
@@ -5101,7 +5140,7 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
-              const autoMlbMarcadorHtml = getAutoMlbMarcadorHtml(sel) || getAutoFutbolMarcadorHtml(sel);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j);
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
                   ${sel.titulo ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${sel.titulo}</div>` : ""}
