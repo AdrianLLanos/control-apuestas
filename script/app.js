@@ -3445,18 +3445,19 @@ async function sincronizarResultadosMlb(silencioso = false) {
 function getAutoMlbMarcadorHtml(selection = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
+  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
     ? ` · ${escapeHtml(carrerasLabel)}: ${escapeHtml(totalCarreras)}`
     : "";
-  const marcadorHtml = marcador
+  const marcadorHtml = marcador && !estadoPrevio
     ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`
     : "";
 
   let horaHtml = "";
-  if (autoMlb.fechaJuego && !marcador && esEstadoJuegoPrevio(autoMlb.estadoJuego)) {
+  if (autoMlb.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
