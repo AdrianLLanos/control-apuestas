@@ -1296,6 +1296,14 @@ function normalizarClaveMlb(value = "") {
     .trim();
 }
 
+function equiposMlbCoinciden(equipoA = "", equipoB = "") {
+  const a = normalizarClaveMlb(equipoA);
+  const b = normalizarClaveMlb(equipoB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.length >= 5 && b.length >= 5 && (a.includes(b) || b.includes(a));
+}
+
 function textoContieneAliasMlb(textoNormalizado, alias = "") {
   const aliasNormalizado = normalizarClaveMlb(alias);
   if (!aliasNormalizado) return false;
@@ -2879,6 +2887,12 @@ function formatFechaJuego(fechaJuegoStr) {
   }
 }
 
+function esEstadoJuegoPrevio(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  if (!normalizado) return true;
+  return /\b(preview|scheduled|pre game|pre-game|programado|previo|not started|no iniciado|por comenzar|warmup)\b/.test(normalizado);
+}
+
 // Compara dos fechas (YYYY-MM-DD) y devuelve true si están dentro de 36 horas
 // de diferencia, tolerando el desfase UTC vs hora local.
 function sonFechasCercanas(fechaA, fechaB) {
@@ -2943,8 +2957,8 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
     const nombres = [
       game?.teams?.home?.team?.name,
       game?.teams?.away?.team?.name
-    ].map(normalizarClaveMlb);
-    return buscados.every(equipo => nombres.includes(equipo));
+    ];
+    return buscados.every(equipo => nombres.some(nombre => equiposMlbCoinciden(equipo, nombre)));
   });
   if (exactMatch) return exactMatch;
 
@@ -2956,8 +2970,8 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
     const nombres = [
       game?.teams?.home?.team?.name,
       game?.teams?.away?.team?.name
-    ].map(normalizarClaveMlb);
-    return buscados.every(equipo => nombres.includes(equipo));
+    ];
+    return buscados.every(equipo => nombres.some(nombre => equiposMlbCoinciden(equipo, nombre)));
   }) || null;
 }
 
@@ -3304,8 +3318,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     const nombres = [
       game?.teams?.home?.team?.name,
       game?.teams?.away?.team?.name
-    ].map(normalizarClaveMlb);
-    return equiposApuesta.map(normalizarClaveMlb).every(eq => nombres.includes(eq));
+    ];
+    return equiposApuesta.every(eq => nombres.some(nombre => equiposMlbCoinciden(eq, nombre)));
   });
   const isoJuego = primerJuego?.gameDate || primerJuego?.date || "";
   const { fecha: fechaExtraida } = obtenerFechaHoraLocalDesdeIso(isoJuego);
@@ -3442,7 +3456,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
     : "";
 
   let horaHtml = "";
-  if (autoMlb.fechaJuego && (!marcador || /preview|sched/i.test(autoMlb.estadoJuego))) {
+  if (autoMlb.fechaJuego && !marcador && esEstadoJuegoPrevio(autoMlb.estadoJuego)) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
