@@ -1136,6 +1136,25 @@ function limpiarEquipoGanador(texto = "", evento = "") {
   return corregirEquipoDesdeEvento(equipo || texto, evento);
 }
 
+const TITULO_EQUIPO_GANARA_CUALQUIER_MITAD = "Equipo ganar\u00e1 cualquier mitad";
+
+function esEquipoGanaraCualquierMitad(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  const tieneGanara = /\b(ganara|ganar|gana|ganan|gane|ganen)\b/.test(normalizado);
+  const tieneCualquierMitad = /\b(cualquier|alguna)\b.*\bmitad\b|\bmitad\b.*\b(cualquier|alguna)\b/.test(normalizado);
+  return tieneGanara && tieneCualquierMitad;
+}
+
+function limpiarEquipoGanaraCualquierMitad(texto = "", evento = "") {
+  let equipo = String(texto)
+    .replace(/\b(?:ganar[a\u00e1]?|gana|ganan|gane|ganen)\b\s+(?:en\s+)?(?:cualquier|alguna)\s+mitad\b/ig, "")
+    .replace(/\b(?:cualquier|alguna)\s+mitad\b\s+(?:la\s+)?(?:ganar[a\u00e1]?|gana|ganan|gane|ganen)\b/ig, "")
+    .replace(/\b(?:equipo|esquipo|team|que)\b/ig, "");
+
+  equipo = limpiarEspaciosMercado(equipo);
+  return corregirEquipoDesdeEvento(equipo || texto, evento);
+}
+
 function limpiarHandicap(texto = "", evento = "") {
   let linea = String(texto)
     .replace(/\bh[aá]ndicap\b/ig, "")
@@ -1263,6 +1282,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: "Doble oportunidad",
       jugada: limpiarDobleOportunidad(jugadaActual || textoCompleto, evento)
+    };
+  }
+
+  if (esEquipoGanaraCualquierMitad(textoCompleto)) {
+    return {
+      titulo: TITULO_EQUIPO_GANARA_CUALQUIER_MITAD,
+      jugada: limpiarEquipoGanaraCualquierMitad(jugadaActual || textoCompleto, evento)
     };
   }
 
@@ -1673,6 +1699,10 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
       equipos,
       seleccion: "empate"
     };
+  }
+
+  if (esEquipoGanaraCualquierMitad(textoCompleto)) {
+    return null;
   }
 
   const seleccionEquipo = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
