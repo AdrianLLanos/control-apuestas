@@ -3613,6 +3613,7 @@ const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
+const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const apiSportsFootballCache = new Map();
 
 const FOOTBALL_TEAM_ALIASES = [
@@ -3783,7 +3784,7 @@ function apuestaFutbolYaDebeSincronizar(apuesta = {}) {
 
 function getFutbolDiscoveryKey(apuesta = {}) {
   const fecha = apuesta.fecha || apuesta.dia || "sin-fecha";
-  return `api-sports-football-discovery-${apuesta.id || fecha}`;
+  return `api-sports-football-discovery-${API_SPORTS_FOOTBALL_DISCOVERY_VERSION}-${apuesta.id || fecha}`;
 }
 
 function getUltimoIntentoDescubrirInicioFutbol(apuesta = {}) {
@@ -4539,7 +4540,11 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const fechas = [...new Set(candidatas.map(getFechaApiSportsFutbolApuesta).filter(Boolean))];
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
-      const juegos = await cargarJuegosFutbolPorFecha(fecha);
+      const juegos = [];
+      const fechasBusqueda = getFechasCercanas(fecha);
+      for (const fechaBusqueda of fechasBusqueda) {
+        juegos.push(...await cargarJuegosFutbolPorFecha(fechaBusqueda));
+      }
       juegosPorFecha.set(fecha, juegos);
     }
 
