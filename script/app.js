@@ -3599,12 +3599,12 @@ async function sincronizarResultadosMlb(silencioso = false) {
   }
 }
 
-function getAutoMlbMarcadorHtml(selection = {}) {
+function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
   const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
-  const estadoFinalizadoHtml = getEstadoFinalizadoHtml(autoMlb);
+  const estadoFinalizadoHtml = options.showFinalizado === false ? "" : getEstadoFinalizadoHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
@@ -3629,11 +3629,11 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   return marcadorHtml ? `${marcadorHtml}${estadoFinalizadoHtml}` : horaHtml;
 }
 
-function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}) {
-  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection) || getAutoFutbolMarcadorHtml(selection);
+function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {}) {
+  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selection, options);
   if (marcadorSeleccion) return marcadorSeleccion;
-  if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb });
-  if (jugada?.autoFutbol) return getAutoFutbolMarcadorHtml({ autoFutbol: jugada.autoFutbol });
+  if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
+  if (jugada?.autoFutbol) return getAutoFutbolMarcadorHtml({ autoFutbol: jugada.autoFutbol }, options);
   return "";
 }
 
@@ -4734,10 +4734,10 @@ function startAutoSyncMlb() {
   }, INTERVALO_MS);
 }
 
-function getAutoFutbolMarcadorHtml(selection = {}) {
+function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
-  const estadoFinalizadoHtml = getEstadoFinalizadoHtml(futbolAuto);
+  const estadoFinalizadoHtml = options.showFinalizado === false ? "" : getEstadoFinalizadoHtml(futbolAuto);
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
   if (futbolAuto.mercado === "total_corners") {
@@ -5507,7 +5507,9 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
-              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
+                showFinalizado: selIndex === selections.length - 1
+              });
               allTimelineItems.push({
                 html: `
                   <div data-selection-wrap="${a.id}-${matchIndex}-${selIndex}" style="display:flex; flex-direction:column; gap:1px; ${styleMod}">
@@ -5593,7 +5595,9 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
-              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
+                showFinalizado: selIndex === selections.length - 1
+              });
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
                   ${sel.titulo ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${sel.titulo}</div>` : ""}
