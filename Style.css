@@ -532,8 +532,43 @@ table td:nth-child(6) {
     border-radius: 50%;
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.38),
+        inset 0 -2px 3px rgba(15, 23, 42, 0.34),
+        0 1px 4px rgba(0, 0, 0, 0.35);
     box-sizing: border-box;
+}
+
+.country-flag-mark::before,
+.country-flag-mark::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.country-flag-mark::before {
+    top: 2px;
+    left: 4px;
+    width: 17px;
+    height: 9px;
+    border-radius: 999px 999px 8px 8px;
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.62),
+        rgba(255, 255, 255, 0.18) 58%,
+        rgba(255, 255, 255, 0)
+    );
+    transform: rotate(-10deg);
+    mix-blend-mode: screen;
+}
+
+.country-flag-mark::after {
+    inset: 0;
+    border-radius: 50%;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+        inset 0 -5px 8px rgba(15, 23, 42, 0.24);
 }
 
 .country-flag-fallback {
