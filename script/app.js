@@ -2988,7 +2988,7 @@ function formatFechaJuego(fechaJuegoStr) {
 function esEstadoJuegoPrevio(estadoJuego = "") {
   const normalizado = normalizarEstadoExternoTexto(estadoJuego);
   if (!normalizado) return true;
-  return /\b(preview|scheduled|pre game|pre-game|programado|previo|not started|no iniciado|por comenzar|warmup)\b/.test(normalizado);
+  return /\b(preview|scheduled|pre game|pre-game|programado|previo|not started|no iniciado|por comenzar|warmup|ns|tbd)\b/.test(normalizado);
 }
 
 function fechaJuegoYaPaso(fechaJuegoStr = "") {
@@ -3643,8 +3643,11 @@ const FOOTBALL_TEAM_ALIASES = [
   ["curazao", "curacao"],
   ["suecia", "sweden"],
   ["tunez", "tunisia"],
+  ["turquia", "turkey"],
+  ["turkiye", "turkey"],
   ["estados unidos", "united states"],
   ["eeuu", "united states"],
+  ["usa", "united states"],
   ["mexico", "mexico"],
   ["brasil", "brazil"],
   ["argentina", "argentina"],
@@ -4655,7 +4658,8 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   let horaHtml = "";
-  if (futbolAuto.fechaJuego && (!marcadorActual || /preview|sched/i.test(futbolAuto.estadoJuego))) {
+  const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
+  if (futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
@@ -4665,6 +4669,7 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
   if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
+  if (horaHtml && (!marcadorActual || estadoPrevio)) return horaHtml;
   return (marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "") || horaHtml;
 }
 
