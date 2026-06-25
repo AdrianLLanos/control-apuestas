@@ -3619,7 +3619,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   if (showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
-      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
+      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
     }
   }
 
@@ -4759,7 +4759,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
-        horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">ðŸ•’ ${escapeHtml(formattedTime)}</div>`;
+        horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
       }
     }
 
@@ -4799,7 +4799,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
-      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">🕒 ${escapeHtml(formattedTime)}</div>`;
+      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
     }
   }
 
