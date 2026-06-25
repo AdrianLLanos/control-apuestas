@@ -190,6 +190,12 @@ button {
     opacity: 1;
 }
 
+.auto-mlb-score--final {
+    color: #93c5fd;
+    text-decoration: none;
+    opacity: 1;
+}
+
 .bet-status-message {
     display: flex;
     flex-direction: column;

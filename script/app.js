@@ -2854,6 +2854,17 @@ function getEstadoJuegoTraducido(estadoJuego = "") {
   return estadoJuego;
 }
 
+function esEstadoJuegoFinalizado(estadoJuego = "") {
+  const normalizado = normalizarEstadoExternoTexto(estadoJuego);
+  return /\b(final|finalizado|game over|match finished|full time|finished|ended|ft|aet|pen)\b/.test(normalizado);
+}
+
+function getEstadoFinalizadoHtml(auto = {}) {
+  return esEstadoJuegoFinalizado(auto?.estadoJuego)
+    ? `<div class="auto-mlb-score auto-mlb-score--final">Finalizado</div>`
+    : "";
+}
+
 function tieneEstadoJuegoEspecial(auto = {}) {
   return Boolean(auto?.estadoEspecial) ||
     /postpon|pospuest|aplaz|cancel|abandon|retras|delay|suspend/i.test(auto?.estadoJuego || "");
@@ -3552,6 +3563,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   const marcador = autoMlb.marcador;
   const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
+  const estadoFinalizadoHtml = getEstadoFinalizadoHtml(autoMlb);
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
@@ -3573,7 +3585,7 @@ function getAutoMlbMarcadorHtml(selection = {}) {
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
   }
-  return marcadorHtml || horaHtml;
+  return marcadorHtml ? `${marcadorHtml}${estadoFinalizadoHtml}` : horaHtml;
 }
 
 function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}) {
@@ -3612,6 +3624,7 @@ const API_SPORTS_FOOTBALL_KEY = "0f4bd89af94f37638906a3de25f55d91";
 const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
+const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 2 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const apiSportsFootballCache = new Map();
@@ -3898,7 +3911,44 @@ async function cargarJuegosFutbolPorFecha(fecha) {
 }
 
 async function cargarResumenFutbol(game) {
-  return null;
+  const fixtureId = getIdJuegoFutbol(game);
+  if (!fixtureId) return null;
+
+  const cacheKey = `fixture-statistics:${fixtureId}`;
+  const cached = apiSportsFootballCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS) {
+    return cached.summary;
+  }
+
+  assertApiSportsFootballQuotaDisponible();
+
+  const url = `${API_SPORTS_FOOTBALL_BASE_URL}/fixtures/statistics?fixture=${encodeURIComponent(fixtureId)}`;
+  const response = await fetch(url, {
+    headers: {
+      "x-apisports-key": API_SPORTS_FOOTBALL_KEY
+    }
+  });
+  registrarApiSportsFootballRequest();
+
+  if (!response.ok) {
+    throw new Error(`API-Sports estadisticas respondio ${response.status}`);
+  }
+
+  const data = await response.json();
+  const errors = data?.errors;
+  const hasErrors = Array.isArray(errors)
+    ? errors.length > 0
+    : errors && Object.keys(errors).length > 0;
+  if (hasErrors) {
+    throw new Error(`API-Sports estadisticas devolvio error: ${JSON.stringify(errors)}`);
+  }
+
+  const summary = { apiSportsStatistics: data?.response || [] };
+  apiSportsFootballCache.set(cacheKey, {
+    createdAt: Date.now(),
+    summary
+  });
+  return summary;
 }
 
 function getIdJuegoFutbol(game) {
@@ -4092,12 +4142,43 @@ function getCornersInicialesFutbol(marcador = null) {
   };
 }
 
+function extraerValorCornersFutbol(stat = {}) {
+  const etiqueta = normalizarTextoMercado(
+    stat.name || stat.type || stat.displayName || stat.label || stat.key || ""
+  );
+  if (!/\b(corner|corners|esquina|esquinas)\b/.test(etiqueta)) return null;
+
+  const rawValue = stat.value ?? stat.displayValue;
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") return null;
+  const value = Number(String(rawValue ?? "").replace(",", "."));
+  return Number.isNaN(value) ? null : value;
+}
+
 function getCornersEquipoFutbol(summary, marcador = null) {
-  const teams = summary?.boxscore?.teams || [];
+  const apiSportsStatistics = Array.isArray(summary?.apiSportsStatistics)
+    ? summary.apiSportsStatistics.map(teamInfo => {
+      const corners = (teamInfo.statistics || [])
+        .map(extraerValorCornersFutbol)
+        .find(value => value !== null);
+      if (corners === undefined) return null;
+      return {
+        team: {
+          displayName: teamInfo.team?.name || "",
+          name: teamInfo.team?.name || "",
+          shortDisplayName: teamInfo.team?.name || "",
+          abbreviation: ""
+        },
+        statistics: [{ name: "wonCorners", value: corners, displayValue: String(corners) }]
+      };
+    }).filter(Boolean)
+    : [];
+  const teams = apiSportsStatistics.length ? apiSportsStatistics : (summary?.boxscore?.teams || []);
   if (!Array.isArray(teams) || teams.length === 0) return null;
 
   const cornersEquipos = teams.map(teamInfo => {
-    const stat = (teamInfo.statistics || []).find(item => item.name === "wonCorners");
+    const stat = (teamInfo.statistics || []).find(item =>
+      item.name === "wonCorners" || extraerValorCornersFutbol(item) !== null
+    );
     const value = Number(stat?.value ?? stat?.displayValue);
     if (!stat || Number.isNaN(value)) return null;
 
@@ -4615,6 +4696,7 @@ function startAutoSyncMlb() {
 function getAutoFutbolMarcadorHtml(selection = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
+  const estadoFinalizadoHtml = getEstadoFinalizadoHtml(futbolAuto);
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
   if (futbolAuto.mercado === "total_corners") {
@@ -4640,18 +4722,18 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
         ? ` &middot; Corners: ${escapeHtml(totalMostrado)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
     }
 
     const estadoPrevio = /\b(programado|scheduled|pre-game|pre game|not started|por comenzar|no iniciado|previo)\b/i.test(futbolAuto.estadoJuego || "");
     const sinDatoCorners = totalCorners === undefined || totalCorners === null;
     if ((estadoPrevio || sinDatoCorners) && marcador && /(?:^|\s)0\s*-\s*0(?:\s|$)/.test(marcador)) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>`;
+      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>${estadoFinalizadoHtml}`;
     }
 
     return totalCorners !== undefined && totalCorners !== null
-      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>`
-      : "";
+      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>${estadoFinalizadoHtml}`
+      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}` : "");
   }
 
   let marcadorActual = futbolAuto.marcador;
@@ -4675,7 +4757,9 @@ function getAutoFutbolMarcadorHtml(selection = {}) {
     return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
   if (horaHtml && (!marcadorActual || estadoPrevio)) return horaHtml;
-  return (marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "") || horaHtml;
+  return marcadorActual
+    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>${estadoFinalizadoHtml}`
+    : horaHtml;
 }
 
 /* =========================
