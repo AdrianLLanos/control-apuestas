@@ -3666,6 +3666,7 @@ const API_SPORTS_FOOTBALL_KEY = "0f4bd89af94f37638906a3de25f55d91";
 const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
+const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 4 * 60 * 1000;
 const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 2 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
@@ -3912,12 +3913,13 @@ function getFechasCercanas(fecha = "") {
   });
 }
 
-async function cargarJuegosFutbolPorFecha(fecha) {
+async function cargarJuegosFutbolPorFecha(fecha, options = {}) {
   if (!fecha) return [];
+  const cacheMs = options.cacheMs ?? API_SPORTS_FOOTBALL_CACHE_MS;
 
   const cacheKey = `fixtures:${fecha}`;
   const cached = apiSportsFootballCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < API_SPORTS_FOOTBALL_CACHE_MS) {
+  if (cached && Date.now() - cached.createdAt < cacheMs) {
     return cached.fixtures;
   }
 
@@ -4636,12 +4638,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
-    const necesitaSincronizar = tieneResultadoPendiente && (
-      !apuestaTieneMarcadorFutbol(a) ||
-      apuestaTieneMercadoCornersFutbol(a) ||
-      apuestaTieneCornersFutbolIncompletos(a)
-    );
-    if (!necesitaSincronizar) return false;
+    if (!tieneResultadoPendiente) return false;
     if (!apuestaFutbolYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
     if (silencioso && (a.fecha || a.dia) !== hoy) return false;
@@ -4662,14 +4659,20 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   }
 
   try {
-    const fechas = [...new Set(candidatas.map(getFechaApiSportsFutbolApuesta).filter(Boolean))];
+    const fechasBusquedaPorApuesta = new Map();
+    const fechas = new Set();
+    candidatas.forEach(apuesta => {
+      const fecha = getFechaApiSportsFutbolApuesta(apuesta);
+      if (!fecha) return;
+      const fechasBusqueda = getInicioFutbolApuesta(apuesta) ? [fecha] : getFechasCercanas(fecha);
+      fechasBusquedaPorApuesta.set(apuesta, fechasBusqueda);
+      fechasBusqueda.forEach(fechaBusqueda => fechas.add(fechaBusqueda));
+    });
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
-      const juegos = [];
-      const fechasBusqueda = getFechasCercanas(fecha);
-      for (const fechaBusqueda of fechasBusqueda) {
-        juegos.push(...await cargarJuegosFutbolPorFecha(fechaBusqueda));
-      }
+      const juegos = await cargarJuegosFutbolPorFecha(fecha, {
+        cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
+      });
       juegosPorFecha.set(fecha, juegos);
     }
 
@@ -4679,7 +4682,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     for (const apuesta of candidatas) {
       revisadas++;
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosPorFecha.get(fecha) || []);
+      const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
+      const juegosApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosApuesta);
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
