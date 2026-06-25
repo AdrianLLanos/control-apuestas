@@ -4754,6 +4754,14 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
+    const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
+    let horaHtml = "";
+    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+      const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
+      if (formattedTime) {
+        horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">ðŸ•’ ${escapeHtml(formattedTime)}</div>`;
+      }
+    }
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
       const awayCorners = Number(cornersEquipo.away.corners);
@@ -4768,7 +4776,6 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
     }
 
-    const estadoPrevio = /\b(programado|scheduled|pre-game|pre game|not started|por comenzar|no iniciado|previo)\b/i.test(futbolAuto.estadoJuego || "");
     const sinDatoCorners = totalCorners === undefined || totalCorners === null;
     if ((estadoPrevio || sinDatoCorners) && marcador && /(?:^|\s)0\s*-\s*0(?:\s|$)/.test(marcador)) {
       return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>${estadoFinalizadoHtml}`;
@@ -4776,7 +4783,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
 
     return totalCorners !== undefined && totalCorners !== null
       ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>${estadoFinalizadoHtml}`
-      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}` : "");
+      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}` : horaHtml);
   }
 
   let marcadorActual = futbolAuto.marcador;
