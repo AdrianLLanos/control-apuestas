@@ -1591,6 +1591,23 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     }
   }
 
+  if (
+    /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado) &&
+    !/\b(corner|corners|esquina|esquinas|tarjeta|tarjetas)\b/.test(normalizado)
+  ) {
+    const linea = extraerNumeroJugada(textoCompleto);
+    const tipoTotal = detectarLadoTotal(textoCompleto);
+    if (linea !== null && tipoTotal) {
+      return {
+        deporte: "futbol",
+        mercado: "total_goles",
+        equipos,
+        tipoTotal,
+        linea
+      };
+    }
+  }
+
   if (tienePalabraMercado(normalizado, ["ambos", "marcan", "anotan"])) {
     return {
       deporte: "futbol",
@@ -3519,6 +3536,10 @@ const FOOTBALL_TEAM_ALIASES = [
   ["belgica", "belgium"],
   ["suiza", "switzerland"],
   ["croacia", "croatia"],
+  ["republica checa", "czech republic"],
+  ["chequia", "czech republic"],
+  ["czechia", "czech republic"],
+  ["czech republic", "czech republic"],
   ["marruecos", "morocco"],
   ["japon", "japan"],
   ["corea del sur", "south korea"],
