@@ -4335,18 +4335,18 @@ async function cargarResumenEspnFutbol(event) {
 }
 
 async function cargarResumenFutbol(apiGame, espnGame = null) {
-  let apiSummary = null;
+  const espnSummary = await cargarResumenEspnFutbol(espnGame);
+  if (getCornersEquipoFutbol(espnSummary)) return espnSummary;
+
   if (apiGame) {
     try {
-      apiSummary = await cargarResumenApiSportsFutbol(apiGame);
-      if (getCornersEquipoFutbol(apiSummary)) return apiSummary;
+      return await cargarResumenApiSportsFutbol(apiGame);
     } catch (e) {
       console.warn("No se pudo cargar estadisticas API-Sports futbol:", e);
     }
   }
 
-  const espnSummary = await cargarResumenEspnFutbol(espnGame);
-  return getCornersEquipoFutbol(espnSummary) ? espnSummary : apiSummary;
+  return espnSummary;
 }
 
 function getIdJuegoFutbol(game) {
@@ -4511,6 +4511,16 @@ function getMarcadorFutbol(game) {
     homeTeam: home.name,
     awayTeam: away.name
   };
+}
+
+function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null) {
+  const marcadorEspn = getMarcadorFutbol(espnGame);
+  const marcadorApi = getMarcadorFutbol(apiGame);
+  if (marcadorEspn && !juegoFutbolNoIniciado(espnGame)) return espnGame;
+  if (marcadorApi && !juegoFutbolNoIniciado(apiGame)) return apiGame;
+  if (marcadorEspn) return espnGame;
+  if (marcadorApi) return apiGame;
+  return espnGame || apiGame;
 }
 
 function reordenarMarcadorTextoFutbol(marcadorTexto, equipos) {
@@ -4853,7 +4863,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       if (!autoOriginal) huboCambioMetadata = true;
       const apiGame = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
-      const game = espnGame || apiGame;
+      const game = elegirJuegoFutbolPrincipal(apiGame, espnGame);
       if (!game) {
         if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
         selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
@@ -5011,7 +5021,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoFutbol?.mercado === "total_goles")?.autoFutbol;
       const game = totalAuto
-        ? (buscarJuegoEspnFutbol(juegosEspnFecha, totalAuto.equipos, fechaBet) || buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet))
+        ? elegirJuegoFutbolPrincipal(
+          buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet),
+          buscarJuegoEspnFutbol(juegosEspnFecha, totalAuto.equipos, fechaBet)
+        )
         : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
       const finalizado = game ? juegoFutbolFinalizado(game) : false;
