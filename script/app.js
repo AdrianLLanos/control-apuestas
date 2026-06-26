@@ -30,6 +30,7 @@ import {
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
 } from "./mlb.js?v=2.0";
+import { COUNTRY_FLAG_ENTRIES } from "./countries.js";
 import {
   cerrarModalValidacion,
   mostrarModalValidacion,
@@ -3716,7 +3717,7 @@ const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const apiSportsFootballCache = new Map();
 
-const FOOTBALL_TEAM_ALIASES = [
+const FOOTBALL_TEAM_ALIASES_BASE = [
   ["catar", "qatar"],
   ["qatar", "qatar"],
   ["bosnia y herzegovina", "bosnia herzegovina"],
@@ -3762,14 +3763,38 @@ const FOOTBALL_TEAM_ALIASES = [
   ["venezuela", "venezuela"]
 ];
 
+function crearAliasesFutbolPaises() {
+  return COUNTRY_FLAG_ENTRIES.flatMap(country => {
+    const code = String(country.flag || "")
+      .replace(/^flag-/i, "")
+      .replace(/\.png$/i, "");
+    const oficial = code ? `pais ${code}` : normalizarTextoMercado(country.name || "");
+    if (!oficial) return [];
+
+    return [country.name, ...(country.aliases || [])]
+      .map(alias => normalizarTextoMercado(alias))
+      .filter(Boolean)
+      .map(alias => [alias, oficial]);
+  });
+}
+
+const FOOTBALL_COUNTRY_ALIASES = crearAliasesFutbolPaises();
+const FOOTBALL_COUNTRY_ALIAS_LOOKUP = new Map(FOOTBALL_COUNTRY_ALIASES);
+
+const FOOTBALL_TEAM_ALIASES = [
+  ...FOOTBALL_COUNTRY_ALIASES,
+  ...FOOTBALL_TEAM_ALIASES_BASE.map(([alias, oficial]) => [
+    alias,
+    FOOTBALL_COUNTRY_ALIAS_LOOKUP.get(normalizarTextoMercado(oficial)) || oficial
+  ])
+].sort((a, b) => b[0].length - a[0].length);
+
 function aplicarAliasFutbol(normalizado = "") {
   let texto = normalizado;
-  FOOTBALL_TEAM_ALIASES
-    .sort((a, b) => b[0].length - a[0].length)
-    .forEach(([alias, oficial]) => {
-      const pattern = new RegExp(`(^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g");
-      texto = texto.replace(pattern, (_, prefix) => `${prefix}${oficial}`);
-    });
+  FOOTBALL_TEAM_ALIASES.forEach(([alias, oficial]) => {
+    const pattern = new RegExp(`(^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g");
+    texto = texto.replace(pattern, (_, prefix) => `${prefix}${oficial}`);
+  });
   return texto.replace(/\s+/g, " ").trim();
 }
 
@@ -4144,8 +4169,12 @@ function scoreEquipoFutbol(equipoApuesta = "", competitor = {}) {
   const objetivoTokens = objetivo.split(" ").filter(t => t.length >= 3);
   const opcionesTokens = opciones.flatMap(op => op.split(" ").filter(t => t.length >= 3));
   if (!objetivoTokens.length || !opcionesTokens.length) return 0;
-  const matches = objetivoTokens.filter(token => opcionesTokens.includes(token)).length;
-  return matches / Math.max(objetivoTokens.length, 1);
+  const matchesObjetivo = objetivoTokens.filter(token => opcionesTokens.includes(token)).length;
+  const matchesOpcion = opcionesTokens.filter(token => objetivoTokens.includes(token)).length;
+  return Math.max(
+    matchesObjetivo / Math.max(objetivoTokens.length, 1),
+    matchesOpcion / Math.max(opcionesTokens.length, 1)
+  );
 }
 
 function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
