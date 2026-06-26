@@ -5931,10 +5931,6 @@ function _render() {
       const fechaBase = a.fecha || a.dia || "";
       const [year, month, day] = fechaBase ? fechaBase.split("-") : ["", "", ""];
       let fechaFormateada = (day && month && year) ? `${day}/${month}/${year}` : (fechaBase || "—");
-      const horaFormateada = a.hora || obtenerHoraAutoApuesta(a);
-      if (horaFormateada) {
-        fechaFormateada += `<br><span style="font-size:11px; color:#cbd5e1; font-weight:500;">${horaFormateada}</span>`;
-      }
 
       let celdaEvento = "";
       if (a.jugadas && a.jugadas.length > 0) {
