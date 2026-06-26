@@ -1588,8 +1588,8 @@ function repararTotalesEquipoMlbPartidos(jugadas = []) {
   });
 }
 
-function normalizarClaveFutbol(value = "") {
-  const normalizado = String(value)
+function normalizarBaseFutbol(value = "") {
+  return String(value)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -1598,6 +1598,10 @@ function normalizarClaveFutbol(value = "") {
     .replace(/\b(fc|cf|club|deportivo|the)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizarClaveFutbol(value = "") {
+  const normalizado = normalizarBaseFutbol(value);
   return aplicarAliasFutbol(normalizado);
 }
 
@@ -3748,7 +3752,11 @@ const FOOTBALL_TEAM_ALIASES_BASE = [
   ["turquia", "turkey"],
   ["turkiye", "turkey"],
   ["estados unidos", "united states"],
+  ["united states of america", "united states"],
   ["eeuu", "united states"],
+  ["ee uu", "united states"],
+  ["u s a", "united states"],
+  ["u s", "united states"],
   ["usa", "united states"],
   ["mexico", "mexico"],
   ["brasil", "brazil"],
@@ -3764,18 +3772,31 @@ const FOOTBALL_TEAM_ALIASES_BASE = [
 ];
 
 function crearAliasesFutbolPaises() {
-  return COUNTRY_FLAG_ENTRIES.flatMap(country => {
+  const aliases = new Map();
+  const ambiguos = new Set();
+
+  const agregarAlias = (alias, oficial) => {
+    const key = normalizarBaseFutbol(alias);
+    if (!key || !oficial || ambiguos.has(key)) return;
+    if (aliases.has(key) && aliases.get(key) !== oficial) {
+      aliases.delete(key);
+      ambiguos.add(key);
+      return;
+    }
+    aliases.set(key, oficial);
+  };
+
+  COUNTRY_FLAG_ENTRIES.forEach(country => {
     const code = String(country.flag || "")
       .replace(/^flag-/i, "")
       .replace(/\.png$/i, "");
-    const oficial = code ? `country${code}` : normalizarTextoMercado(country.name || "");
-    if (!oficial) return [];
+    const oficial = code ? `country${code}` : normalizarBaseFutbol(country.name || "");
+    if (!oficial) return;
 
-    return [country.name, ...(country.aliases || [])]
-      .map(alias => normalizarTextoMercado(alias))
-      .filter(Boolean)
-      .map(alias => [alias, oficial]);
+    [country.name, ...(country.aliases || [])].forEach(alias => agregarAlias(alias, oficial));
   });
+
+  return [...aliases.entries()];
 }
 
 const FOOTBALL_COUNTRY_ALIASES = crearAliasesFutbolPaises();
@@ -3784,8 +3805,8 @@ const FOOTBALL_COUNTRY_ALIAS_LOOKUP = new Map(FOOTBALL_COUNTRY_ALIASES);
 const FOOTBALL_TEAM_ALIASES = [
   ...FOOTBALL_COUNTRY_ALIASES,
   ...FOOTBALL_TEAM_ALIASES_BASE.map(([alias, oficial]) => [
-    alias,
-    FOOTBALL_COUNTRY_ALIAS_LOOKUP.get(normalizarTextoMercado(oficial)) || oficial
+    normalizarBaseFutbol(alias),
+    FOOTBALL_COUNTRY_ALIAS_LOOKUP.get(normalizarBaseFutbol(oficial)) || normalizarBaseFutbol(oficial)
   ])
 ].sort((a, b) => b[0].length - a[0].length);
 
