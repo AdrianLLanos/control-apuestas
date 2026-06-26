@@ -607,6 +607,17 @@ function limpiarUndefinedFirestore(valor) {
   return valor;
 }
 
+function aplicarUpdateLocalApuesta(id, updateData = {}) {
+  const index = apuestas.findIndex(apuesta => apuesta.id === id);
+  if (index < 0) return false;
+  apuestas[index] = normalizarFechaDeApuesta({
+    ...apuestas[index],
+    ...limpiarUndefinedFirestore(updateData),
+    id
+  });
+  return true;
+}
+
 function getSelectionsFromJugada(jugada) {
   if (typeof jugada !== "object" || !jugada) {
     return [{ titulo: "", jugada: jugada || "", estado: "pendiente" }];
@@ -2865,6 +2876,7 @@ function esEstadoFutbolMedioTiempo(estadoJuego = "") {
 }
 
 function getPausaMedioTiempoHastaFutbol(estadoJuego = "", pausaActual = null) {
+  if (FOOTBALL_HALFTIME_PAUSE_MS <= 0) return null;
   if (!esEstadoFutbolMedioTiempo(estadoJuego)) return null;
   const pausaActualMs = Number(pausaActual) || 0;
   return pausaActualMs > Date.now() ? pausaActualMs : Date.now() + FOOTBALL_HALFTIME_PAUSE_MS;
@@ -3060,6 +3072,7 @@ function apuestaYaFinalizadaYResuelta(apuesta = {}, key = "") {
 }
 
 function apuestaFutbolPausadaPorMedioTiempo(apuesta = {}) {
+  if (FOOTBALL_HALFTIME_PAUSE_MS <= 0) return false;
   return (apuesta.jugadas || []).some(jugada =>
     Number(jugada?.autoFutbol?.pausaMedioTiempoHasta) > Date.now() ||
     (jugada?.selections || []).some(sel => Number(sel?.autoFutbol?.pausaMedioTiempoHasta) > Date.now())
@@ -3685,7 +3698,7 @@ const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
 const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 0;
-const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 2 * 60 * 1000;
+const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
@@ -4721,7 +4734,13 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
       actualizadas++;
+    }
+
+    if (silencioso && actualizadas > 0) {
+      renderSnapshotProgramado();
     }
 
     if (!silencioso) {
