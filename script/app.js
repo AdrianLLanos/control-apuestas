@@ -4270,7 +4270,7 @@ async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
   return events;
 }
 
-async function cargarResumenFutbol(game) {
+async function cargarResumenApiSportsFutbol(game) {
   const fixtureId = getIdJuegoFutbol(game);
   if (!fixtureId) return null;
 
@@ -4309,6 +4309,44 @@ async function cargarResumenFutbol(game) {
     summary
   });
   return summary;
+}
+
+async function cargarResumenEspnFutbol(event) {
+  const eventId = event?.id;
+  const leagueSlug = event?.leagueSlug;
+  if (!eventId || !leagueSlug) return null;
+
+  const cacheKey = `espn-football-summary:${leagueSlug}:${eventId}`;
+  const cached = apiSportsFootballCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS) {
+    return cached.summary;
+  }
+
+  const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(leagueSlug)}/summary?event=${encodeURIComponent(eventId)}&lang=es&region=mx`;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const summary = await response.json();
+  apiSportsFootballCache.set(cacheKey, {
+    createdAt: Date.now(),
+    summary
+  });
+  return summary;
+}
+
+async function cargarResumenFutbol(apiGame, espnGame = null) {
+  let apiSummary = null;
+  if (apiGame) {
+    try {
+      apiSummary = await cargarResumenApiSportsFutbol(apiGame);
+      if (getCornersEquipoFutbol(apiSummary)) return apiSummary;
+    } catch (e) {
+      console.warn("No se pudo cargar estadisticas API-Sports futbol:", e);
+    }
+  }
+
+  const espnSummary = await cargarResumenEspnFutbol(espnGame);
+  return getCornersEquipoFutbol(espnSummary) ? espnSummary : apiSummary;
 }
 
 function getIdJuegoFutbol(game) {
@@ -4861,7 +4899,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         continue;
       }
 
-      const summary = autoFutbol.mercado === "total_corners" && apiGame ? await cargarResumenFutbol(apiGame) : null;
+      const summary = autoFutbol.mercado === "total_corners" ? await cargarResumenFutbol(apiGame, espnGame) : null;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
