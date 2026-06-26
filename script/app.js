@@ -3569,9 +3569,121 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
   return updatePayload;
 }
 
+function apuestaMlbNecesitaHorario(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (fecha !== obtenerFechaActualLocal()) return false;
+  if (!apuestaPareceMlb(apuesta)) return false;
+  if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
+  if ((apuesta.resultado || "pendiente") !== "pendiente") return false;
+  if (!apuesta.hora) return true;
+  return getAutoMlbFechasJuego(apuesta).length === 0;
+}
+
+function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+  const fechaBet = apuesta.fecha || apuesta.dia;
+  const jugadasBase = normalizarJugadasConEstado(apuesta.jugadas || []);
+  let huboCambio = false;
+  let primeraHora = "";
+
+  const nuevasJugadas = jugadasBase.map(jugada => {
+    if (typeof jugada !== "object" || !jugada) return jugada;
+
+    const ev = jugada.ev || jugada.evento || apuesta.evento || "";
+    const selections = getSelectionsFromJugada(jugada).map(sel => {
+      const autoMlbOriginal = sel.autoMlb || null;
+      const autoMlbDetectado = crearAutoMlbSeleccion({
+        evento: ev,
+        titulo: sel.titulo || "",
+        jugada: sel.jugada || ""
+      });
+      const autoMlb = autoMlbOriginal && autoMlbDetectado
+        ? {
+          ...autoMlbOriginal,
+          mercado: autoMlbDetectado.mercado || autoMlbOriginal.mercado,
+          equipos: autoMlbDetectado.equipos || autoMlbOriginal.equipos,
+          seleccionEquipo: autoMlbDetectado.seleccionEquipo || autoMlbOriginal.seleccionEquipo,
+          tipoTotal: autoMlbDetectado.tipoTotal || autoMlbOriginal.tipoTotal,
+          linea: autoMlbDetectado.linea ?? autoMlbOriginal.linea
+        }
+        : (autoMlbOriginal || autoMlbDetectado);
+      if (!autoMlb) return sel;
+
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet);
+      const isoJuego = game?.gameDate || espnGame?.date || autoMlb.fechaJuego || "";
+      const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
+      if (!primeraHora && hora) primeraHora = hora;
+      if (!game && !espnGame) {
+        if (!autoMlbOriginal && autoMlbDetectado) huboCambio = true;
+        return autoMlbOriginal || autoMlbDetectado ? { ...sel, autoMlb } : sel;
+      }
+
+      const estadoJuego = game?.status?.detailedState ||
+        game?.status?.abstractGameState ||
+        espnGame?.status?.type?.detail ||
+        espnGame?.status?.type?.description ||
+        autoMlb.estadoJuego ||
+        "";
+      const siguienteAuto = {
+        ...autoMlb,
+        gamePk: game?.gamePk ?? autoMlb.gamePk,
+        espnId: espnGame?.id ?? autoMlb.espnId,
+        estadoJuego,
+        fechaJuego: isoJuego || autoMlb.fechaJuego
+      };
+
+      if (
+        !autoMlbOriginal ||
+        autoMlb.gamePk !== siguienteAuto.gamePk ||
+        autoMlb.espnId !== siguienteAuto.espnId ||
+        autoMlb.estadoJuego !== siguienteAuto.estadoJuego ||
+        autoMlb.fechaJuego !== siguienteAuto.fechaJuego
+      ) {
+        huboCambio = true;
+      }
+
+      return {
+        ...sel,
+        autoMlb: siguienteAuto
+      };
+    });
+
+    const equiposMlb = detectarEquiposMlb(ev);
+    const siguienteJugada = {
+      ...jugada,
+      selections
+    };
+    const autoJugada = jugada.autoMlb || (equiposMlb.length >= 2 ? { deporte: "mlb", equipos: equiposMlb.slice(0, 2) } : null);
+    if (autoJugada) {
+      const game = buscarJuegoMlb(juegosFecha, autoJugada.equipos, fechaBet);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoJugada.equipos, fechaBet);
+      const isoJuego = game?.gameDate || espnGame?.date || autoJugada.fechaJuego || "";
+      const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
+      if (!primeraHora && hora) primeraHora = hora;
+      siguienteJugada.autoMlb = {
+        ...autoJugada,
+        gamePk: game?.gamePk ?? autoJugada.gamePk,
+        espnId: espnGame?.id ?? autoJugada.espnId,
+        estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || autoJugada.estadoJuego || "",
+        fechaJuego: isoJuego || autoJugada.fechaJuego
+      };
+      if (JSON.stringify(jugada.autoMlb || null) !== JSON.stringify(siguienteJugada.autoMlb || null)) {
+        huboCambio = true;
+      }
+    }
+
+    return siguienteJugada;
+  });
+
+  const updatePayload = {};
+  if (huboCambio) updatePayload.jugadas = nuevasJugadas;
+  if (!apuesta.hora && primeraHora) updatePayload.hora = primeraHora;
+  return Object.keys(updatePayload).length > 0 ? updatePayload : null;
+}
+
 async function sincronizarResultadosMlb(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const candidatas = apuestas.filter(a => {
+  const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
@@ -3581,10 +3693,18 @@ async function sincronizarResultadosMlb(silencioso = false) {
     if (silencioso && (a.fecha || a.dia) !== hoy) return false;
     return true;
   });
+  const candidatasHorario = apuestas.filter(a => {
+    if (!apuestaMlbNecesitaHorario(a)) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
+    return true;
+  });
+  const candidatas = [...new Map(
+    [...candidatasResultados, ...candidatasHorario].map(apuesta => [apuesta.id, apuesta])
+  ).values()];
 
   if (candidatas.length === 0) {
     if (!silencioso) {
-      setMlbSyncStatus("No hay apuestas MLB ya iniciadas para sincronizar.", "");
+      setMlbSyncStatus("No hay apuestas MLB pendientes para sincronizar.", "");
     }
     return;
   }
@@ -3616,25 +3736,34 @@ async function sincronizarResultadosMlb(silencioso = false) {
     }
 
     let actualizadas = 0;
+    let horariosActualizados = 0;
     let revisadas = 0;
 
     for (const apuesta of candidatas) {
       revisadas++;
       const fecha = apuesta.fecha || apuesta.dia;
-      const updateData = aplicarResultadoMlbApuesta(
-        apuesta,
-        juegosPorFecha.get(fecha) || [],
-        juegosEspnPorFecha.get(fecha) || []
-      );
+      const juegosApuesta = juegosPorFecha.get(fecha) || [];
+      const juegosEspnApuesta = juegosEspnPorFecha.get(fecha) || [];
+      const debeSincronizarResultado = candidatasResultados.some(item => item.id === apuesta.id);
+      const updateData = debeSincronizarResultado
+        ? aplicarResultadoMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta)
+        : aplicarHorarioMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
       actualizadas++;
+      if (!debeSincronizarResultado) horariosActualizados++;
+    }
+
+    if (silencioso && actualizadas > 0) {
+      renderSnapshotProgramado();
     }
 
     if (!silencioso) {
       setMlbSyncStatus(
-        `MLB sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
+        `MLB sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${horariosActualizados ? ` Horarios: ${horariosActualizados}.` : ""}`,
         actualizadas > 0 ? "success" : ""
       );
     }
