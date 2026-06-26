@@ -4536,6 +4536,28 @@ function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
   }
 }
 
+function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
+  const total = Number(autoFutbol.totalCorners);
+  if (Number.isNaN(total)) return null;
+
+  const equipos = Array.isArray(autoFutbol.equipos) ? autoFutbol.equipos : [];
+  const nombres = autoFutbol.marcador
+    ? String(autoFutbol.marcador).split(/\s+\d+\s*-\s*\d+\s+/).map(item => item.trim()).filter(Boolean)
+    : [];
+  const awayName = equipos[0] || nombres[0] || "Visitante";
+  const homeName = equipos[1] || nombres[1] || "Local";
+
+  if (total === 0) {
+    return {
+      total: 0,
+      away: { name: awayName, corners: 0 },
+      home: { name: homeName, corners: 0 }
+    };
+  }
+
+  return null;
+}
+
 function getCornersInicialesFutbol(marcador = null) {
   if (!marcador) return null;
   return {
@@ -5221,7 +5243,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     }
 
     const totalCorners = futbolAuto.totalCorners;
-    const cornersEquipo = futbolAuto.cornersEquipo;
+    const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcador;
     const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
@@ -5241,7 +5263,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? awayCorners + homeCorners
         : totalCorners;
       const totalHtml = totalMostrado !== undefined && totalMostrado !== null
-        ? ` &middot; Corners: ${escapeHtml(totalMostrado)}`
+        ? ` &middot; Total: ${escapeHtml(totalMostrado)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
       return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
@@ -5249,11 +5271,11 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
 
     const sinDatoCorners = totalCorners === undefined || totalCorners === null;
     if ((estadoPrevio || sinDatoCorners) && marcador && /(?:^|\s)0\s*-\s*0(?:\s|$)/.test(marcador)) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Total: 0${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
     }
 
     return totalCorners !== undefined && totalCorners !== null
-      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+      ? `<div class="auto-mlb-score">Total corners: ${escapeHtml(totalCorners)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
       : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml);
   }
 
