@@ -3786,6 +3786,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
+  const mostrarHoraConMarcador = options.showScheduleWithScore !== false;
   const totalCarreras = Number(autoMlb.totalCarreras);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
@@ -3796,18 +3797,18 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
+  if (showAutoMeta && autoMlb.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
     }
   }
 
-  if (estadoEspecialHtml) return `${marcadorHtml}${estadoEspecialHtml}`;
+  if (estadoEspecialHtml) return `${marcadorHtml}${mostrarHoraConMarcador ? horaHtml : ""}${estadoEspecialHtml}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
   }
-  return marcadorHtml ? `${marcadorHtml}${estadoFinalizadoHtml}` : horaHtml;
+  return marcadorHtml ? `${marcadorHtml}${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml;
 }
 
 function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {}) {
@@ -5207,6 +5208,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(futbolAuto) : "";
+  const mostrarHoraConMarcador = options.showScheduleWithScore !== false;
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
   if (futbolAuto.mercado === "total_corners") {
@@ -5224,7 +5226,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcador;
     const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
     let horaHtml = "";
-    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+    if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -5241,17 +5243,17 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? ` &middot; Corners: ${escapeHtml(totalMostrado)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
     }
 
     const sinDatoCorners = totalCorners === undefined || totalCorners === null;
     if ((estadoPrevio || sinDatoCorners) && marcador && /(?:^|\s)0\s*-\s*0(?:\s|$)/.test(marcador)) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Corners: 0${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
     }
 
     return totalCorners !== undefined && totalCorners !== null
-      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>${estadoFinalizadoHtml}`
-      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}` : horaHtml);
+      ? `<div class="auto-mlb-score">Corners: ${escapeHtml(totalCorners)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml);
   }
 
   let marcadorActual = futbolAuto.marcador;
@@ -5265,7 +5267,6 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   let horaHtml = "";
   const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcadorActual;
   const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
-  const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
@@ -5984,7 +5985,8 @@ function _render() {
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: selIndex === selections.length - 1
+                showAutoMeta: isCrearSimple || selIndex === selections.length - 1,
+                showScheduleWithScore: true
               });
               allTimelineItems.push({
                 html: `
@@ -6073,7 +6075,7 @@ function _render() {
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
                 showAutoMeta: selIndex === selections.length - 1,
-                showScheduleWithScore: isSimpleOptionBet
+                showScheduleWithScore: true
               });
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
