@@ -3523,7 +3523,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     return equiposApuesta.every(eq => nombres.some(nombre => equiposMlbCoinciden(eq, nombre)));
   });
   const isoJuego = primerJuego?.gameDate || primerJuego?.date || "";
-  const { fecha: fechaExtraida } = obtenerFechaHoraLocalDesdeIso(isoJuego);
+  const { fecha: fechaExtraida, hora: horaExtraida } = obtenerFechaHoraLocalDesdeIso(isoJuego);
 
   const apuestaTemp = {
     ...apuesta,
@@ -3555,6 +3555,10 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
   if ((!apuesta.fecha && !apuesta.dia) && fechaExtraida) {
     updatePayload.fecha = fechaExtraida;
     updatePayload.dia = fechaExtraida;
+  }
+
+  if (!apuesta.hora && horaExtraida) {
+    updatePayload.hora = horaExtraida;
   }
 
   if (apuesta.fecha || apuesta.dia) {
@@ -3648,7 +3652,8 @@ async function sincronizarResultadosMlb(silencioso = false) {
 function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
-  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego);
+  const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego) && !marcador;
+  const estadoPrevio = (esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego)) || juegoPendientePorFecha;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
@@ -3917,6 +3922,21 @@ function getInicioFutbolApuesta(apuesta = {}) {
     return new Date(Math.min(...fechasAuto.map(date => date.getTime())));
   }
   return parseFechaHoraLocal(apuesta.fecha || apuesta.dia, apuesta.hora || "");
+}
+
+function obtenerHoraAutoApuesta(apuesta = {}) {
+  const fechasAuto = [
+    ...getAutoMlbFechasJuego(apuesta),
+    ...getAutoFutbolFechasJuego(apuesta)
+  ].filter(date => date instanceof Date && !Number.isNaN(date.getTime()));
+  if (fechasAuto.length === 0) return "";
+
+  const primeraFecha = new Date(Math.min(...fechasAuto.map(date => date.getTime())));
+  return primeraFecha.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
 }
 
 function apuestaFutbolYaDebeSincronizar(apuesta = {}) {
@@ -4835,7 +4855,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     return scoreA >= 0.45 && scoreB >= 0.45;
   });
   const isoJuegoFutbol = getFechaJuegoFutbol(primerJuegoFutbol);
-  const { fecha: fechaExtraidaFutbol } = obtenerFechaHoraLocalDesdeIso(isoJuegoFutbol);
+  const { fecha: fechaExtraidaFutbol, hora: horaExtraidaFutbol } = obtenerFechaHoraLocalDesdeIso(isoJuegoFutbol);
 
   const apuestaTemp = {
     ...apuesta,
@@ -4867,6 +4887,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
   if ((!apuesta.fecha && !apuesta.dia) && fechaExtraidaFutbol) {
     updatePayloadFutbol.fecha = fechaExtraidaFutbol;
     updatePayloadFutbol.dia = fechaExtraidaFutbol;
+  }
+
+  if (!apuesta.hora && horaExtraidaFutbol) {
+    updatePayloadFutbol.hora = horaExtraidaFutbol;
   }
 
   if (apuesta.fecha || apuesta.dia) {
@@ -5054,7 +5078,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
-    const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
+    const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcador;
+    const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
     let horaHtml = "";
     if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
@@ -5095,7 +5120,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   let horaHtml = "";
-  const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
+  const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcadorActual;
+  const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
@@ -5762,8 +5788,9 @@ function _render() {
       const fechaBase = a.fecha || a.dia || "";
       const [year, month, day] = fechaBase ? fechaBase.split("-") : ["", "", ""];
       let fechaFormateada = (day && month && year) ? `${day}/${month}/${year}` : (fechaBase || "—");
-      if (a.hora) {
-        fechaFormateada += `<br><span style="font-size:11px; color:#cbd5e1; font-weight:500;">${a.hora}</span>`;
+      const horaFormateada = a.hora || obtenerHoraAutoApuesta(a);
+      if (horaFormateada) {
+        fechaFormateada += `<br><span style="font-size:11px; color:#cbd5e1; font-weight:500;">${horaFormateada}</span>`;
       }
 
       let celdaEvento = "";
