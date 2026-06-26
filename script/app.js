@@ -3768,7 +3768,7 @@ function crearAliasesFutbolPaises() {
     const code = String(country.flag || "")
       .replace(/^flag-/i, "")
       .replace(/\.png$/i, "");
-    const oficial = code ? `pais ${code}` : normalizarTextoMercado(country.name || "");
+    const oficial = code ? `country${code}` : normalizarTextoMercado(country.name || "");
     if (!oficial) return [];
 
     return [country.name, ...(country.aliases || [])]
@@ -4201,6 +4201,41 @@ function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
   return mejor.game;
 }
 
+function limpiarDatosJuegoAutoFutbol(autoFutbol = {}) {
+  const {
+    id,
+    liga,
+    estadoJuego,
+    estadoEspecial,
+    marcador,
+    totalCorners,
+    cornersEquipo,
+    fechaJuego,
+    pausaMedioTiempoHasta,
+    pausaEstadoEspecialHasta,
+    sincronizadoEn,
+    ...base
+  } = autoFutbol || {};
+
+  return base;
+}
+
+function autoFutbolTieneDatosJuego(autoFutbol = {}) {
+  return Boolean(
+    autoFutbol?.id ||
+    autoFutbol?.liga ||
+    autoFutbol?.estadoJuego ||
+    autoFutbol?.estadoEspecial ||
+    autoFutbol?.marcador ||
+    autoFutbol?.totalCorners !== undefined ||
+    autoFutbol?.cornersEquipo ||
+    autoFutbol?.fechaJuego ||
+    autoFutbol?.pausaMedioTiempoHasta ||
+    autoFutbol?.pausaEstadoEspecialHasta ||
+    autoFutbol?.sincronizadoEn
+  );
+}
+
 function juegoFutbolFinalizado(game) {
   const apiStatus = game?.fixture?.status?.short;
   if (apiStatus) return ["FT", "AET", "PEN", "AWD", "WO"].includes(apiStatus);
@@ -4549,7 +4584,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       if (!autoOriginal) huboCambioMetadata = true;
       const game = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       if (!game) {
-        selections.push({ ...sel, autoFutbol });
+        if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
+        selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
         continue;
       }
 
