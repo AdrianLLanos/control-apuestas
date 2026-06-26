@@ -5265,7 +5265,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   let horaHtml = "";
   const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcadorActual;
   const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
-  if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio)) {
+  const mostrarHoraConMarcador = options.showScheduleWithScore === true;
+  if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -5277,7 +5278,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   }
   if (horaHtml && (!marcadorActual || estadoPrevio)) return horaHtml;
   return marcadorActual
-    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>${estadoFinalizadoHtml}`
+    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
     : horaHtml;
 }
 
@@ -6071,7 +6072,8 @@ function _render() {
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: selIndex === selections.length - 1
+                showAutoMeta: selIndex === selections.length - 1,
+                showScheduleWithScore: isSimpleOptionBet
               });
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
