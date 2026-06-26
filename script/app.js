@@ -5032,7 +5032,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
 async function sincronizarResultadosFutbol(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const candidatas = apuestas.filter(a => {
+  const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
@@ -5043,10 +5043,21 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
     return true;
   });
+  const candidatasHorario = apuestas.filter(a => {
+    if (!apuestaPareceFutbol(a)) return false;
+    if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (!puedeDescubrirInicioFutbol(a, silencioso)) return false;
+    return true;
+  });
+  const idsHorario = new Set(candidatasHorario.map(apuesta => apuesta.id));
+  const candidatas = [...new Map(
+    [...candidatasResultados, ...candidatasHorario].map(apuesta => [apuesta.id, apuesta])
+  ).values()];
 
   if (candidatas.length === 0) {
     if (!silencioso) {
-      setFootballSyncStatus("No hay apuestas de futbol ya iniciadas para sincronizar.", "");
+      setFootballSyncStatus("No hay apuestas de futbol pendientes para sincronizar.", "");
     }
     return;
   }
@@ -5064,6 +5075,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     candidatas.forEach(apuesta => {
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
       if (!fecha) return;
+      if (idsHorario.has(apuesta.id)) registrarIntentoDescubrirInicioFutbol(apuesta);
       const fechasBase = getInicioFutbolApuesta(apuesta) ? [fecha] : getFechasCercanas(fecha);
       const fechasBusqueda = filtrarFechasPermitidasApiSportsFutbol(fechasBase);
       fechasOmitidasPorPlan += fechasBase.length - fechasBusqueda.length;
@@ -5098,6 +5110,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
 
     let actualizadas = 0;
+    let horariosActualizados = 0;
     let revisadas = 0;
 
     for (const apuesta of candidatas) {
@@ -5113,6 +5126,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       aplicarUpdateLocalApuesta(apuesta.id, updateData);
       if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
       actualizadas++;
+      if (idsHorario.has(apuesta.id)) horariosActualizados++;
     }
 
     if (silencioso && actualizadas > 0) {
@@ -5124,7 +5138,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
         ? ` ${fechasOmitidasPorPlan} fecha(s) fuera del plan free fueron omitidas.`
         : "";
       setFootballSyncStatus(
-        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${detalleOmitidas}`,
+        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${horariosActualizados ? ` Horarios: ${horariosActualizados}.` : ""}${detalleOmitidas}`,
         actualizadas > 0 ? "success" : ""
       );
     }
