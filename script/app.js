@@ -3954,6 +3954,31 @@ function getFechasCercanas(fecha = "") {
   });
 }
 
+function fechaIsoConOffset(fecha = "", offset = 0) {
+  const base = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return "";
+  base.setDate(base.getDate() + offset);
+  return base.toISOString().slice(0, 10);
+}
+
+function getFechasPermitidasApiSportsFutbol() {
+  const hoy = obtenerFechaActualLocal();
+  return new Set([
+    fechaIsoConOffset(hoy, -1),
+    hoy,
+    fechaIsoConOffset(hoy, 1)
+  ].filter(Boolean));
+}
+
+function filtrarFechasPermitidasApiSportsFutbol(fechas = []) {
+  const permitidas = getFechasPermitidasApiSportsFutbol();
+  return fechas.filter(fecha => permitidas.has(fecha));
+}
+
+function esErrorRangoApiSportsFreePlan(error) {
+  return /free plans do not have access to this date/i.test(error?.message || "");
+}
+
 async function cargarJuegosFutbolPorFecha(fecha, options = {}) {
   if (!fecha) return [];
   const cacheMs = options.cacheMs ?? API_SPORTS_FOOTBALL_CACHE_MS;
@@ -4727,19 +4752,28 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   try {
     const fechasBusquedaPorApuesta = new Map();
     const fechas = new Set();
+    let fechasOmitidasPorPlan = 0;
     candidatas.forEach(apuesta => {
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
       if (!fecha) return;
-      const fechasBusqueda = getInicioFutbolApuesta(apuesta) ? [fecha] : getFechasCercanas(fecha);
+      const fechasBase = getInicioFutbolApuesta(apuesta) ? [fecha] : getFechasCercanas(fecha);
+      const fechasBusqueda = filtrarFechasPermitidasApiSportsFutbol(fechasBase);
+      fechasOmitidasPorPlan += fechasBase.length - fechasBusqueda.length;
       fechasBusquedaPorApuesta.set(apuesta, fechasBusqueda);
       fechasBusqueda.forEach(fechaBusqueda => fechas.add(fechaBusqueda));
     });
     const juegosPorFecha = new Map();
     for (const fecha of fechas) {
-      const juegos = await cargarJuegosFutbolPorFecha(fecha, {
-        cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
-      });
-      juegosPorFecha.set(fecha, juegos);
+      try {
+        const juegos = await cargarJuegosFutbolPorFecha(fecha, {
+          cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
+        });
+        juegosPorFecha.set(fecha, juegos);
+      } catch (e) {
+        if (!esErrorRangoApiSportsFreePlan(e)) throw e;
+        fechasOmitidasPorPlan++;
+        juegosPorFecha.set(fecha, []);
+      }
     }
 
     let actualizadas = 0;
@@ -4764,8 +4798,11 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
 
     if (!silencioso) {
+      const detalleOmitidas = fechasOmitidasPorPlan > 0
+        ? ` ${fechasOmitidasPorPlan} fecha(s) fuera del plan free fueron omitidas.`
+        : "";
       setFootballSyncStatus(
-        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.`,
+        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${detalleOmitidas}`,
         actualizadas > 0 ? "success" : ""
       );
     }
