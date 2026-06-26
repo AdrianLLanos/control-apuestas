@@ -2829,10 +2829,10 @@ function detectarEstadoEspecialTexto({ estado = "", motivo = "", clima = "", pro
   const texto = normalizarEstadoExternoTexto(estado, motivo, clima);
   if (!texto) return null;
 
-  const esCancelado = /\b(cancelled|canceled|cancelado|cancelada|abandoned|abandonado|abandonada)\b/.test(texto);
-  const esPospuesto = /\b(postponed|pospuesto|pospuesta|aplazado|aplazada)\b/.test(texto);
+  const esCancelado = /\b(cancelled|canceled|cancelado|cancelada|abandoned|abandonado|abandonada|abd)\b/.test(texto);
+  const esPospuesto = /\b(postponed|pospuesto|pospuesta|aplazado|aplazada|pst)\b/.test(texto);
   const esRetrasado = /\b(delayed|delay|retrasado|retrasada|demorado|demorada|weather delay|rain delay)\b/.test(texto);
-  const esSuspendido = /\b(suspended|suspendido|suspendida)\b/.test(texto);
+  const esSuspendido = /\b(suspended|suspendido|suspendida|interrupted|interrumpido|interrumpida|susp|int)\b/.test(texto);
   if (!esCancelado && !esPospuesto && !esRetrasado && !esSuspendido) return null;
 
   const motivoOriginal = motivo || clima || "";
@@ -3076,6 +3076,14 @@ function apuestaFutbolPausadaPorMedioTiempo(apuesta = {}) {
   return (apuesta.jugadas || []).some(jugada =>
     Number(jugada?.autoFutbol?.pausaMedioTiempoHasta) > Date.now() ||
     (jugada?.selections || []).some(sel => Number(sel?.autoFutbol?.pausaMedioTiempoHasta) > Date.now())
+  );
+}
+
+function apuestaFutbolPausadaPorEstadoEspecial(apuesta = {}) {
+  if (FOOTBALL_SPECIAL_STATUS_RETRY_MS <= 0) return false;
+  return (apuesta.jugadas || []).some(jugada =>
+    Number(jugada?.autoFutbol?.pausaEstadoEspecialHasta) > Date.now() ||
+    (jugada?.selections || []).some(sel => Number(sel?.autoFutbol?.pausaEstadoEspecialHasta) > Date.now())
   );
 }
 
@@ -3702,6 +3710,7 @@ const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
+const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const apiSportsFootballCache = new Map();
 
 const FOOTBALL_TEAM_ALIASES = [
@@ -4474,11 +4483,15 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
         if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
         const targetFechaJuego = getFechaJuegoFutbol(game);
+        const pausaEstadoEspecialHasta = ["suspendido", "retrasado"].includes(estadoEspecial.tipo)
+          ? Date.now() + FOOTBALL_SPECIAL_STATUS_RETRY_MS
+          : null;
         if (
           autoFutbol.estadoJuego !== estadoEspecial.label ||
           autoFutbol.estadoEspecial?.tipo !== estadoEspecial.tipo ||
           autoFutbol.estadoEspecial?.motivo !== estadoEspecial.motivo ||
-          autoFutbol.fechaJuego !== targetFechaJuego
+          autoFutbol.fechaJuego !== targetFechaJuego ||
+          (autoFutbol.pausaEstadoEspecialHasta || null) !== pausaEstadoEspecialHasta
         ) {
           huboCambioMetadata = true;
         }
@@ -4492,7 +4505,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             estadoJuego: estadoEspecial.label,
             estadoEspecial,
             marcador: autoFutbol.marcador,
-            fechaJuego: targetFechaJuego || autoFutbol.fechaJuego
+            fechaJuego: targetFechaJuego || autoFutbol.fechaJuego,
+            pausaMedioTiempoHasta: null,
+            pausaEstadoEspecialHasta
           }
         });
         continue;
@@ -4525,7 +4540,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           autoFutbol.totalCorners !== totalCorners ||
           JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null) ||
           autoFutbol.fechaJuego !== targetFechaJuego ||
-          (autoFutbol.pausaMedioTiempoHasta || null) !== pausaMedioTiempoHasta
+          (autoFutbol.pausaMedioTiempoHasta || null) !== pausaMedioTiempoHasta ||
+          (autoFutbol.pausaEstadoEspecialHasta || null) !== null
         ) {
           huboCambioMetadata = true;
         }
@@ -4541,7 +4557,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
             totalCorners,
             cornersEquipo: cornersEquipo || null,
             fechaJuego: targetFechaJuego,
-            pausaMedioTiempoHasta
+            pausaMedioTiempoHasta,
+            pausaEstadoEspecialHasta: null
           }
         });
         continue;
@@ -4567,6 +4584,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           fechaJuego: targetFechaJuego,
           pausaMedioTiempoHasta,
+          pausaEstadoEspecialHasta: null,
           sincronizadoEn: Date.now()
         }
       };
@@ -4581,7 +4599,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         autoFutbol.totalCorners !== siguiente.autoFutbol.totalCorners ||
         JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null) ||
         autoFutbol.fechaJuego !== targetFechaJuego ||
-        (autoFutbol.pausaMedioTiempoHasta || null) !== siguiente.autoFutbol.pausaMedioTiempoHasta
+        (autoFutbol.pausaMedioTiempoHasta || null) !== siguiente.autoFutbol.pausaMedioTiempoHasta ||
+        (autoFutbol.pausaEstadoEspecialHasta || null) !== null
       ) {
         huboCambioMetadata = true;
       }
@@ -4684,6 +4703,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
+    if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     if (!tieneResultadoPendiente) return false;
     if (!apuestaFutbolYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
