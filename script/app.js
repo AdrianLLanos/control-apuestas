@@ -4087,6 +4087,39 @@ async function cargarJuegosFutbolPorFecha(fecha, options = {}) {
   return fixtures;
 }
 
+async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
+  if (!fecha) return [];
+  const cacheMs = options.cacheMs ?? API_SPORTS_FOOTBALL_LIVE_CACHE_MS;
+  const cacheKey = `espn-football:${fecha}`;
+  const cached = apiSportsFootballCache.get(cacheKey);
+  if (cacheMs > 0 && cached && Date.now() - cached.createdAt < cacheMs) {
+    return cached.events;
+  }
+
+  const date = String(fecha).replace(/-/g, "");
+  const results = await Promise.allSettled(FOOTBALL_LEAGUES.map(async league => {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    return (data.events || []).map(event => ({
+      ...event,
+      leagueLabel: event.leagueLabel || data?.leagues?.[0]?.name || league.label,
+      leagueSlug: league.slug
+    }));
+  }));
+
+  const events = results
+    .flatMap(result => result.status === "fulfilled" ? result.value : [])
+    .filter(Boolean);
+  apiSportsFootballCache.set(cacheKey, {
+    createdAt: Date.now(),
+    events
+  });
+  return events;
+}
+
 async function cargarResumenFutbol(game) {
   const fixtureId = getIdJuegoFutbol(game);
   if (!fixtureId) return null;
@@ -4220,6 +4253,10 @@ function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
   });
 
   return mejor.game;
+}
+
+function buscarJuegoEspnFutbol(juegos = [], equipos = [], fechaBet = "") {
+  return buscarJuegoFutbol(juegos, equipos, fechaBet);
 }
 
 function limpiarDatosJuegoAutoFutbol(autoFutbol = {}) {
@@ -4557,7 +4594,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   return null;
 }
 
-async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
+async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
   const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   let huboCambio = false;
@@ -4576,15 +4613,16 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
 
     for (const sel of getSelectionsFromJugada(jugada)) {
       const autoOriginal = sel.autoFutbol || null;
-      const autoFutbol = autoOriginal || crearAutoFutbolSeleccion({
+      let autoFutbol = autoOriginal || crearAutoFutbolSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
         jugada: sel.jugada || ""
       });
       if (!autoFutbol) {
         const jugadaText = sel.jugada || sel.titulo || "";
-        if (jugadaText && juegosFecha.length > 0) {
-          const foundGame = buscarJuegoFutbolFallback(juegosFecha, jugadaText, fechaBet);
+        const juegosDescubrimiento = [...juegosEspnFecha, ...juegosFecha];
+        if (jugadaText && juegosDescubrimiento.length > 0) {
+          const foundGame = buscarJuegoFutbolFallback(juegosDescubrimiento, jugadaText, fechaBet);
           if (foundGame) {
             const competidores = getCompetidoresFutbol(foundGame);
             const nombresEquipos = competidores.map(c => c.name).filter(Boolean);
@@ -4603,14 +4641,19 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       }
 
       if (!autoOriginal) huboCambioMetadata = true;
-      const game = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
+      const apiGame = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
+      const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
+      const game = espnGame || apiGame;
       if (!game) {
         if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
         selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
         continue;
       }
 
-      const estadoEspecial = getEstadoEspecialApiSportsFutbol(game);
+      const estadoEspecial = combinarEstadoEspecial(
+        getEstadoEspecialApiSportsFutbol(apiGame),
+        getEstadoEspecialEspn(espnGame, "espn_football_scoreboard")
+      );
       if (estadoEspecial) {
         const siguienteEstado = estadoEspecial.accion === "nula" ? "nula" : (sel.estado || "pendiente");
         if ((sel.estado || "pendiente") !== siguienteEstado) huboCambio = true;
@@ -4632,7 +4675,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           estado: siguienteEstado,
           autoFutbol: {
             ...autoFutbol,
-            id: getIdJuegoFutbol(game),
+            id: getIdJuegoFutbol(apiGame || game),
+            espnId: espnGame?.id ?? autoFutbol.espnId,
             liga: getLigaJuegoFutbol(game),
             estadoJuego: estadoEspecial.label,
             estadoEspecial,
@@ -4645,7 +4689,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         continue;
       }
 
-      const summary = autoFutbol.mercado === "total_corners" ? await cargarResumenFutbol(game) : null;
+      const summary = autoFutbol.mercado === "total_corners" && apiGame ? await cargarResumenFutbol(apiGame) : null;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
@@ -4681,7 +4725,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
           ...sel,
           autoFutbol: {
             ...autoFutbol,
-            id: getIdJuegoFutbol(game),
+            id: getIdJuegoFutbol(apiGame || game),
+            espnId: espnGame?.id ?? autoFutbol.espnId,
             liga: getLigaJuegoFutbol(game),
             estadoJuego,
             estadoEspecial: null,
@@ -4707,7 +4752,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
         estado: evaluacion.estado,
         autoFutbol: {
           ...autoFutbol,
-          id: getIdJuegoFutbol(game),
+          id: getIdJuegoFutbol(apiGame || game),
+          espnId: espnGame?.id ?? autoFutbol.espnId,
           liga: getLigaJuegoFutbol(game),
           estadoJuego,
           estadoEspecial: null,
@@ -4724,7 +4770,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
       if ((sel.estado || "pendiente") !== evaluacion.estado) huboCambio = true;
       if (
         autoFutbol.sincronizadoEn === undefined ||
-        autoFutbol.id !== getIdJuegoFutbol(game) ||
+        autoFutbol.id !== getIdJuegoFutbol(apiGame || game) ||
+        (espnGame?.id && autoFutbol.espnId !== espnGame.id) ||
         autoFutbol.liga !== getLigaJuegoFutbol(game) ||
         autoFutbol.estadoJuego !== siguiente.autoFutbol.estadoJuego ||
         autoFutbol.marcador !== siguiente.autoFutbol.marcador ||
@@ -4753,7 +4800,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => sel.autoFutbol?.mercado === "total_goles")?.autoFutbol;
-      const game = totalAuto ? buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet) : null;
+      const game = totalAuto
+        ? (buscarJuegoEspnFutbol(juegosEspnFecha, totalAuto.equipos, fechaBet) || buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet))
+        : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
       const finalizado = game ? juegoFutbolFinalizado(game) : false;
       const totalIrreversible = marcador && totalAuto && (
@@ -4774,7 +4823,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
   if (!huboCambio && !huboCambioMetadata) return null;
 
   // Extraer hora y fecha local desde el primer juego de fútbol encontrado
-  const primerJuegoFutbol = juegosFecha.find(game => {
+  const juegosFutbolDisponibles = [...juegosEspnFecha, ...juegosFecha];
+  const primerJuegoFutbol = juegosFutbolDisponibles.find(game => {
     const equiposApuesta = nuevasJugadas
       .flatMap(j => (j?.autoFutbol?.equipos || []))
       .filter(Boolean);
@@ -4809,7 +4859,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = []) {
     cuota,
     deporte: "futbol",
     autoSync: {
-      proveedor: "api_sports_football",
+      proveedor: "api_sports_football+espn_scoreboard",
       ultimaRevision: Date.now()
     }
   };
@@ -4868,6 +4918,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       fechasBusqueda.forEach(fechaBusqueda => fechas.add(fechaBusqueda));
     });
     const juegosPorFecha = new Map();
+    const juegosEspnPorFecha = new Map();
     for (const fecha of fechas) {
       try {
         const juegos = await cargarJuegosFutbolPorFecha(fecha, {
@@ -4875,9 +4926,21 @@ async function sincronizarResultadosFutbol(silencioso = false) {
         });
         juegosPorFecha.set(fecha, juegos);
       } catch (e) {
-        if (!esErrorRangoApiSportsFreePlan(e)) throw e;
-        fechasOmitidasPorPlan++;
+        if (esErrorRangoApiSportsFreePlan(e)) {
+          fechasOmitidasPorPlan++;
+        } else {
+          console.warn("No se pudo cargar API-Sports futbol:", fecha, e);
+        }
         juegosPorFecha.set(fecha, []);
+      }
+      try {
+        const juegosEspn = await cargarJuegosEspnFutbolPorFecha(fecha, {
+          cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
+        });
+        juegosEspnPorFecha.set(fecha, juegosEspn);
+      } catch (e) {
+        console.warn("No se pudo cargar ESPN futbol:", fecha, e);
+        juegosEspnPorFecha.set(fecha, []);
       }
     }
 
@@ -4889,7 +4952,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosApuesta);
+      const juegosEspnApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosEspnPorFecha.get(fechaBusqueda) || []);
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
       if (!updateData) continue;
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
