@@ -3782,7 +3782,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
   const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego) && !marcador;
-  const estadoPrevio = (esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego)) || juegoPendientePorFecha;
+  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) || juegoPendientePorFecha;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
@@ -5341,7 +5341,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcador;
-    const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
+    const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
     let horaHtml = "";
     if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
@@ -5384,7 +5384,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   }
   let horaHtml = "";
   const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcadorActual;
-  const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
+  const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
