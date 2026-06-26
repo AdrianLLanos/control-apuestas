@@ -4832,11 +4832,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatas = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    const tieneResultadoPendiente = (a.resultado || "pendiente") === "pendiente";
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
-    if (!tieneResultadoPendiente) return false;
     if (!apuestaFutbolYaDebeSincronizar(a)) return false;
     // En modo automatico/silencioso, revisar tambien pendientes recientes para cerrar partidos que terminaron tarde.
     if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
@@ -4927,17 +4925,34 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 
 
 let _autoSyncFutbolIntervalId = null;
+let _autoSyncFutbolEnCurso = false;
+let _ultimoAutoSyncFutbol = 0;
+
+async function ejecutarAutoSyncFutbol(force = false) {
+  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
+  if (_autoSyncFutbolEnCurso) return;
+  if (!force && Date.now() - _ultimoAutoSyncFutbol < INTERVALO_MS) return;
+
+  _autoSyncFutbolEnCurso = true;
+  _ultimoAutoSyncFutbol = Date.now();
+  try {
+    await sincronizarResultadosFutbol(true);
+  } catch (e) {
+    console.warn("Auto-sync futbol - error general:", e.message);
+  } finally {
+    _autoSyncFutbolEnCurso = false;
+  }
+}
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
   const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
-  _autoSyncFutbolIntervalId = setInterval(async () => {
-    try {
-      await sincronizarResultadosFutbol(true);
-    } catch (e) {
-      console.warn("Auto-sync fútbol - error general:", e.message);
-    }
-  }, INTERVALO_MS);
+  _autoSyncFutbolIntervalId = setInterval(() => ejecutarAutoSyncFutbol(true), INTERVALO_MS);
+  setTimeout(() => ejecutarAutoSyncFutbol(false), 1500);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") ejecutarAutoSyncFutbol(false);
+  });
+  window.addEventListener("focus", () => ejecutarAutoSyncFutbol(false));
 }
 
 
