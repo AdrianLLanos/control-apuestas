@@ -2823,6 +2823,7 @@ function normalizarEstadoExternoTexto(...partes) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase()
+    .replace(/[_-]+/g, " ")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
@@ -3029,7 +3030,7 @@ function formatFechaJuego(fechaJuegoStr) {
 function esEstadoJuegoPrevio(estadoJuego = "") {
   const normalizado = normalizarEstadoExternoTexto(estadoJuego);
   if (!normalizado) return true;
-  return /\b(preview|scheduled|pre game|pre-game|programado|previo|not started|no iniciado|por comenzar|warmup|ns|tbd)\b/.test(normalizado);
+  return /\b(preview|scheduled|pre|pre game|programado|previo|not started|no iniciado|por comenzar|warmup|ns|tbd)\b/.test(normalizado);
 }
 
 function fechaJuegoYaPaso(fechaJuegoStr = "") {
@@ -3781,7 +3782,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
 function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
-  const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego) && !marcador;
+  const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego);
   const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) || juegoPendientePorFecha;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
@@ -4546,8 +4547,6 @@ function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null) {
   const marcadorApi = getMarcadorFutbol(apiGame);
   if (marcadorEspn && !juegoFutbolNoIniciado(espnGame)) return espnGame;
   if (marcadorApi && !juegoFutbolNoIniciado(apiGame)) return apiGame;
-  if (marcadorEspn) return espnGame;
-  if (marcadorApi) return apiGame;
   return espnGame || apiGame;
 }
 
@@ -4733,6 +4732,7 @@ function getTotalCornersFutbol(summary) {
 
 function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (!autoFutbol) return null;
+  if (juegoFutbolNoIniciado(game)) return null;
   const marcador = getMarcadorFutbol(game);
   if (!marcador) return null;
   const finalizado = juegoFutbolFinalizado(game);
@@ -4819,8 +4819,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   }
 
   if (autoFutbol.mercado === "total_corners") {
-    const cornersEquipo = getCornersEquipoFutbol(summary, marcador) ||
-      (juegoFutbolNoIniciado(game) ? getCornersInicialesFutbol(marcador) : null);
+    const cornersEquipo = getCornersEquipoFutbol(summary, marcador);
     const totalCorners = cornersEquipo?.total ?? null;
     const linea = Number(autoFutbol.linea);
     if (totalCorners === null || Number.isNaN(linea)) return null;
@@ -4937,7 +4936,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         continue;
       }
 
-      const summary = autoFutbol.mercado === "total_corners" ? await cargarResumenFutbol(apiGame, espnGame) : null;
+      const juegoNoIniciado = juegoFutbolNoIniciado(game);
+      const summary = autoFutbol.mercado === "total_corners" && !juegoNoIniciado
+        ? await cargarResumenFutbol(apiGame, espnGame)
+        : null;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
@@ -4945,24 +4947,26 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           estadoJuego,
           autoFutbol.pausaMedioTiempoHasta
         );
-        const marcador = getMarcadorFutbol(game);
+        const marcador = juegoNoIniciado ? null : getMarcadorFutbol(game);
         const marcadorTexto = marcador
           ? obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos)
           : autoFutbol.marcador;
         const cornersEquipo = autoFutbol.mercado === "total_corners"
-          ? getCornersEquipoFutbol(summary, marcador) ||
-            (juegoFutbolNoIniciado(game) ? getCornersInicialesFutbol(marcador) : null)
+          ? (juegoNoIniciado ? null : getCornersEquipoFutbol(summary, marcador))
           : autoFutbol.cornersEquipo;
         const totalCorners = autoFutbol.mercado === "total_corners"
           ? cornersEquipo?.total ?? autoFutbol.totalCorners
           : autoFutbol.totalCorners;
+        const siguienteMarcador = juegoNoIniciado ? null : marcadorTexto;
+        const siguienteTotalCorners = juegoNoIniciado ? undefined : totalCorners;
+        const siguienteCornersEquipo = cornersEquipo || null;
         const targetFechaJuego = getFechaJuegoFutbol(game);
         if (
           autoFutbol.id !== getIdJuegoFutbol(game) ||
           autoFutbol.estadoJuego !== estadoJuego ||
-          autoFutbol.marcador !== marcadorTexto ||
-          autoFutbol.totalCorners !== totalCorners ||
-          JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(cornersEquipo || null) ||
+          autoFutbol.marcador !== siguienteMarcador ||
+          autoFutbol.totalCorners !== siguienteTotalCorners ||
+          JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguienteCornersEquipo) ||
           autoFutbol.fechaJuego !== targetFechaJuego ||
           (autoFutbol.pausaMedioTiempoHasta || null) !== pausaMedioTiempoHasta ||
           (autoFutbol.pausaEstadoEspecialHasta || null) !== null
@@ -4978,9 +4982,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
             liga: getLigaJuegoFutbol(game),
             estadoJuego,
             estadoEspecial: null,
-            marcador: marcadorTexto,
-            totalCorners,
-            cornersEquipo: cornersEquipo || null,
+            marcador: siguienteMarcador,
+            totalCorners: siguienteTotalCorners,
+            cornersEquipo: siguienteCornersEquipo,
             fechaJuego: targetFechaJuego,
             pausaMedioTiempoHasta,
             pausaEstadoEspecialHasta: null
@@ -5340,7 +5344,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
-    const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcador;
+    const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
     const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
     let horaHtml = "";
     if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
@@ -5383,7 +5387,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   let horaHtml = "";
-  const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego) && !marcadorActual;
+  const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
   const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
