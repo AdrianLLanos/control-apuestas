@@ -846,8 +846,10 @@ function escucharApuestas() {
 
     requestAnimationFrame(() => {
       if (omitirRenderSnapshot) {
-        renderSilenciosoApuestas.clear();
-        ultimoScrollGuardado = 0;
+        setTimeout(() => {
+          renderSilenciosoApuestas.clear();
+          ultimoScrollGuardado = 0;
+        }, 0);
         return;
       }
 
@@ -3709,6 +3711,7 @@ const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 0;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
+const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const apiSportsFootballCache = new Map();
@@ -3877,6 +3880,24 @@ function apuestaFutbolYaDebeSincronizar(apuesta = {}) {
   const fecha = apuesta.fecha || apuesta.dia;
   if (!fecha) return false;
   return fecha < obtenerFechaActualLocal();
+}
+
+function apuestaFutbolEnVentanaSyncSilencioso(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (!fecha) return false;
+
+  const hoy = obtenerFechaActualLocal();
+  if (fecha === hoy) return true;
+
+  const inicio = getInicioFutbolApuesta(apuesta);
+  const base = inicio || new Date(`${fecha}T12:00:00`);
+  if (!base || Number.isNaN(base.getTime())) return false;
+
+  const limiteInferior = new Date(`${hoy}T00:00:00`);
+  if (Number.isNaN(limiteInferior.getTime())) return false;
+  limiteInferior.setDate(limiteInferior.getDate() - API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS);
+
+  return base >= limiteInferior && base <= new Date();
 }
 
 function getFutbolDiscoveryKey(apuesta = {}) {
@@ -4731,8 +4752,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     if (!tieneResultadoPendiente) return false;
     if (!apuestaFutbolYaDebeSincronizar(a)) return false;
-    // En modo automático/silencioso, solo procesar apuestas de hoy
-    if (silencioso && (a.fecha || a.dia) !== hoy) return false;
+    // En modo automatico/silencioso, revisar tambien pendientes recientes para cerrar partidos que terminaron tarde.
+    if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
     return true;
   });
 
