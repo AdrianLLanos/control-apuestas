@@ -7,7 +7,11 @@ import {
   onSnapshot,
   getDocs,
   getDoc,
+  limit as firestoreLimit,
+  orderBy,
+  query,
   setDoc,
+  startAfter,
   updateDoc
 } from "./firebase-store.js";
 import {
@@ -39,6 +43,7 @@ import {
 
 let paginaActual = 1;
 const porPagina = 1;
+const APUESTAS_PAGE_LIMIT = 80;
 
 /* =========================
    ESTADO
@@ -492,7 +497,7 @@ window.cambiarFiltroCasa = function (id) {
   paginaActual = 1;
   isEditingFinal = false;
   renderCasasControls();
-  render();
+  cargarApuestasIniciales();
 };
 
 /* =========================
@@ -737,6 +742,9 @@ let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const autoSyncTimers = new Map();
+let ultimoDocApuestas = null;
+let hayMasApuestas = true;
+let cargandoApuestas = false;
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
@@ -776,137 +784,135 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   autoSyncTimers.set(deporte, timerId);
 }
 
-function escucharApuestas() {
-  onSnapshot(collection(db, "apuestas"), (snapshot) => {
-    const cambiosSnapshot = snapshot.docChanges();
-    if (apuestasSnapshotRecibido && cambiosSnapshot.length === 0) return;
+function getConsultaApuestasPaginada(cursor = null) {
+  const constraints = [
+    orderBy("creadoEn", "desc")
+  ];
 
-    const apuestasParaAutocorregir = [];
-    const isRecentAdd = (ultimoDiaAgregadoTime && (Date.now() - ultimoDiaAgregadoTime < 2500));
-    if (inicializado && !isRecentAdd) {
-      ultimoScrollGuardado = window.scrollY;
+  if (cursor) {
+    constraints.push(startAfter(cursor));
+  }
+
+  constraints.push(firestoreLimit(APUESTAS_PAGE_LIMIT));
+  return query(collection(db, "apuestas"), ...constraints);
+}
+
+function autocorregirApuestasCargadas(lista = []) {
+  lista.forEach(a => {
+    if (!a.casaId) {
+      updateDoc(doc(db, "apuestas", a.id), {
+        casaId: CASA_DEFAULT_ID,
+        casaNombre: getCasaNombre(CASA_DEFAULT_ID)
+      }).catch(err => console.error("Error al asignar casa por defecto:", err));
     }
 
-    if (!apuestasSnapshotRecibido) {
-      apuestas = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
-      apuestasSnapshotRecibido = true;
+    if (a.fecha && a.dia && a.fecha !== a.dia) {
+      const fechaNormalizada = a.fecha;
+      updateDoc(doc(db, "apuestas", a.id), { fecha: fechaNormalizada, dia: fechaNormalizada })
+        .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
+    }
+
+    if (a.tipoApuesta === "patente") {
+      const resultadoPatente = determinarResultadoPatente(a);
+      const cuotaPatente = calcularCuotaMaximaPatente(a.jugadas || []);
+      const updateData = {};
+
+      if (a.resultado !== resultadoPatente) {
+        a.resultado = resultadoPatente;
+        updateData.resultado = resultadoPatente;
+      }
+
+      if (formatDecimal(a.cuota) !== formatDecimal(cuotaPatente)) {
+        a.cuota = cuotaPatente;
+        updateData.cuota = cuotaPatente;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        updateDoc(doc(db, "apuestas", a.id), updateData)
+          .catch(err => console.error("Error al auto-corregir patente:", err));
+      }
+    } else if (Array.isArray(a.jugadas) && a.jugadas.length > 0) {
+      const resultadoRecalculado = recalcularResultadoApuesta(a);
+      const updateData = {};
+      if (a.resultado !== resultadoRecalculado) {
+        a.resultado = resultadoRecalculado;
+        updateData.resultado = resultadoRecalculado;
+      }
+      if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
+        const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
+        if (cuotaRecalculada > 0 && formatDecimal(a.cuota) !== formatDecimal(cuotaRecalculada)) {
+          a.cuota = cuotaRecalculada;
+          updateData.cuota = cuotaRecalculada;
+        }
+      }
+      if (Object.keys(updateData).length > 0) {
+        updateDoc(doc(db, "apuestas", a.id), updateData)
+          .catch(err => console.error("Error al auto-corregir resultado:", err));
+      }
+    }
+
+    const val = a.importe;
+    if (typeof val === 'number') {
+      const rounded = Math.round(val);
+      const distance = Math.abs(val - rounded);
+      if (distance > 0 && distance <= 0.035) {
+        updateDoc(doc(db, "apuestas", a.id), { importe: rounded })
+          .catch(err => console.error("Error al auto-corregir importe:", err));
+      }
+    }
+  });
+}
+
+async function cargarApuestasIniciales() {
+  apuestas = [];
+  ultimoDocApuestas = null;
+  hayMasApuestas = true;
+  apuestasSnapshotRecibido = false;
+  paginaActual = 1;
+  await cargarMasApuestas({ reset: true });
+}
+
+async function cargarMasApuestas({ reset = false } = {}) {
+  if (cargandoApuestas) return;
+  if (!reset && !hayMasApuestas) return;
+
+  cargandoApuestas = true;
+  try {
+    const snapshot = await getDocs(getConsultaApuestasPaginada(reset ? null : ultimoDocApuestas));
+    const nuevas = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
+
+    if (reset) {
+      apuestas = nuevas;
     } else {
-      cambiosSnapshot.forEach(change => {
-        const id = change.doc.id;
-        if (change.type === "removed") {
-          apuestas = apuestas.filter(apuesta => apuesta.id !== id);
-          return;
-        }
-
-        const apuesta = normalizarFechaDeApuesta({ ...change.doc.data(), id });
-        const index = apuestas.findIndex(item => item.id === id);
-        if (index >= 0) apuestas[index] = apuesta;
-        else apuestas.push(apuesta);
-        apuestasParaAutocorregir.push(apuesta);
-
-        if (apuesta.fecha && apuesta.dia && apuesta.fecha !== apuesta.dia) {
-          const fechaNormalizada = apuesta.fecha;
-          updateDoc(doc(db, "apuestas", apuesta.id), { fecha: fechaNormalizada, dia: fechaNormalizada })
-            .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
-        }
-      });
+      const existentes = new Set(apuestas.map(a => a.id));
+      apuestas = [...apuestas, ...nuevas.filter(a => !existentes.has(a.id))];
     }
+
+    if (snapshot.docs.length > 0) {
+      ultimoDocApuestas = snapshot.docs[snapshot.docs.length - 1];
+    }
+    hayMasApuestas = snapshot.docs.length === APUESTAS_PAGE_LIMIT;
+    apuestasSnapshotRecibido = true;
+    inicializado = true;
 
     apuestas.sort((a, b) => (a.creadoEn || 0) - (b.creadoEn || 0));
+    autocorregirApuestasCargadas(nuevas);
 
-    // Evita recorrer todo el historial al cargar: en móvil ese barrido puede congelar la pestaña.
-    apuestasParaAutocorregir.forEach(a => {
-      if (!a.casaId) {
-        updateDoc(doc(db, "apuestas", a.id), {
-          casaId: CASA_DEFAULT_ID,
-          casaNombre: getCasaNombre(CASA_DEFAULT_ID)
-        }).catch(err => console.error("Error al asignar casa por defecto:", err));
-      }
+    const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
+    const totalPags = Math.ceil(diasUnicos.length / porPagina);
+    paginaActual = reset ? (totalPags || 1) : 1;
 
-      if (a.tipoApuesta === "patente") {
-        const resultadoPatente = determinarResultadoPatente(a);
-        const cuotaPatente = calcularCuotaMaximaPatente(a.jugadas || []);
-        const updateData = {};
+    render();
+  } catch (error) {
+    console.error("Error cargando apuestas con cursor:", error);
+    mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
+  } finally {
+    cargandoApuestas = false;
+  }
+}
 
-        if (a.resultado !== resultadoPatente) {
-          a.resultado = resultadoPatente;
-          updateData.resultado = resultadoPatente;
-        }
-
-        if (formatDecimal(a.cuota) !== formatDecimal(cuotaPatente)) {
-          a.cuota = cuotaPatente;
-          updateData.cuota = cuotaPatente;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          updateDoc(doc(db, "apuestas", a.id), updateData)
-            .catch(err => console.error("Error al auto-corregir patente:", err));
-        }
-      } else if (Array.isArray(a.jugadas) && a.jugadas.length > 0) {
-        const resultadoRecalculado = recalcularResultadoApuesta(a);
-        const updateData = {};
-        if (a.resultado !== resultadoRecalculado) {
-          a.resultado = resultadoRecalculado;
-          updateData.resultado = resultadoRecalculado;
-        }
-        if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
-          const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
-          if (cuotaRecalculada > 0 && formatDecimal(a.cuota) !== formatDecimal(cuotaRecalculada)) {
-            a.cuota = cuotaRecalculada;
-            updateData.cuota = cuotaRecalculada;
-          }
-        }
-        if (Object.keys(updateData).length > 0) {
-          updateDoc(doc(db, "apuestas", a.id), updateData)
-            .catch(err => console.error("Error al auto-corregir resultado:", err));
-        }
-      }
-
-      const val = a.importe;
-      if (typeof val === 'number') {
-        const rounded = Math.round(val);
-        const distance = Math.abs(val - rounded);
-        // Si el importe está muy cerca de un entero (ej: 9.98, 2.99, 10.01) lo corregimos en Firestore
-        if (distance > 0 && distance <= 0.035) {
-          updateDoc(doc(db, "apuestas", a.id), { importe: rounded })
-            .catch(err => console.error("Error al auto-corregir importe:", err));
-        }
-      }
-    });
-
-    if (!inicializado) {
-      inicializado = true;
-      // Al cargar por primera vez, ir a la última página (fechas más recientes)
-      const diasUnicos = [...new Set(apuestas.map(a => a.dia))];
-      const totalPags = Math.ceil(diasUnicos.length / porPagina);
-      paginaActual = totalPags || 1;
-
-      // La sincronizacion periodica sigue cada 5 minutos; no se dispara en el primer render.
-    }
-
-    const omitirRenderSnapshot = renderSilenciosoApuestas.size > 0;
-
-    requestAnimationFrame(() => {
-      if (omitirRenderSnapshot) {
-        setTimeout(() => {
-          renderSilenciosoApuestas.clear();
-          ultimoScrollGuardado = 0;
-        }, 0);
-        return;
-      }
-
-      render();
-
-      const isRecentAddNow = (ultimoDiaAgregadoTime && (Date.now() - ultimoDiaAgregadoTime < 2500));
-      if (ultimoScrollGuardado > 0 && !ultimoDiaAgregado && !isRecentAddNow) {
-        window.scrollTo(0, ultimoScrollGuardado);
-      }
-      ultimoScrollGuardado = 0;
-    });
-  }, (error) => {
-    console.error("Error escuchando apuestas en tiempo real:", error);
-    mostrarModalValidacion(["No se pudo sincronizar las apuestas en tiempo real: " + error.message]);
-  });
+function escucharApuestas() {
+  cargarApuestasIniciales();
 }
 
 /* =========================
@@ -2619,7 +2625,7 @@ async function agregarApuesta() {
   const diasUnicosPost = [...new Set([...getApuestasFiltradas().map(a => a.dia), dia])].sort((a, b) => new Date(a) - new Date(b));
   paginaActual = Math.ceil((diasUnicosPost.indexOf(dia) + 1) / porPagina) || 1;
   renderCasasControls();
-  render();
+  await cargarApuestasIniciales();
 
   // ── Reset form ──
   document.getElementById("importe").value = "";
@@ -6309,9 +6315,15 @@ function _render() {
   if (totalPaginas > 1) {
     html += `
       <div class="paginacion">
-        <button onclick="cambiarPagina(-1, false)" ${paginaActual === 1 ? 'disabled' : ''}>⬅</button>
+        <button onclick="cambiarPagina(-1, false)" ${paginaActual === 1 && !hayMasApuestas ? 'disabled' : ''}>⬅</button>
         <span> Página ${paginaActual} / ${totalPaginas} </span>
         <button onclick="cambiarPagina(1, false)" ${paginaActual === totalPaginas ? 'disabled' : ''}>➡</button>
+      </div>
+    `;
+  } else if (hayMasApuestas) {
+    html += `
+      <div class="paginacion">
+        <button onclick="cambiarPagina(-1, false)">Cargar más historial</button>
       </div>
     `;
   }
@@ -6886,9 +6898,15 @@ function _render() {
   if (totalPaginas > 1) {
     html += `
       <div class="paginacion">
-        <button onclick="cambiarPagina(-1, true)" ${paginaActual === 1 ? 'disabled' : ''}>⬅</button>
+        <button onclick="cambiarPagina(-1, true)" ${paginaActual === 1 && !hayMasApuestas ? 'disabled' : ''}>⬅</button>
         <span> Página ${paginaActual} / ${totalPaginas} </span>
         <button onclick="cambiarPagina(1, true)" ${paginaActual === totalPaginas ? 'disabled' : ''}>➡</button>
+      </div>
+    `;
+  } else if (hayMasApuestas) {
+    html += `
+      <div class="paginacion">
+        <button onclick="cambiarPagina(-1, true)">Cargar más historial</button>
       </div>
     `;
   }
@@ -7690,13 +7708,21 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
   }
 };
 
-window.cambiarPagina = function (direccion, scrollAlTop = false) {
+window.cambiarPagina = async function (direccion, scrollAlTop = false) {
   const totalPaginas = Math.ceil(Object.keys(
     getApuestasFiltradas().reduce((acc, a) => {
       acc[a.dia] = true;
       return acc;
     }, {})
   ).length / porPagina);
+
+  if (direccion < 0 && paginaActual <= 1 && hayMasApuestas) {
+    await cargarMasApuestas();
+    if (scrollAlTop) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    return;
+  }
 
   paginaActual += direccion;
 

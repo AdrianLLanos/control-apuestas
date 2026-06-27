@@ -8,7 +8,11 @@ export {
   onSnapshot,
   getDocs,
   getDoc,
+  limit,
+  orderBy,
+  query,
   setDoc,
+  startAfter,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
