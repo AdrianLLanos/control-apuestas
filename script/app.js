@@ -735,6 +735,47 @@ function debeRecalcularCuotaCombinada(tipoApuesta) {
 let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
+const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_SYNC_INICIAL_DELAY_MS = 6000;
+const autoSyncTimers = new Map();
+
+function paginaEstaVisible() {
+  return document.visibilityState !== "hidden";
+}
+
+function ejecutarCuandoEsteLibre(callback, timeout = 8000) {
+  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+    window.requestIdleCallback(callback, { timeout });
+    return;
+  }
+
+  setTimeout(callback, 0);
+}
+
+function programarSyncSilenciosa(deporte, delay = 0, force = false) {
+  if (!paginaEstaVisible()) return;
+  if (autoSyncTimers.has(deporte)) {
+    if (!force) return;
+    clearTimeout(autoSyncTimers.get(deporte));
+    autoSyncTimers.delete(deporte);
+  }
+
+  const timerId = setTimeout(() => {
+    autoSyncTimers.delete(deporte);
+    if (!paginaEstaVisible()) return;
+
+    ejecutarCuandoEsteLibre(() => {
+      if (!paginaEstaVisible()) return;
+      if (deporte === "mlb") {
+        ejecutarAutoSyncMlb(force);
+      } else if (deporte === "futbol") {
+        ejecutarAutoSyncFutbol(force);
+      }
+    });
+  }, delay);
+
+  autoSyncTimers.set(deporte, timerId);
+}
 
 function escucharApuestas() {
   onSnapshot(collection(db, "apuestas"), { includeMetadataChanges: true }, (snapshot) => {
@@ -836,11 +877,9 @@ function escucharApuestas() {
       const totalPags = Math.ceil(diasUnicos.length / porPagina);
       paginaActual = totalPags || 1;
 
-      // Sincronizar inicialmente de forma silenciosa
-      setTimeout(() => {
-        sincronizarResultadosFutbol(true).catch(e => console.warn("Error en sincronización de fútbol inicial:", e));
-        sincronizarResultadosMlb(true).catch(e => console.warn("Error en sincronización MLB inicial:", e));
-      }, 1000);
+      // Sincronizar despues de la primera pintura para no bloquear la carga inicial, sobre todo en celular.
+      programarSyncSilenciosa("futbol", AUTO_SYNC_INICIAL_DELAY_MS);
+      programarSyncSilenciosa("mlb", AUTO_SYNC_INICIAL_DELAY_MS + 3500);
     }
 
     const omitirRenderSnapshot = renderSilenciosoApuestas.size > 0;
@@ -2641,9 +2680,9 @@ async function agregarApuesta() {
   // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
   if (dia === obtenerFechaActualLocal()) {
     if (deporte === "mlb") {
-      sincronizarResultadosMlb(true).catch(e => console.warn("Auto-sync MLB post-agregar:", e.message));
+      programarSyncSilenciosa("mlb", 1200, true);
     } else if (deporte === "futbol") {
-      sincronizarResultadosFutbol(true).catch(e => console.warn("Auto-sync Fútbol post-agregar:", e.message));
+      programarSyncSilenciosa("futbol", 1200, true);
     }
   }
 }
@@ -5454,9 +5493,9 @@ let _autoSyncFutbolEnCurso = false;
 let _ultimoAutoSyncFutbol = 0;
 
 async function ejecutarAutoSyncFutbol(force = false) {
-  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
+  if (!paginaEstaVisible()) return;
   if (_autoSyncFutbolEnCurso) return;
-  if (!force && Date.now() - _ultimoAutoSyncFutbol < INTERVALO_MS) return;
+  if (!force && Date.now() - _ultimoAutoSyncFutbol < AUTO_SYNC_INTERVAL_MS) return;
 
   _autoSyncFutbolEnCurso = true;
   _ultimoAutoSyncFutbol = Date.now();
@@ -5471,29 +5510,42 @@ async function ejecutarAutoSyncFutbol(force = false) {
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
-  _autoSyncFutbolIntervalId = setInterval(() => ejecutarAutoSyncFutbol(true), INTERVALO_MS);
-  setTimeout(() => ejecutarAutoSyncFutbol(false), 1500);
+  _autoSyncFutbolIntervalId = setInterval(() => ejecutarAutoSyncFutbol(false), AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") ejecutarAutoSyncFutbol(false);
+    if (paginaEstaVisible()) programarSyncSilenciosa("futbol", 1000);
   });
-  window.addEventListener("focus", () => ejecutarAutoSyncFutbol(false));
+  window.addEventListener("focus", () => programarSyncSilenciosa("futbol", 1000));
 }
 
 
 
 let _autoSyncMlbIntervalId = null;
+let _autoSyncMlbEnCurso = false;
+let _ultimoAutoSyncMlb = 0;
+
+async function ejecutarAutoSyncMlb(force = false) {
+  if (!paginaEstaVisible()) return;
+  if (_autoSyncMlbEnCurso) return;
+  if (!force && Date.now() - _ultimoAutoSyncMlb < AUTO_SYNC_INTERVAL_MS) return;
+
+  _autoSyncMlbEnCurso = true;
+  _ultimoAutoSyncMlb = Date.now();
+  try {
+    await sincronizarResultadosMlb(true);
+  } catch (e) {
+    console.warn("Auto-sync MLB - error general:", e.message);
+  } finally {
+    _autoSyncMlbEnCurso = false;
+  }
+}
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  const INTERVALO_MS = 5 * 60 * 1000; // 5 minutos
-  _autoSyncMlbIntervalId = setInterval(async () => {
-    try {
-      await sincronizarResultadosMlb(true);
-    } catch (e) {
-      console.warn("Auto-sync MLB - error general:", e.message);
-    }
-  }, INTERVALO_MS);
+  _autoSyncMlbIntervalId = setInterval(() => ejecutarAutoSyncMlb(false), AUTO_SYNC_INTERVAL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (paginaEstaVisible()) programarSyncSilenciosa("mlb", 3000);
+  });
+  window.addEventListener("focus", () => programarSyncSilenciosa("mlb", 3000));
 }
 
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
@@ -5826,9 +5878,9 @@ async function guardarEdicion(id) {
     // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
     if (nuevoFecha === obtenerFechaActualLocal()) {
       if (nuevoDeporte === "mlb") {
-        sincronizarResultadosMlb(true).catch(e => console.warn("Auto-sync MLB post-edición:", e.message));
+        programarSyncSilenciosa("mlb", 1200, true);
       } else if (nuevoDeporte === "futbol") {
-        sincronizarResultadosFutbol(true).catch(e => console.warn("Auto-sync Fútbol post-edición:", e.message));
+        programarSyncSilenciosa("futbol", 1200, true);
       }
     }
 
