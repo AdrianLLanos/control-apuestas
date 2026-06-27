@@ -38,7 +38,7 @@ import {
 } from "./validation-modal.js";
 
 let paginaActual = 1;
-const porPagina = 7;
+const porPagina = 1;
 
 /* =========================
    ESTADO
@@ -4730,6 +4730,53 @@ function getMarcadorFutbol(game) {
   };
 }
 
+function calcularResumenYEstadisticas() {
+  let invertido = 0;
+  let retornado = 0;
+  let pendiente = 0;
+  let ganadas = 0;
+  let perdidas = 0;
+  let nulas = 0;
+  let pendientes = 0;
+
+  getApuestasFiltradas().forEach(a => {
+    if (a.resultado === "pendiente") {
+      pendiente += a.importe || 0;
+      pendientes++;
+    } else {
+      invertido += a.importe || 0;
+      retornado += calcularRetornoApuesta(a);
+      if (a.resultado === "ganada") ganadas++;
+      else if (a.resultado === "perdida") perdidas++;
+      else if (a.resultado === "nula") nulas++;
+    }
+  });
+
+  const casasResumen = getCasasParaResumen();
+  const bankrollInicial = casasResumen.reduce((acc, c) => acc + (parseFloat(c.bankrollInicial) || 0), 0);
+  const bankrollAjuste = casasResumen.reduce((acc, c) => acc + (parseFloat(c.ajuste) || 0), 0);
+  const balance = retornado - invertido;
+  const totalStats = ganadas + perdidas + nulas + pendientes || 1;
+
+  return {
+    resumen: {
+      invertido,
+      retornado,
+      pendiente,
+      balance,
+      bankrollInicial,
+      bankrollAjuste,
+      bankrollFinal: bankrollInicial + balance + bankrollAjuste - pendiente
+    },
+    stats: {
+      pGanadas: (ganadas / totalStats) * 100,
+      pPerdidas: (perdidas / totalStats) * 100,
+      pNulas: (nulas / totalStats) * 100,
+      pPendientes: (pendientes / totalStats) * 100
+    }
+  };
+}
+
 function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null, autoFutbol = null) {
   if (autoFutbol && juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol)) return apiGame;
   if (juegoFutbolTieneResultadoUtil(espnGame)) return espnGame;
@@ -6224,20 +6271,13 @@ function _render() {
   if (!contenido) return;
 
   const apuestasRender = getApuestasFiltradas();
-  const dias = {};
-  apuestasRender.forEach(a => {
-    const diaKey = a.fecha || a.dia || "";
-    if (!dias[diaKey]) dias[diaKey] = [];
-    dias[diaKey].push(a);
-  });
-
-  if (ultimoDiaAgregado && !dias[ultimoDiaAgregado]) {
-    dias[ultimoDiaAgregado] = [];
-  }
-
-  const diasKeys = Object.keys(dias).sort(
+  const diasKeys = [...new Set(apuestasRender.map(a => a.fecha || a.dia || "").filter(Boolean))].sort(
     (a, b) => new Date(a) - new Date(b)
   );
+  if (ultimoDiaAgregado && !diasKeys.includes(ultimoDiaAgregado)) {
+    diasKeys.push(ultimoDiaAgregado);
+    diasKeys.sort((a, b) => new Date(a) - new Date(b));
+  }
 
   const totalPaginas = Math.ceil(diasKeys.length / porPagina);
 
@@ -6252,6 +6292,17 @@ function _render() {
   const fin = inicio + porPagina;
 
   const diasPagina = diasKeys.slice(inicio, fin);
+  const diasPaginaSet = new Set(diasPagina);
+  const dias = {};
+  diasPagina.forEach(dia => {
+    dias[dia] = [];
+  });
+  apuestasRender.forEach(a => {
+    const diaKey = a.fecha || a.dia || "";
+    if (diasPaginaSet.has(diaKey)) {
+      dias[diaKey].push(a);
+    }
+  });
 
   let html = "";
 
@@ -6842,7 +6893,8 @@ function _render() {
     `;
   }
 
-  const total = calcularResumenGeneral();
+  const resumenYStats = calcularResumenYEstadisticas();
+  const total = resumenYStats.resumen;
   const roi = total.invertido ? (total.balance / total.invertido) * 100 : 0;
   const resumenCasaTitulo = filtroCasaId === CASA_TODAS_ID ? "Todas las casas" : getCasaNombre(filtroCasaId);
   const puedeEditarFinal = filtroCasaId !== CASA_TODAS_ID;
@@ -6910,7 +6962,7 @@ function _render() {
     </div>
   `;
 
-  const stats = calcularEstadisticas();
+  const stats = resumenYStats.stats;
 
   html += `
     <div class="page stats-box">
@@ -6959,7 +7011,10 @@ function _render() {
   `;
 
   contenido.innerHTML = html;
-  habilitarAutocompleteMlb(contenido);
+  if (editandoId) {
+    const editCard = document.getElementById(`edit-tarjeta-${editandoId}`);
+    if (editCard) habilitarAutocompleteMlb(editCard);
+  }
 
   let old = document.getElementById("btnNuevaApuestaBottom");
   if (old) old.remove();
