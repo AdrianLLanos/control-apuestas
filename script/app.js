@@ -44,6 +44,7 @@ import {
 let paginaActual = 1;
 const porPagina = 1;
 const APUESTAS_PAGE_LIMIT = 80;
+const APUESTAS_VISIBLES_POR_DIA = 10;
 
 /* =========================
    ESTADO
@@ -54,6 +55,7 @@ let ultimoDiaAgregadoTime = 0;
 let ultimoDiaAgregadoIntentos = 0;
 let editandoId = null;
 let isEditingFinal = false;
+const apuestasVisiblesPorDia = {};
 /* =========================
    CASAS / BANKROLL
  ========================= */
@@ -496,6 +498,7 @@ window.cambiarFiltroCasa = function (id) {
   if (filtroCasaId !== CASA_TODAS_ID) casaFormularioId = filtroCasaId;
   paginaActual = 1;
   isEditingFinal = false;
+  Object.keys(apuestasVisiblesPorDia).forEach(dia => delete apuestasVisiblesPorDia[dia]);
   renderCasasControls();
   cargarApuestasIniciales();
 };
@@ -6332,14 +6335,22 @@ function _render() {
     let inv = 0;
     let ret = 0;
     let filas = "";
+    const apuestasDia = dias[dia] || [];
+    const editIndex = editandoId ? apuestasDia.findIndex(apuesta => apuesta.id === editandoId) : -1;
+    const limiteVisible = Math.max(
+      apuestasVisiblesPorDia[dia] || APUESTAS_VISIBLES_POR_DIA,
+      editIndex >= 0 ? editIndex + 1 : 0
+    );
 
-    dias[dia].forEach(a => {
+    apuestasDia.forEach((a, index) => {
       const r = calcularRetornoApuesta(a);
 
       if (a.resultado !== "pendiente") {
         inv += a.importe;
         ret += r;
       }
+
+      if (index >= limiteVisible) return;
 
       const fechaBase = a.fecha || a.dia || "";
       const [year, month, day] = fechaBase ? fechaBase.split("-") : ["", "", ""];
@@ -6867,6 +6878,10 @@ function _render() {
     });
 
     const balance = ret - inv;
+    const hayMasEnDia = apuestasDia.length > limiteVisible;
+    const verMasDiaHtml = hayMasEnDia
+      ? `<button class="btn" type="button" onclick="window.mostrarMasDia('${dia}')" style="margin-top:10px;">Ver más apuestas del día (${apuestasDia.length - limiteVisible})</button>`
+      : "";
 
     html += `
       <div class="page" data-dia="${dia}">
@@ -6887,6 +6902,7 @@ function _render() {
             <tbody>${filas}</tbody>
           </table>
         </div>
+        ${verMasDiaHtml}
 
         <button class="btn btn-danger btn-eliminar-dia" onclick="window.eliminarDia('${dia}')">
           🗑 Eliminar día
@@ -7733,6 +7749,11 @@ window.cambiarPagina = async function (direccion, scrollAlTop = false) {
   if (scrollAlTop) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+};
+
+window.mostrarMasDia = function (dia) {
+  apuestasVisiblesPorDia[dia] = (apuestasVisiblesPorDia[dia] || APUESTAS_VISIBLES_POR_DIA) + APUESTAS_VISIBLES_POR_DIA;
+  render();
 };
 
 window.habilitarEdicion = habilitarEdicion;
