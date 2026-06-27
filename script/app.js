@@ -6127,6 +6127,19 @@ function getAutoMetaKey(selection = {}, jugada = {}, fallbackFechaJuego = "") {
   return `${fechaJuego}|${equipos}|${id}`;
 }
 
+function prepararSeleccionAutoFutbolRender(selection = {}, jugada = {}, evento = "") {
+  if (selection?.autoFutbol || selection?.autoMlb || jugada?.autoFutbol || jugada?.autoMlb) {
+    return selection;
+  }
+
+  const autoFutbol = crearAutoFutbolSeleccion({
+    evento,
+    titulo: selection.titulo || "",
+    jugada: selection.jugada || selection.jug || ""
+  });
+  return autoFutbol ? { ...selection, autoFutbol } : selection;
+}
+
 function debeMostrarAutoMeta(mostrados, selection = {}, jugada = {}, fallbackFechaJuego = "") {
   const key = getAutoMetaKey(selection, jugada, fallbackFechaJuego);
   if (!key) return true;
@@ -6138,8 +6151,10 @@ function debeMostrarAutoMeta(mostrados, selection = {}, jugada = {}, fallbackFec
 function contarAutoMetaPorPartido(apuesta = {}, fallbackFechaJuego = "") {
   const conteos = new Map();
   (apuesta.jugadas || []).forEach(jugada => {
+    const evento = getJugadaEvento(apuesta, jugada);
     getSelectionsFromJugada(jugada).forEach(selection => {
-      const key = getAutoMetaKey(selection, jugada, fallbackFechaJuego);
+      const selectionRender = prepararSeleccionAutoFutbolRender(selection, jugada, evento);
+      const key = getAutoMetaKey(selectionRender, jugada, fallbackFechaJuego);
       if (!key) return;
       conteos.set(key, (conteos.get(key) || 0) + 1);
     });
@@ -6561,8 +6576,9 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
-              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, sel, j, fallbackFechaJuegoApuesta);
-              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
+              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, selAutoRender, j, fallbackFechaJuegoApuesta);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: mostrarAutoMeta,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -6651,8 +6667,9 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
-              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, sel, j, fallbackFechaJuegoApuesta);
-              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
+              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, selAutoRender, j, fallbackFechaJuegoApuesta);
+              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: mostrarAutoMeta,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
