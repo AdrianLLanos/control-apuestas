@@ -764,6 +764,23 @@ function ejecutarCuandoEsteLibre(callback, timeout = 8000) {
   setTimeout(callback, 0);
 }
 
+function cederControlNavegador() {
+  return new Promise(resolve => {
+    if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+      window.requestAnimationFrame(() => setTimeout(resolve, 0));
+      return;
+    }
+
+    setTimeout(resolve, 0);
+  });
+}
+
+function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
+  if (!id) return;
+  renderSilenciosoApuestas.add(id);
+  setTimeout(() => renderSilenciosoApuestas.delete(id), ttl);
+}
+
 function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   if (!paginaEstaVisible()) return;
   if (autoSyncTimers.has(deporte)) {
@@ -899,6 +916,9 @@ function cargarApuestasIniciales() {
   paginaActual = 1;
 
   unsubscribeApuestas = onSnapshot(getConsultaApuestasPaginada(), (snapshot) => {
+    const cambios = apuestasSnapshotRecibido ? snapshot.docChanges() : [];
+    const soloCambiosSilenciosos = cambios.length > 0 &&
+      cambios.every(change => change.type !== "removed" && renderSilenciosoApuestas.has(change.doc.id));
     const iniciales = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
     const idsIniciales = new Set(iniciales.map(a => a.id));
     apuestasExtraPaginadas = apuestasExtraPaginadas.filter(a => !idsIniciales.has(a.id));
@@ -914,6 +934,7 @@ function cargarApuestasIniciales() {
     apuestasSnapshotRecibido = true;
     inicializado = true;
     autocorregirApuestasCargadas(iniciales);
+    if (soloCambiosSilenciosos) return;
     renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
   }, (error) => {
     console.error("Error escuchando primera tanda de apuestas:", error);
@@ -3816,6 +3837,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
   const btn = document.getElementById("btnSincronizarMlb");
   if (!silencioso) {
     if (btn) btn.disabled = true;
+    await cederControlNavegador();
     setMlbSyncStatus("Sincronizando resultados MLB...", "");
   }
 
@@ -4435,22 +4457,28 @@ async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
   }
 
   const date = String(fecha).replace(/-/g, "");
-  const results = await Promise.allSettled(FOOTBALL_LEAGUES.map(async league => {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx&tz=${encodeURIComponent(timezone)}`;
-    const response = await fetch(url);
-    if (!response.ok) return [];
+  const events = [];
+  const batchSize = 5;
+  for (let i = 0; i < FOOTBALL_LEAGUES.length; i += batchSize) {
+    await cederControlNavegador();
+    const batch = FOOTBALL_LEAGUES.slice(i, i + batchSize);
+    const results = await Promise.allSettled(batch.map(async league => {
+      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx&tz=${encodeURIComponent(timezone)}`;
+      const response = await fetch(url);
+      if (!response.ok) return [];
 
-    const data = await response.json();
-    return (data.events || []).map(event => ({
-      ...event,
-      leagueLabel: event.leagueLabel || data?.leagues?.[0]?.name || league.label,
-      leagueSlug: league.slug
+      const data = await response.json();
+      return (data.events || []).map(event => ({
+        ...event,
+        leagueLabel: event.leagueLabel || data?.leagues?.[0]?.name || league.label,
+        leagueSlug: league.slug
+      }));
     }));
-  }));
 
-  const events = results
-    .flatMap(result => result.status === "fulfilled" ? result.value : [])
-    .filter(Boolean);
+    events.push(...results
+      .flatMap(result => result.status === "fulfilled" ? result.value : [])
+      .filter(Boolean));
+  }
   apiSportsFootballCache.set(cacheKey, {
     createdAt: Date.now(),
     events
@@ -5144,6 +5172,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
   const nuevasJugadas = [];
 
   for (const jugada of jugadas) {
+    await cederControlNavegador();
     if (typeof jugada !== "object" || !jugada) {
       nuevasJugadas.push(jugada);
       continue;
@@ -5153,6 +5182,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     const selections = [];
 
     for (const sel of getSelectionsFromJugada(jugada)) {
+      await cederControlNavegador();
       const autoOriginal = sel.autoFutbol || null;
       let autoFutbol = autoOriginal || crearAutoFutbolSeleccion({
         evento: ev,
@@ -5478,6 +5508,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const btn = document.getElementById("btnSincronizarFutbol");
   if (!silencioso) {
     if (btn) btn.disabled = true;
+    await cederControlNavegador();
     setFootballSyncStatus("Sincronizando resultados de fútbol...", "");
   }
 
@@ -5501,7 +5532,13 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
     let juegosApiSportsCargados = 0;
     let erroresApiSports = 0;
+    let fechasApiProcesadas = 0;
     for (const fecha of fechas) {
+      fechasApiProcesadas++;
+      if (!silencioso) {
+        setFootballSyncStatus(`Sincronizando futbol... API-Football ${fechasApiProcesadas}/${fechas.size}`, "");
+      }
+      await cederControlNavegador();
       try {
         const juegos = await cargarJuegosFutbolPorFecha(fecha, {
           cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
@@ -5534,7 +5571,13 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       juegosEspnPorFecha.set(fecha, []);
     }
     let juegosEspnCargados = 0;
+    let fechasEspnProcesadas = 0;
     for (const fecha of fechasEspn) {
+      fechasEspnProcesadas++;
+      if (!silencioso) {
+        setFootballSyncStatus(`Sincronizando futbol... ESPN ${fechasEspnProcesadas}/${fechasEspn.size}`, "");
+      }
+      await cederControlNavegador();
       try {
         const juegosEspn = await cargarJuegosEspnFutbolPorFecha(fecha, {
           cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
@@ -5553,6 +5596,10 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 
     for (const apuesta of candidatas) {
       revisadas++;
+      if (!silencioso) {
+        setFootballSyncStatus(`Sincronizando futbol... apuestas ${revisadas}/${candidatas.length}`, "");
+      }
+      await cederControlNavegador();
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
@@ -5560,9 +5607,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
       if (!updateData) continue;
 
+      marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
       actualizadas++;
       if (idsHorario.has(apuesta.id)) horariosActualizados++;
     }
@@ -6077,6 +6124,32 @@ function debeMostrarAutoMeta(mostrados, selection = {}, jugada = {}, fallbackFec
   return true;
 }
 
+function contarAutoMetaPorPartido(apuesta = {}, fallbackFechaJuego = "") {
+  const conteos = new Map();
+  (apuesta.jugadas || []).forEach(jugada => {
+    getSelectionsFromJugada(jugada).forEach(selection => {
+      const key = getAutoMetaKey(selection, jugada, fallbackFechaJuego);
+      if (!key) return;
+      conteos.set(key, (conteos.get(key) || 0) + 1);
+    });
+  });
+  return conteos;
+}
+
+function debeMostrarAutoMetaAlFinal(conteos, selection = {}, jugada = {}, fallbackFechaJuego = "") {
+  const key = getAutoMetaKey(selection, jugada, fallbackFechaJuego);
+  if (!key) return true;
+
+  const restantes = conteos.get(key) || 0;
+  if (restantes <= 1) {
+    conteos.delete(key);
+    return true;
+  }
+
+  conteos.set(key, restantes - 1);
+  return false;
+}
+
 function getSimpleOptionDetalle(apuesta) {
   const jugada = apuesta?.jugadas?.[0] || {};
   return {
@@ -6427,8 +6500,8 @@ function _render() {
 
       let celdaEvento = "";
       if (a.jugadas && a.jugadas.length > 0) {
-        const autoMetaMostrados = new Set();
         const fallbackFechaJuegoApuesta = getFechaJuegoFallbackApuesta(a);
+        const autoMetaConteos = contarAutoMetaPorPartido(a, fallbackFechaJuegoApuesta);
 
         if (a.tipoApuesta === "crear_apuesta" || a.tipoApuesta === "crear_apuesta_simple") {
           // ── CREAR APUESTA: título sin punto, cada selección con su propio punto ──
@@ -6477,7 +6550,7 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
-              const mostrarAutoMeta = debeMostrarAutoMeta(autoMetaMostrados, sel, j, fallbackFechaJuegoApuesta);
+              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, sel, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
                 showAutoMeta: mostrarAutoMeta,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
@@ -6567,7 +6640,7 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
-              const mostrarAutoMeta = debeMostrarAutoMeta(autoMetaMostrados, sel, j, fallbackFechaJuegoApuesta);
+              const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, sel, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
                 showAutoMeta: mostrarAutoMeta,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
