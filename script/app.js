@@ -748,6 +748,8 @@ const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
 let cargandoApuestas = false;
+let unsubscribeApuestas = null;
+let apuestasExtraPaginadas = [];
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
@@ -866,30 +868,72 @@ function autocorregirApuestasCargadas(lista = []) {
   });
 }
 
-async function cargarApuestasIniciales() {
+function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
+  apuestas.sort((a, b) => (a.creadoEn || 0) - (b.creadoEn || 0));
+
+  const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
+  const totalPags = Math.ceil(diasUnicos.length / porPagina);
+  if (pagina !== null) {
+    paginaActual = pagina;
+  } else if (!mantenerPagina) {
+    paginaActual = totalPags || 1;
+  } else if (paginaActual > totalPags) {
+    paginaActual = totalPags || 1;
+  }
+
+  render();
+  programarSyncInicialVisible();
+}
+
+function cargarApuestasIniciales() {
+  if (unsubscribeApuestas) {
+    unsubscribeApuestas();
+    unsubscribeApuestas = null;
+  }
+
   apuestas = [];
+  apuestasExtraPaginadas = [];
   ultimoDocApuestas = null;
   hayMasApuestas = true;
   apuestasSnapshotRecibido = false;
   paginaActual = 1;
-  await cargarMasApuestas({ reset: true });
+
+  unsubscribeApuestas = onSnapshot(getConsultaApuestasPaginada(), (snapshot) => {
+    const iniciales = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
+    const idsIniciales = new Set(iniciales.map(a => a.id));
+    apuestasExtraPaginadas = apuestasExtraPaginadas.filter(a => !idsIniciales.has(a.id));
+    apuestas = [...iniciales, ...apuestasExtraPaginadas];
+
+    if (snapshot.docs.length > 0 && apuestasExtraPaginadas.length === 0) {
+      ultimoDocApuestas = snapshot.docs[snapshot.docs.length - 1];
+    }
+
+    if (apuestasExtraPaginadas.length === 0) {
+      hayMasApuestas = snapshot.docs.length === APUESTAS_PAGE_LIMIT;
+    }
+    apuestasSnapshotRecibido = true;
+    inicializado = true;
+    autocorregirApuestasCargadas(iniciales);
+    renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
+  }, (error) => {
+    console.error("Error escuchando primera tanda de apuestas:", error);
+    mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
+  });
 }
 
-async function cargarMasApuestas({ reset = false } = {}) {
+async function cargarMasApuestas() {
   if (cargandoApuestas) return;
-  if (!reset && !hayMasApuestas) return;
+  if (!hayMasApuestas) return;
 
   cargandoApuestas = true;
   try {
-    const snapshot = await getDocs(getConsultaApuestasPaginada(reset ? null : ultimoDocApuestas));
+    const snapshot = await getDocs(getConsultaApuestasPaginada(ultimoDocApuestas));
     const nuevas = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
 
-    if (reset) {
-      apuestas = nuevas;
-    } else {
-      const existentes = new Set(apuestas.map(a => a.id));
-      apuestas = [...apuestas, ...nuevas.filter(a => !existentes.has(a.id))];
-    }
+    const existentes = new Set(apuestas.map(a => a.id));
+    const nuevasUnicas = nuevas.filter(a => !existentes.has(a.id));
+    apuestasExtraPaginadas = [...apuestasExtraPaginadas, ...nuevasUnicas];
+    apuestas = [...apuestas, ...nuevasUnicas];
 
     if (snapshot.docs.length > 0) {
       ultimoDocApuestas = snapshot.docs[snapshot.docs.length - 1];
@@ -898,15 +942,8 @@ async function cargarMasApuestas({ reset = false } = {}) {
     apuestasSnapshotRecibido = true;
     inicializado = true;
 
-    apuestas.sort((a, b) => (a.creadoEn || 0) - (b.creadoEn || 0));
     autocorregirApuestasCargadas(nuevas);
-
-    const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
-    const totalPags = Math.ceil(diasUnicos.length / porPagina);
-    paginaActual = reset ? (totalPags || 1) : 1;
-
-    render();
-    programarSyncInicialVisible();
+    renderApuestasCargadas({ pagina: 1 });
   } catch (error) {
     console.error("Error cargando apuestas con cursor:", error);
     mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
@@ -6022,6 +6059,24 @@ function formatTextWithCorners(texto, forceGoalIcon = false, forceCornerIcon = f
   return formattedText;
 }
 
+function getAutoMetaKey(selection = {}, jugada = {}, fallbackFechaJuego = "") {
+  const auto = selection.autoFutbol || selection.autoMlb || jugada.autoFutbol || jugada.autoMlb || {};
+  const fechaJuego = auto.fechaJuego || fallbackFechaJuego;
+  if (!fechaJuego) return "";
+
+  const equipos = Array.isArray(auto.equipos) ? auto.equipos.join("|") : "";
+  const id = auto.id || auto.espnId || auto.gamePk || "";
+  return `${fechaJuego}|${equipos}|${id}`;
+}
+
+function debeMostrarAutoMeta(mostrados, selection = {}, jugada = {}, fallbackFechaJuego = "") {
+  const key = getAutoMetaKey(selection, jugada, fallbackFechaJuego);
+  if (!key) return true;
+  if (mostrados.has(key)) return false;
+  mostrados.add(key);
+  return true;
+}
+
 function getSimpleOptionDetalle(apuesta) {
   const jugada = apuesta?.jugadas?.[0] || {};
   return {
@@ -6372,6 +6427,8 @@ function _render() {
 
       let celdaEvento = "";
       if (a.jugadas && a.jugadas.length > 0) {
+        const autoMetaMostrados = new Set();
+        const fallbackFechaJuegoApuesta = getFechaJuegoFallbackApuesta(a);
 
         if (a.tipoApuesta === "crear_apuesta" || a.tipoApuesta === "crear_apuesta_simple") {
           // ── CREAR APUESTA: título sin punto, cada selección con su propio punto ──
@@ -6420,9 +6477,10 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
+              const mostrarAutoMeta = debeMostrarAutoMeta(autoMetaMostrados, sel, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: isCrearSimple || selIndex === selections.length - 1,
-                fallbackFechaJuego: getFechaJuegoFallbackApuesta(a)
+                showAutoMeta: mostrarAutoMeta,
+                fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
               allTimelineItems.push({
                 html: `
@@ -6509,9 +6567,10 @@ function _render() {
               const formattedJugada = formatTextWithCorners(sel.jugada, isSimpleOptionBet);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
+              const mostrarAutoMeta = debeMostrarAutoMeta(autoMetaMostrados, sel, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: selIndex === selections.length - 1,
-                fallbackFechaJuego: getFechaJuegoFallbackApuesta(a)
+                showAutoMeta: mostrarAutoMeta,
+                fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
