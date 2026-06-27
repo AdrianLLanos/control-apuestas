@@ -3820,7 +3820,8 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   if (selection?.autoFutbol && !selection.autoFutbol.fechaJuego) {
     const fechaJuego = jugada?.autoFutbol?.fechaJuego ||
-      (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego;
+      (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
+      options.fallbackFechaJuego;
     if (fechaJuego) {
       return getAutoFutbolMarcadorHtml({
         autoFutbol: {
@@ -3831,7 +3832,15 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
       }, options);
     }
   }
-  if (jugada?.autoFutbol) return getAutoFutbolMarcadorHtml({ autoFutbol: jugada.autoFutbol }, options);
+  if (jugada?.autoFutbol) {
+    const fechaJuego = jugada.autoFutbol.fechaJuego || options.fallbackFechaJuego;
+    return getAutoFutbolMarcadorHtml({
+      autoFutbol: {
+        ...jugada.autoFutbol,
+        ...(fechaJuego ? { fechaJuego, estadoJuego: jugada.autoFutbol.estadoJuego || "Programado" } : {})
+      }
+    }, options);
+  }
   return "";
 }
 
@@ -4062,6 +4071,20 @@ function formatFechaLocal(date) {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatFechaHoraLocalIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${formatFechaLocal(date)}T${hh}:${min}:00`;
+}
+
+function getFechaJuegoFallbackApuesta(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia || "";
+  const hora = apuesta.hora || "";
+  const date = parseFechaHoraLocal(fecha, hora);
+  return date ? formatFechaHoraLocalIso(date) : "";
 }
 
 function getAutoFutbolFechasJuego(apuesta = {}) {
@@ -6256,7 +6279,8 @@ function _render() {
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: isCrearSimple || selIndex === selections.length - 1
+                showAutoMeta: isCrearSimple || selIndex === selections.length - 1,
+                fallbackFechaJuego: getFechaJuegoFallbackApuesta(a)
               });
               allTimelineItems.push({
                 html: `
@@ -6344,7 +6368,8 @@ function _render() {
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(sel, j, {
-                showAutoMeta: selIndex === selections.length - 1
+                showAutoMeta: selIndex === selections.length - 1,
+                fallbackFechaJuego: getFechaJuegoFallbackApuesta(a)
               });
               return `
                 <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
