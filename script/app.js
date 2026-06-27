@@ -5194,7 +5194,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
-    if (!apuestaFutbolYaDebeSincronizar(a)) return false;
+    const fechaApuesta = a.fecha || a.dia;
+    const forzarRevisionManualHoy = !silencioso && fechaApuesta === hoy;
+    if (!apuestaFutbolYaDebeSincronizar(a) && !forzarRevisionManualHoy) return false;
     // En modo automatico/silencioso, revisar tambien pendientes recientes para cerrar partidos que terminaron tarde.
     if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
     return true;
@@ -5239,11 +5241,13 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       fechasBusqueda.forEach(fechaBusqueda => fechas.add(fechaBusqueda));
     });
     const juegosEspnPorFecha = new Map();
+    let juegosEspnCargados = 0;
     for (const fecha of fechas) {
       try {
         const juegosEspn = await cargarJuegosEspnFutbolPorFecha(fecha, {
           cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
         });
+        juegosEspnCargados += juegosEspn.length;
         juegosEspnPorFecha.set(fecha, juegosEspn);
       } catch (e) {
         console.warn("No se pudo cargar ESPN futbol:", fecha, e);
@@ -5265,11 +5269,13 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     for (const fecha of fechas) {
       juegosPorFecha.set(fecha, []);
     }
+    let juegosApiSportsCargados = 0;
     for (const fecha of fechasApiSports) {
       try {
         const juegos = await cargarJuegosFutbolPorFecha(fecha, {
           cacheMs: API_SPORTS_FOOTBALL_LIVE_CACHE_MS
         });
+        juegosApiSportsCargados += juegos.length;
         juegosPorFecha.set(fecha, juegos);
       } catch (e) {
         if (esErrorRangoApiSportsFreePlan(e)) {
@@ -5309,8 +5315,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       const detalleOmitidas = fechasOmitidasPorPlan > 0
         ? ` ${fechasOmitidasPorPlan} fecha(s) fuera del plan free fueron omitidas.`
         : "";
+      const detalleFuentes = ` ESPN: ${fechas.size} fecha(s), ${juegosEspnCargados} juego(s). API-Football: ${fechasApiSports.size} fecha(s), ${juegosApiSportsCargados} juego(s).`;
       setFootballSyncStatus(
-        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${horariosActualizados ? ` Horarios: ${horariosActualizados}.` : ""}${detalleOmitidas}`,
+        `Fútbol sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas.${horariosActualizados ? ` Horarios: ${horariosActualizados}.` : ""}${detalleFuentes}${detalleOmitidas}`,
         actualizadas > 0 ? "success" : ""
       );
     }
