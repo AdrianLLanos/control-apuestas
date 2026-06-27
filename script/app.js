@@ -3938,23 +3938,23 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
 }
 
 function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {}) {
-  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selection, options);
+  const fechaJuegoFutbol = selection?.autoFutbol?.fechaJuego ||
+    jugada?.autoFutbol?.fechaJuego ||
+    (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
+    options.fallbackFechaJuego;
+  const selectionConFallbackFutbol = selection?.autoFutbol && fechaJuegoFutbol
+    ? {
+      ...selection,
+      autoFutbol: {
+        ...selection.autoFutbol,
+        fechaJuego: fechaJuegoFutbol,
+        estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
+      }
+    }
+    : selection;
+  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
   if (marcadorSeleccion) return marcadorSeleccion;
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
-  if (selection?.autoFutbol && !selection.autoFutbol.fechaJuego) {
-    const fechaJuego = jugada?.autoFutbol?.fechaJuego ||
-      (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
-      options.fallbackFechaJuego;
-    if (fechaJuego) {
-      return getAutoFutbolMarcadorHtml({
-        autoFutbol: {
-          ...selection.autoFutbol,
-          fechaJuego,
-          estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
-        }
-      }, options);
-    }
-  }
   if (jugada?.autoFutbol) {
     const fechaJuego = jugada.autoFutbol.fechaJuego || options.fallbackFechaJuego;
     return getAutoFutbolMarcadorHtml({
@@ -4030,6 +4030,17 @@ const FOOTBALL_TEAM_ALIASES_BASE = [
   ["corea del sur", "south korea"],
   ["sudafrica", "south africa"],
   ["costa de marfil", "ivory coast"],
+  ["congo rep dem", "congo dr"],
+  ["congo republica democratica", "congo dr"],
+  ["republica democratica del congo", "congo dr"],
+  ["democratic republic of congo", "congo dr"],
+  ["dr congo", "congo dr"],
+  ["d r congo", "congo dr"],
+  ["rd congo", "congo dr"],
+  ["congo democratic republic", "congo dr"],
+  ["urbezkistan", "uzbekistan"],
+  ["uzbezkistan", "uzbekistan"],
+  ["uzbekistan", "uzbekistan"],
   ["curazao", "curacao"],
   ["cape verde islands", "cabo verde"],
   ["cav", "cabo verde"],
