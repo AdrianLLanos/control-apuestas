@@ -222,7 +222,7 @@ function renderCasasControls() {
 
 function escucharCasas() {
   asegurarCasaPrincipal().catch(e => console.error("Error creando casa principal:", e));
-  onSnapshot(collection(db, "casas"), { includeMetadataChanges: true }, (snapshot) => {
+  onSnapshot(collection(db, "casas"), (snapshot) => {
     if (!casasSnapshotRecibido) {
       casas = snapshot.docs.map(d => normalizarCasa({ ...d.data(), id: d.id }));
       casasSnapshotRecibido = true;
@@ -736,7 +736,6 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-const AUTO_SYNC_INICIAL_DELAY_MS = 6000;
 const autoSyncTimers = new Map();
 
 function paginaEstaVisible() {
@@ -778,7 +777,11 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
 }
 
 function escucharApuestas() {
-  onSnapshot(collection(db, "apuestas"), { includeMetadataChanges: true }, (snapshot) => {
+  onSnapshot(collection(db, "apuestas"), (snapshot) => {
+    const cambiosSnapshot = snapshot.docChanges();
+    if (apuestasSnapshotRecibido && cambiosSnapshot.length === 0) return;
+
+    const apuestasParaAutocorregir = [];
     const isRecentAdd = (ultimoDiaAgregadoTime && (Date.now() - ultimoDiaAgregadoTime < 2500));
     if (inicializado && !isRecentAdd) {
       ultimoScrollGuardado = window.scrollY;
@@ -788,7 +791,7 @@ function escucharApuestas() {
       apuestas = snapshot.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
       apuestasSnapshotRecibido = true;
     } else {
-      snapshot.docChanges().forEach(change => {
+      cambiosSnapshot.forEach(change => {
         const id = change.doc.id;
         if (change.type === "removed") {
           apuestas = apuestas.filter(apuesta => apuesta.id !== id);
@@ -799,6 +802,7 @@ function escucharApuestas() {
         const index = apuestas.findIndex(item => item.id === id);
         if (index >= 0) apuestas[index] = apuesta;
         else apuestas.push(apuesta);
+        apuestasParaAutocorregir.push(apuesta);
 
         if (apuesta.fecha && apuesta.dia && apuesta.fecha !== apuesta.dia) {
           const fechaNormalizada = apuesta.fecha;
@@ -810,8 +814,8 @@ function escucharApuestas() {
 
     apuestas.sort((a, b) => (a.creadoEn || 0) - (b.creadoEn || 0));
 
-    // Auto-corrección de importes con errores de precisión o autocompletado en la base de datos existente
-    apuestas.forEach(a => {
+    // Evita recorrer todo el historial al cargar: en móvil ese barrido puede congelar la pestaña.
+    apuestasParaAutocorregir.forEach(a => {
       if (!a.casaId) {
         updateDoc(doc(db, "apuestas", a.id), {
           casaId: CASA_DEFAULT_ID,
@@ -877,9 +881,7 @@ function escucharApuestas() {
       const totalPags = Math.ceil(diasUnicos.length / porPagina);
       paginaActual = totalPags || 1;
 
-      // Sincronizar despues de la primera pintura para no bloquear la carga inicial, sobre todo en celular.
-      programarSyncSilenciosa("futbol", AUTO_SYNC_INICIAL_DELAY_MS);
-      programarSyncSilenciosa("mlb", AUTO_SYNC_INICIAL_DELAY_MS + 3500);
+      // La sincronizacion periodica sigue cada 5 minutos; no se dispara en el primer render.
     }
 
     const omitirRenderSnapshot = renderSilenciosoApuestas.size > 0;
