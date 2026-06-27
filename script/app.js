@@ -3818,6 +3818,19 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
   const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selection, options);
   if (marcadorSeleccion) return marcadorSeleccion;
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
+  if (selection?.autoFutbol && !selection.autoFutbol.fechaJuego) {
+    const fechaJuego = jugada?.autoFutbol?.fechaJuego ||
+      (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego;
+    if (fechaJuego) {
+      return getAutoFutbolMarcadorHtml({
+        autoFutbol: {
+          ...selection.autoFutbol,
+          fechaJuego,
+          estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
+        }
+      }, options);
+    }
+  }
   if (jugada?.autoFutbol) return getAutoFutbolMarcadorHtml({ autoFutbol: jugada.autoFutbol }, options);
   return "";
 }
@@ -5155,9 +5168,19 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     };
 
     if (jugada.autoFutbol) {
-      jugadaActualizada.autoFutbol = jugada.autoFutbol;
+      const autoConFecha = selections.find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol;
+      jugadaActualizada.autoFutbol = autoConFecha
+        ? {
+          ...jugada.autoFutbol,
+          fechaJuego: autoConFecha.fechaJuego,
+          estadoJuego: autoConFecha.estadoJuego || jugada.autoFutbol.estadoJuego
+        }
+        : jugada.autoFutbol;
     } else if (equipos.length >= 2) {
-      jugadaActualizada.autoFutbol = { deporte: "futbol", equipos };
+      const autoConFecha = selections.find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol;
+      jugadaActualizada.autoFutbol = autoConFecha
+        ? { deporte: "futbol", equipos, fechaJuego: autoConFecha.fechaJuego, estadoJuego: autoConFecha.estadoJuego || "" }
+        : { deporte: "futbol", equipos };
     }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
