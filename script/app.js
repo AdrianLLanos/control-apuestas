@@ -906,6 +906,7 @@ async function cargarMasApuestas({ reset = false } = {}) {
     paginaActual = reset ? (totalPags || 1) : 1;
 
     render();
+    programarSyncInicialVisible();
   } catch (error) {
     console.error("Error cargando apuestas con cursor:", error);
     mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
@@ -916,6 +917,19 @@ async function cargarMasApuestas({ reset = false } = {}) {
 
 function escucharApuestas() {
   cargarApuestasIniciales();
+}
+
+function programarSyncInicialVisible() {
+  const hayFutbol = apuestas.some(apuesta => apuestaPareceFutbol(apuesta));
+  const hayMlb = apuestas.some(apuesta => apuestaPareceMlb(apuesta));
+
+  if (hayFutbol) {
+    programarSyncSilenciosa("futbol", 2500);
+  }
+
+  if (hayMlb) {
+    programarSyncSilenciosa("mlb", 4000);
+  }
 }
 
 /* =========================
