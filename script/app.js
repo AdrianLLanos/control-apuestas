@@ -4574,9 +4574,6 @@ function juegoFutbolTieneResultadoActualizado(game, autoFutbol = {}) {
 
   if (marcadorNuevo && marcadorNuevo !== marcadorActual) return true;
 
-  const estadoNuevo = getEstadoJuegoFutbol(game);
-  if (estadoNuevo && estadoNuevo !== autoFutbol.estadoJuego) return true;
-
   return false;
 }
 
