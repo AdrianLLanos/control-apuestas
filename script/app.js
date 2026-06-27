@@ -3783,7 +3783,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
   const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego);
-  const estadoPrevio = esEstadoJuegoPrevio(autoMlb.estadoJuego) || juegoPendientePorFecha;
+  const estadoPrevio = (esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego)) || juegoPendientePorFecha;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
@@ -4152,13 +4152,12 @@ function apuestaNecesitaApiSportsFutbol(apuesta = {}, juegosEspn = [], fechaBet 
       if (autoFutbol) {
         const espnGame = buscarJuegoEspnFutbol(juegosEspn, autoFutbol.equipos, fechaBet);
         if (!espnGame) return true;
-        if (!getMarcadorFutbol(espnGame) && !juegoFutbolNoIniciado(espnGame)) return true;
-        return false;
+        return !juegoFutbolTieneResultadoActualizado(espnGame, autoFutbol);
       }
 
       const textoFallback = sel.jugada || sel.titulo || ev;
       const espnFallback = buscarJuegoFutbolFallback(juegosEspn, textoFallback, fechaBet);
-      return !espnFallback || (!getMarcadorFutbol(espnFallback) && !juegoFutbolNoIniciado(espnFallback));
+      return !espnFallback || !juegoFutbolTieneResultadoUtil(espnFallback);
     });
   });
 }
@@ -4520,11 +4519,65 @@ function juegoFutbolFinalizado(game) {
 }
 
 function juegoFutbolNoIniciado(game) {
+  const fechaJuego = getFechaJuegoFutbol(game);
+  const horaProgramadaPaso = fechaJuego ? fechaJuegoYaPaso(fechaJuego) : false;
   const apiStatus = game?.fixture?.status?.short;
-  if (apiStatus) return ["NS", "TBD"].includes(apiStatus);
+  if (apiStatus) return ["NS", "TBD"].includes(apiStatus) && !horaProgramadaPaso;
 
   const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
-  return status.state === "pre" || /\b(programado|scheduled|pre-game|pre game|not started)\b/i.test(status.description || status.detail || "");
+  const estadoPrevio = status.state === "pre" ||
+    /\b(programado|scheduled|pre-game|pre game|not started)\b/i.test(status.description || status.detail || "");
+  return estadoPrevio && !horaProgramadaPaso;
+}
+
+function juegoFutbolEnCurso(game) {
+  const apiStatus = game?.fixture?.status;
+  if (apiStatus) {
+    const short = String(apiStatus.short || "").toUpperCase();
+    if (["1H", "HT", "2H", "ET", "BT", "P", "LIVE"].includes(short)) return true;
+    if (["NS", "TBD", "FT", "AET", "PEN", "AWD", "WO", "PST", "CANC", "ABD"].includes(short)) return false;
+    return Number(apiStatus.elapsed) > 0;
+  }
+
+  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  const state = normalizarEstadoExternoTexto(status.state || status.name || "");
+  const detail = normalizarEstadoExternoTexto(status.description || status.detail || status.shortDetail || "");
+  if (status.completed === true || state === "post") return false;
+  if (/\b(in|in progress|live)\b/.test(state)) return true;
+  if (/\b(1st|2nd|first half|second half|halftime|half time|tiempo|live|in progress)\b/.test(detail)) return true;
+  return false;
+}
+
+function juegoFutbolTieneResultadoUtil(game) {
+  const marcador = getMarcadorFutbol(game);
+  if (!marcador) return false;
+  if (juegoFutbolFinalizado(game) || juegoFutbolEnCurso(game)) return true;
+  if (juegoFutbolNoIniciado(game)) return false;
+
+  const fechaJuego = getFechaJuegoFutbol(game);
+  const horaProgramadaPaso = fechaJuego ? fechaJuegoYaPaso(fechaJuego) : false;
+  if (!horaProgramadaPaso) return false;
+
+  return marcador.total > 0;
+}
+
+function juegoFutbolTieneResultadoActualizado(game, autoFutbol = {}) {
+  if (!juegoFutbolTieneResultadoUtil(game)) return false;
+
+  const marcador = getMarcadorFutbol(game);
+  const marcadorNuevo = marcador
+    ? reordenarMarcadorTextoFutbol(obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos), autoFutbol.equipos)
+    : "";
+  const marcadorActual = autoFutbol?.marcador
+    ? reordenarMarcadorTextoFutbol(autoFutbol.marcador, autoFutbol.equipos)
+    : "";
+
+  if (marcadorNuevo && marcadorNuevo !== marcadorActual) return true;
+
+  const estadoNuevo = getEstadoJuegoFutbol(game);
+  if (estadoNuevo && estadoNuevo !== autoFutbol.estadoJuego) return true;
+
+  return false;
 }
 
 function getMarcadorFutbol(game) {
@@ -4542,11 +4595,10 @@ function getMarcadorFutbol(game) {
   };
 }
 
-function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null) {
-  const marcadorEspn = getMarcadorFutbol(espnGame);
-  const marcadorApi = getMarcadorFutbol(apiGame);
-  if (marcadorEspn && !juegoFutbolNoIniciado(espnGame)) return espnGame;
-  if (marcadorApi && !juegoFutbolNoIniciado(apiGame)) return apiGame;
+function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null, autoFutbol = null) {
+  if (autoFutbol && juegoFutbolTieneResultadoActualizado(espnGame, autoFutbol)) return espnGame;
+  if (juegoFutbolTieneResultadoUtil(apiGame)) return apiGame;
+  if (juegoFutbolTieneResultadoUtil(espnGame)) return espnGame;
   return espnGame || apiGame;
 }
 
@@ -4890,7 +4942,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       if (!autoOriginal) huboCambioMetadata = true;
       const apiGame = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
-      const game = elegirJuegoFutbolPrincipal(apiGame, espnGame);
+      const game = elegirJuegoFutbolPrincipal(apiGame, espnGame, autoFutbol);
       if (!game) {
         if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
         selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
@@ -5055,7 +5107,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const game = totalAuto
         ? elegirJuegoFutbolPrincipal(
           buscarJuegoFutbol(juegosFecha, totalAuto.equipos, fechaBet),
-          buscarJuegoEspnFutbol(juegosEspnFecha, totalAuto.equipos, fechaBet)
+          buscarJuegoEspnFutbol(juegosEspnFecha, totalAuto.equipos, fechaBet),
+          totalAuto
         )
         : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
@@ -5345,7 +5398,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
-    const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
+    const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
     let horaHtml = "";
     if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
@@ -5388,7 +5441,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   }
   let horaHtml = "";
   const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
-  const estadoPrevio = esEstadoJuegoPrevio(futbolAuto.estadoJuego) || juegoPendientePorFecha;
+  const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
   if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
