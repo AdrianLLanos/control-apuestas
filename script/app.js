@@ -4043,6 +4043,14 @@ function parseFechaHoraLocal(fecha = "", hora = "") {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function formatFechaLocal(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function getAutoFutbolFechasJuego(apuesta = {}) {
   return (apuesta.jugadas || []).flatMap(jugada => {
     const fechas = [];
@@ -4138,7 +4146,7 @@ function puedeDescubrirInicioFutbol(apuesta = {}, silencioso = false) {
 
 function getFechaApiSportsFutbolApuesta(apuesta = {}) {
   const inicio = getInicioFutbolApuesta(apuesta);
-  if (inicio) return inicio.toISOString().slice(0, 10);
+  if (inicio) return formatFechaLocal(inicio);
   return apuesta.fecha || apuesta.dia || "";
 }
 
@@ -4200,7 +4208,7 @@ function getFechasCercanas(fecha = "") {
   return [-1, 0, 1].map(offset => {
     const date = new Date(base);
     date.setDate(base.getDate() + offset);
-    return date.toISOString().slice(0, 10);
+    return formatFechaLocal(date);
   });
 }
 
@@ -4208,7 +4216,7 @@ function fechaIsoConOffset(fecha = "", offset = 0) {
   const base = new Date(`${fecha}T12:00:00`);
   if (Number.isNaN(base.getTime())) return "";
   base.setDate(base.getDate() + offset);
-  return base.toISOString().slice(0, 10);
+  return formatFechaLocal(base);
 }
 
 function getFechasPermitidasApiSportsFutbol() {
