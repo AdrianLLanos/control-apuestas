@@ -6216,16 +6216,25 @@ function getAutoMetaKey(selection = {}, jugada = {}, fallbackFechaJuego = "") {
 }
 
 function prepararSeleccionAutoFutbolRender(selection = {}, jugada = {}, evento = "") {
-  if (selection?.autoFutbol || selection?.autoMlb || jugada?.autoFutbol || jugada?.autoMlb) {
+  if (selection?.autoMlb || jugada?.autoMlb) {
     return selection;
   }
 
-  const autoFutbol = crearAutoFutbolSeleccion({
+  const autoDetectado = crearAutoFutbolSeleccion({
     evento,
     titulo: selection.titulo || "",
     jugada: selection.jugada || selection.jug || ""
   });
+  const autoFutbol = combinarAutoFutbolConDetectado(selection.autoFutbol || jugada.autoFutbol || null, autoDetectado);
   return autoFutbol ? { ...selection, autoFutbol } : selection;
+}
+
+function getEstadoSeleccionRender(selection = {}, jugada = {}, evento = "") {
+  const selectionRender = prepararSeleccionAutoFutbolRender(selection, jugada, evento);
+  const autoFutbol = selectionRender.autoFutbol;
+  const gameGuardado = crearJuegoFutbolDesdeAutoFutbol(autoFutbol);
+  const evaluacion = gameGuardado ? evaluarAutoFutbol(autoFutbol, gameGuardado, null) : null;
+  return evaluacion?.estado || selection.estado || "pendiente";
 }
 
 function debeMostrarAutoMeta(mostrados, selection = {}, jugada = {}, fallbackFechaJuego = "") {
@@ -6642,7 +6651,7 @@ function _render() {
             }
 
             selections.forEach((sel, selIndex) => {
-              const jEstado = sel.estado || "pendiente";
+              const jEstado = getEstadoSeleccionRender(sel, j, evText);
               const iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
@@ -6744,7 +6753,7 @@ function _render() {
             }
 
             const selectionsHtml = selections.map((sel, selIndex) => {
-              const jEstado = sel.estado || "pendiente";
+              const jEstado = getEstadoSeleccionRender(sel, j, evText);
               const iconHtml = getEstadoSeleccionIconHtml(jEstado);
               const estadoIcon = (isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
