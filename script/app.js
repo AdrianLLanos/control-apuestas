@@ -3999,6 +3999,7 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
     : selectionConDatosPartidoFutbol;
   const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
   if (marcadorSeleccion) return marcadorSeleccion;
+  if (selectionConFallbackFutbol?.autoFutbol?.mercado === "total_corners") return "";
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   if (jugada?.autoFutbol) {
     const fechaJuego = jugada.autoFutbol.fechaJuego || options.fallbackFechaJuego;
@@ -5889,14 +5890,9 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
     }
 
-    const sinDatoCorners = totalCorners === undefined || totalCorners === null;
-    if ((estadoPrevio || sinDatoCorners) && marcador && /(?:^|\s)0\s*-\s*0(?:\s|$)/.test(marcador)) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)} &middot; Total: 0${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
-    }
-
     return totalCorners !== undefined && totalCorners !== null
       ? `<div class="auto-mlb-score">Total corners: ${escapeHtml(totalCorners)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
-      : (marcador ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml);
+      : (horaHtml || (showAutoMeta && futbolAuto.estadoJuego ? `<div class="auto-mlb-score auto-mlb-score--status">Corners sin datos${liga}</div>${estadoFinalizadoHtml}` : ""));
   }
 
   let marcadorActual = futbolAuto.marcador;
