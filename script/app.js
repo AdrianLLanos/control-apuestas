@@ -1243,6 +1243,12 @@ function formatearTituloTotalCarrerasMlb(equipo = "") {
   return equipo ? `${obtenerNombreCortoMlb(equipo)} total carreras` : "Total carreras";
 }
 
+const TITULO_TOTAL_HITS_MLB = "Hits M\u00e1s de/Menos de (incl. extra innings)";
+
+function formatearTituloTotalHitsMlb() {
+  return TITULO_TOTAL_HITS_MLB;
+}
+
 function esTotalCarrerasEquipoMlb(texto = "", evento = "") {
   const normalizado = normalizarTextoMercado(texto);
   const tieneDireccionTotal = /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado);
@@ -1260,6 +1266,11 @@ function formatearLineaTotalAuto(auto = {}) {
   const linea = Number(auto.linea);
   if (Number.isNaN(linea)) return "";
   return `${auto.tipoTotal === "under" ? "Menos de" : "Más de"} ${String(linea).replace(",", ".")}`;
+}
+
+function esTotalHitsMlb(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  return tienePalabraMercado(normalizado, ["hit", "hits", "imparable", "imparables"]);
 }
 
 function limpiarEquipoGanador(texto = "", evento = "") {
@@ -1360,6 +1371,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
   const autoMlb = seleccion.autoMlb || null;
+  if (autoMlb?.mercado === "total_hits") {
+    return {
+      titulo: formatearTituloTotalHitsMlb(),
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
   if (autoMlb?.mercado === "total_carreras") {
     return {
       titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
@@ -1374,6 +1392,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: "Total tiros de esquina",
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["corner", "corners", "tiro", "tiros", "esquina", "esquinas"])
+    };
+  }
+
+  if (esTotalHitsMlb(textoCompleto)) {
+    return {
+      titulo: formatearTituloTotalHitsMlb(),
+      jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["hit", "hits", "imparable", "imparables"])
     };
   }
 
@@ -1570,7 +1595,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
 
   if (tienePalabraMercado(normalizado, ["carrera", "carreras", "run", "runs"])) {
     const linea = extraerNumeroJugada(textoCompleto);
-    const tipoTotal = detectarLadoTotal(textoCompleto);
+    const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
     const seleccionEquipo = equiposJugada.length === 1 ? equiposJugada[0] : null;
     if (linea !== null && tipoTotal) {
@@ -1585,9 +1610,23 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     }
   }
 
+  if (esTotalHitsMlb(textoCompleto)) {
+    const linea = extraerNumeroJugada(textoCompleto);
+    const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
+    if (linea !== null && tipoTotal) {
+      return {
+        deporte: "mlb",
+        mercado: "total_hits",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        tipoTotal,
+        linea
+      };
+    }
+  }
+
   if (/\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado)) {
     const linea = extraerNumeroJugada(textoCompleto);
-    const tipoTotal = detectarLadoTotal(textoCompleto);
+    const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
     const seleccionEquipo = equiposJugada.length === 1 ? equiposJugada[0] : null;
     if (linea !== null && tipoTotal) {
@@ -3390,10 +3429,17 @@ function getMarcadorMlb(game) {
   const away = Number(game?.teams?.away?.score ?? game?.linescore?.teams?.away?.runs);
   if (Number.isNaN(home) || Number.isNaN(away)) return null;
 
+  const homeHits = Number(game?.linescore?.teams?.home?.hits ?? game?.teams?.home?.hits);
+  const awayHits = Number(game?.linescore?.teams?.away?.hits ?? game?.teams?.away?.hits);
+  const tieneHits = !Number.isNaN(homeHits) && !Number.isNaN(awayHits);
+
   return {
     home,
     away,
     total: home + away,
+    homeHits: tieneHits ? homeHits : null,
+    awayHits: tieneHits ? awayHits : null,
+    totalHits: tieneHits ? homeHits + awayHits : null,
     homeTeam: game?.teams?.home?.team?.name || "",
     awayTeam: game?.teams?.away?.team?.name || ""
   };
@@ -3418,6 +3464,32 @@ function getTotalCarrerasObjetivoMlb(autoMlb = {}, marcador) {
   if (!autoMlb?.seleccionEquipo) return marcador?.total ?? null;
   const equipo = getScoreEquipoMarcadorMlb(autoMlb.seleccionEquipo, marcador);
   return equipo ? equipo.seleccionado : null;
+}
+
+function getHitsEquipoMarcadorMlb(equipo = "", marcador) {
+  if (!marcador) return null;
+  const objetivo = normalizarClaveMlb(equipo);
+  const home = normalizarClaveMlb(marcador.homeTeam);
+  const away = normalizarClaveMlb(marcador.awayTeam);
+
+  if (objetivo && (home === objetivo || home.includes(objetivo) || objetivo.includes(home))) {
+    return marcador.homeHits;
+  }
+  if (objetivo && (away === objetivo || away.includes(objetivo) || objetivo.includes(away))) {
+    return marcador.awayHits;
+  }
+  return null;
+}
+
+function getTotalHitsObjetivoMlb(autoMlb = {}, marcador) {
+  if (!autoMlb?.seleccionEquipo) return marcador?.totalHits ?? null;
+  return getHitsEquipoMarcadorMlb(autoMlb.seleccionEquipo, marcador);
+}
+
+function getTotalObjetivoAutoMlb(autoMlb = {}, marcador) {
+  if (autoMlb?.mercado === "total_hits") return getTotalHitsObjetivoMlb(autoMlb, marcador);
+  if (autoMlb?.mercado === "total_carreras") return getTotalCarrerasObjetivoMlb(autoMlb, marcador);
+  return marcador?.total ?? null;
 }
 
 function juegoMlbFinalizado(game) {
@@ -3469,6 +3541,23 @@ function evaluarAutoMlb(autoMlb, game) {
   if (autoMlb.mercado === "total_carreras") {
     const linea = Number(autoMlb.linea);
     const totalObjetivo = getTotalCarrerasObjetivoMlb(autoMlb, marcador);
+    if (Number.isNaN(linea) || totalObjetivo === null) return null;
+    if (!finalizado) {
+      if (autoMlb.tipoTotal === "over" && totalObjetivo > linea) return { estado: "ganada", marcador };
+      if (autoMlb.tipoTotal === "under" && totalObjetivo > linea) return { estado: "perdida", marcador };
+      return null;
+    }
+    if (totalObjetivo === linea) return { estado: "nula", marcador };
+    const ganaOver = totalObjetivo > linea;
+    return {
+      estado: (autoMlb.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida",
+      marcador
+    };
+  }
+
+  if (autoMlb.mercado === "total_hits") {
+    const linea = Number(autoMlb.linea);
+    const totalObjetivo = getTotalHitsObjetivoMlb(autoMlb, marcador);
     if (Number.isNaN(linea) || totalObjetivo === null) return null;
     if (!finalizado) {
       if (autoMlb.tipoTotal === "over" && totalObjetivo > linea) return { estado: "ganada", marcador };
@@ -3580,9 +3669,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       if (!evaluacion) {
         const marcador = getMarcadorMlb(game);
         const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
-        const totalObjetivo = autoMlb.mercado === "total_carreras"
-          ? getTotalCarrerasObjetivoMlb(autoMlb, marcador)
-          : marcador?.total;
+        const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
         const marcadorTexto = marcador
           ? formatMarcadorSegunEvento(ev, marcador)
           : autoMlb.marcador;
@@ -3597,13 +3684,14 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
             estadoJuego,
             estadoEspecial: null,
             marcador: marcadorTexto,
-            totalCarreras: totalObjetivo,
+            totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
+            totalHits: autoMlb.mercado === "total_hits" ? totalObjetivo : autoMlb.totalHits,
             fechaJuego: game.gameDate
           }
         };
       }
 
-      const totalObjetivo = getTotalCarrerasObjetivoMlb(autoMlb, evaluacion.marcador);
+      const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
       const siguiente = {
         ...sel,
         estado: evaluacion.estado,
@@ -3613,7 +3701,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           estadoEspecial: null,
           marcador: formatMarcadorSegunEvento(ev, evaluacion.marcador),
-          totalCarreras: totalObjetivo,
+          totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
+          totalHits: autoMlb.mercado === "total_hits" ? totalObjetivo : autoMlb.totalHits,
           fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
         }
@@ -3637,11 +3726,11 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
-      const totalAuto = selections.find(sel => sel.autoMlb?.mercado === "total_carreras")?.autoMlb;
+      const totalAuto = selections.find(sel => ["total_carreras", "total_hits"].includes(sel.autoMlb?.mercado))?.autoMlb;
       const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet) : null;
       const marcador = game ? getMarcadorMlb(game) : null;
       const finalizado = game ? juegoMlbFinalizado(game) : false;
-      const totalObjetivo = getTotalCarrerasObjetivoMlb(totalAuto, marcador);
+      const totalObjetivo = getTotalObjetivoAutoMlb(totalAuto, marcador);
       const totalIrreversible = marcador && totalAuto && (
         finalizado ||
         (totalAuto.tipoTotal === "over" && totalObjetivo > Number(totalAuto.linea)) ||
@@ -3938,12 +4027,17 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
   const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   const totalCarreras = Number(autoMlb.totalCarreras);
+  const totalHits = Number(autoMlb.totalHits);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
     ? ` · ${escapeHtml(carrerasLabel)}: ${escapeHtml(totalCarreras)}`
     : "";
+  const hitsLabel = autoMlb.seleccionEquipo ? `Hits de ${autoMlb.seleccionEquipo}` : "Hits";
+  const hitsHtml = autoMlb.mercado === "total_hits" && !Number.isNaN(totalHits)
+    ? ` \u00b7 ${escapeHtml(hitsLabel)}: ${escapeHtml(totalHits)}`
+    : "";
   const marcadorHtml = marcador && !estadoPrevio
-    ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}</div>`
+    ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}${hitsHtml}</div>`
     : "";
 
   let horaHtml = "";
