@@ -1890,11 +1890,12 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
     const ev = jugada.ev || jugada.evento || "";
     const equipos = extraerEquiposEventoFutbol(ev);
     const selections = getSelectionsFromJugada(jugada).map(sel => {
-      const autoFutbol = crearAutoFutbolSeleccion({
+      const autoDetectado = crearAutoFutbolSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
         jugada: sel.jugada || ""
       });
+      const autoFutbol = combinarAutoFutbolConDetectado(sel.autoFutbol || null, autoDetectado);
 
       return autoFutbol ? { ...sel, autoFutbol } : sel;
     });
