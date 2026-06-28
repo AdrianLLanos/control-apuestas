@@ -4063,7 +4063,10 @@ const FOOTBALL_TEAM_ALIASES_BASE = [
   ["rd congo", "congo dr"],
   ["congo democratic republic", "congo dr"],
   ["urbezkistan", "uzbekistan"],
+  ["urbezquistan", "uzbekistan"],
+  ["urbequistan", "uzbekistan"],
   ["uzbezkistan", "uzbekistan"],
+  ["uzbezquistan", "uzbekistan"],
   ["uzbekistan", "uzbekistan"],
   ["curazao", "curacao"],
   ["cape verde islands", "cabo verde"],
@@ -5120,6 +5123,9 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
     const selecciones = Array.isArray(autoFutbol.seleccionEquipos) && autoFutbol.seleccionEquipos.length
       ? autoFutbol.seleccionEquipos
       : [autoFutbol.seleccionEquipo].filter(Boolean);
+    if (autoFutbol.incluyeEmpate === false && selecciones.length >= 2) {
+      return { estado: "ganada", marcador };
+    }
     return {
       estado: selecciones.some(equipo =>
         normalizarClaveFutbol(ganador).includes(normalizarClaveFutbol(equipo)) ||
