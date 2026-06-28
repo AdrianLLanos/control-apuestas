@@ -4969,6 +4969,14 @@ function obtenerMarcadorTextoFutbol(marcador, equipos) {
   }
 }
 
+function normalizarNumeroCorners(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const match = String(value).replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const numero = Number(match[0]);
+  return Number.isNaN(numero) ? null : numero;
+}
+
 function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
   if (!cornersEquipo?.home || !cornersEquipo?.away) return "";
   const awayName = cornersEquipo.away.name || "Visitante";
@@ -5030,9 +5038,7 @@ function extraerValorCornersFutbol(stat = {}) {
   if (!/\b(corner|corners|esquina|esquinas)\b/.test(etiqueta)) return null;
 
   const rawValue = stat.value ?? stat.displayValue;
-  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") return null;
-  const value = Number(String(rawValue ?? "").replace(",", "."));
-  return Number.isNaN(value) ? null : value;
+  return normalizarNumeroCorners(rawValue);
 }
 
 function getCornersEquipoFutbol(summary, marcador = null) {
@@ -5060,8 +5066,8 @@ function getCornersEquipoFutbol(summary, marcador = null) {
     const stat = (teamInfo.statistics || []).find(item =>
       item.name === "wonCorners" || extraerValorCornersFutbol(item) !== null
     );
-    const value = Number(stat?.value ?? stat?.displayValue);
-    if (!stat || Number.isNaN(value)) return null;
+    const value = normalizarNumeroCorners(stat?.value ?? stat?.displayValue);
+    if (!stat || value === null) return null;
 
     return {
       name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
@@ -5856,9 +5862,9 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (horaHtml && estadoPrevio) return horaHtml;
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
-      const awayCorners = Number(cornersEquipo.away.corners);
-      const homeCorners = Number(cornersEquipo.home.corners);
-      const totalMostrado = !Number.isNaN(awayCorners) && !Number.isNaN(homeCorners)
+      const awayCorners = normalizarNumeroCorners(cornersEquipo.away.corners);
+      const homeCorners = normalizarNumeroCorners(cornersEquipo.home.corners);
+      const totalMostrado = awayCorners !== null && homeCorners !== null
         ? awayCorners + homeCorners
         : totalCorners;
       const totalHtml = totalMostrado !== undefined && totalMostrado !== null
