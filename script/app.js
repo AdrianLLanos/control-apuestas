@@ -3966,16 +3966,37 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
     jugada?.autoFutbol?.fechaJuego ||
     (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
     options.fallbackFechaJuego;
-  const selectionConFallbackFutbol = selection?.autoFutbol && fechaJuegoFutbol
+  const selectionConDatosPartidoFutbol = selection?.autoFutbol && jugada?.autoFutbol
     ? {
       ...selection,
       autoFutbol: {
+        ...jugada.autoFutbol,
         ...selection.autoFutbol,
-        fechaJuego: fechaJuegoFutbol,
-        estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
+        id: selection.autoFutbol.id ?? jugada.autoFutbol.id,
+        espnId: selection.autoFutbol.espnId ?? jugada.autoFutbol.espnId,
+        liga: selection.autoFutbol.liga ?? jugada.autoFutbol.liga,
+        estadoJuego: selection.autoFutbol.estadoJuego ?? jugada.autoFutbol.estadoJuego,
+        estadoEspecial: selection.autoFutbol.estadoEspecial ?? jugada.autoFutbol.estadoEspecial,
+        marcador: selection.autoFutbol.marcador ?? jugada.autoFutbol.marcador,
+        totalCorners: selection.autoFutbol.totalCorners ?? jugada.autoFutbol.totalCorners,
+        cornersEquipo: selection.autoFutbol.cornersEquipo ?? jugada.autoFutbol.cornersEquipo,
+        fechaJuego: selection.autoFutbol.fechaJuego ?? jugada.autoFutbol.fechaJuego,
+        pausaMedioTiempoHasta: selection.autoFutbol.pausaMedioTiempoHasta ?? jugada.autoFutbol.pausaMedioTiempoHasta,
+        pausaEstadoEspecialHasta: selection.autoFutbol.pausaEstadoEspecialHasta ?? jugada.autoFutbol.pausaEstadoEspecialHasta,
+        sincronizadoEn: selection.autoFutbol.sincronizadoEn ?? jugada.autoFutbol.sincronizadoEn
       }
     }
     : selection;
+  const selectionConFallbackFutbol = selectionConDatosPartidoFutbol?.autoFutbol && fechaJuegoFutbol
+    ? {
+      ...selectionConDatosPartidoFutbol,
+      autoFutbol: {
+        ...selectionConDatosPartidoFutbol.autoFutbol,
+        fechaJuego: fechaJuegoFutbol,
+        estadoJuego: selectionConDatosPartidoFutbol.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
+      }
+    }
+    : selectionConDatosPartidoFutbol;
   const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
   if (marcadorSeleccion) return marcadorSeleccion;
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
