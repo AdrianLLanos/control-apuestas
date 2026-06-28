@@ -5518,7 +5518,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     const fechaApuesta = a.fecha || a.dia;
