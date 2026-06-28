@@ -1157,6 +1157,8 @@ function elegirEquipoSimilar(texto = "", evento = "") {
 
 function corregirEquipoDesdeEvento(texto = "", evento = "") {
   const limpio = limpiarEspaciosMercado(String(texto)
+    .replace(HANDICAP_TEXTO_GLOBAL_REGEX, "")
+    .replace(/\bhándicap\b/ig, "")
     .replace(/(\p{L})([+-]\d+(?:[.,]\d+)?)/gu, "$1 $2")
     .replace(/([+-])\s+(\d)/g, "$1$2")
   );
@@ -1268,6 +1270,16 @@ function formatearLineaTotalAuto(auto = {}) {
   return `${auto.tipoTotal === "under" ? "Menos de" : "Más de"} ${String(linea).replace(",", ".")}`;
 }
 
+const HANDICAP_TEXTO_REGEX = /\bh(?:a|á|\u00c3\u00a1)ndicap\b/i;
+const HANDICAP_TEXTO_GLOBAL_REGEX = /\bh(?:a|á|\u00c3\u00a1)ndicap\b/ig;
+
+function esHandicapMlbTexto(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  return HANDICAP_TEXTO_REGEX.test(String(texto)) ||
+    tienePalabraMercado(normalizado, ["handicap", "handi", "hcap"]) ||
+    /\b(runline|spread)\b/.test(normalizado);
+}
+
 function esTotalHitsMlb(texto = "") {
   const normalizado = normalizarTextoMercado(texto);
   return tienePalabraMercado(normalizado, ["hit", "hits", "imparable", "imparables"]);
@@ -1304,6 +1316,8 @@ function limpiarEquipoGanaraCualquierMitad(texto = "", evento = "") {
 
 function limpiarHandicap(texto = "", evento = "") {
   let linea = String(texto)
+    .replace(HANDICAP_TEXTO_GLOBAL_REGEX, "")
+    .replace(/\bhándicap\b/ig, "")
     .replace(/\bh[aá]ndicap\b/ig, "")
     .replace(/(\p{L})([+-]\d+(?:[.,]\d+)?)/gu, "$1 $2")
     .replace(/([+-])\s+(\d)/g, "$1$2");
@@ -1371,6 +1385,16 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
   const autoMlb = seleccion.autoMlb || null;
+  const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
+  const normalizado = normalizarTextoMercado(textoCompleto);
+
+  if (esHandicapMlbTexto(textoCompleto)) {
+    return {
+      titulo: "Hándicap",
+      jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
+    };
+  }
+
   if (autoMlb?.mercado === "total_hits") {
     return {
       titulo: formatearTituloTotalHitsMlb(),
@@ -1384,9 +1408,6 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
       jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
     };
   }
-
-  const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
-  const normalizado = normalizarTextoMercado(textoCompleto);
 
   if (tienePalabraMercado(normalizado, ["corner", "corners", "corne", "esquina", "esquinas"])) {
     return {
@@ -1578,7 +1599,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
   const equiposEvento = detectarEquiposMlb(evento);
   const equiposTexto = detectarEquiposMlb(`${evento} ${textoCompleto}`);
 
-  if (tienePalabraMercado(normalizado, ["handicap", "handi", "hcap"]) || /\b(runline|spread)\b/.test(normalizado) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
+  if (esHandicapMlbTexto(textoCompleto) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
     const linea = extraerNumeroConSigno(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
     const seleccionEquipo = equiposJugada[0] || null;
@@ -1705,6 +1726,11 @@ function esTotalCarrerasMlbSinEquipo(selection = {}) {
   return autoMlb.mercado === "total_carreras" && !autoMlb.seleccionEquipo;
 }
 
+function esSeleccionHandicapMlb(selection = {}) {
+  const autoMlb = selection?.autoMlb || {};
+  return autoMlb.mercado === "handicap" || esHandicapMlbTexto(`${selection.titulo || ""} ${selection.jugada || ""}`);
+}
+
 function aplicarEquipoATotalCarrerasMlb(selection = {}, equipo = "") {
   if (!equipo) return selection;
   const autoMlb = {
@@ -1728,7 +1754,7 @@ function repararTotalesEquipoMlbPartidos(jugadas = []) {
     jugada.selections.forEach(selection => {
       const anterior = reparadas[reparadas.length - 1];
       const equipoAnterior = getEquipoGanadorSeleccionMlb(anterior);
-      const totalSinEquipo = esTotalCarrerasMlbSinEquipo(selection);
+      const totalSinEquipo = esTotalCarrerasMlbSinEquipo(selection) && !esSeleccionHandicapMlb(selection);
       const yaHabiaGanadorMismoEquipo = equipoAnterior && reparadas
         .slice(0, -1)
         .some(sel => normalizarClaveMlb(getEquipoGanadorSeleccionMlb(sel)) === normalizarClaveMlb(equipoAnterior));
