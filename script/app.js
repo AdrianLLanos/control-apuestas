@@ -3966,40 +3966,18 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
     jugada?.autoFutbol?.fechaJuego ||
     (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
     options.fallbackFechaJuego;
-  const selectionConDatosPartidoFutbol = selection?.autoFutbol && jugada?.autoFutbol
+  const selectionConFallbackFutbol = selection?.autoFutbol && fechaJuegoFutbol
     ? {
       ...selection,
       autoFutbol: {
-        ...jugada.autoFutbol,
         ...selection.autoFutbol,
-        id: selection.autoFutbol.id ?? jugada.autoFutbol.id,
-        espnId: selection.autoFutbol.espnId ?? jugada.autoFutbol.espnId,
-        liga: selection.autoFutbol.liga ?? jugada.autoFutbol.liga,
-        estadoJuego: selection.autoFutbol.estadoJuego ?? jugada.autoFutbol.estadoJuego,
-        estadoEspecial: selection.autoFutbol.estadoEspecial ?? jugada.autoFutbol.estadoEspecial,
-        marcador: selection.autoFutbol.marcador ?? jugada.autoFutbol.marcador,
-        totalCorners: selection.autoFutbol.totalCorners ?? jugada.autoFutbol.totalCorners,
-        cornersEquipo: selection.autoFutbol.cornersEquipo ?? jugada.autoFutbol.cornersEquipo,
-        fechaJuego: selection.autoFutbol.fechaJuego ?? jugada.autoFutbol.fechaJuego,
-        pausaMedioTiempoHasta: selection.autoFutbol.pausaMedioTiempoHasta ?? jugada.autoFutbol.pausaMedioTiempoHasta,
-        pausaEstadoEspecialHasta: selection.autoFutbol.pausaEstadoEspecialHasta ?? jugada.autoFutbol.pausaEstadoEspecialHasta,
-        sincronizadoEn: selection.autoFutbol.sincronizadoEn ?? jugada.autoFutbol.sincronizadoEn
+        fechaJuego: fechaJuegoFutbol,
+        estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
       }
     }
     : selection;
-  const selectionConFallbackFutbol = selectionConDatosPartidoFutbol?.autoFutbol && fechaJuegoFutbol
-    ? {
-      ...selectionConDatosPartidoFutbol,
-      autoFutbol: {
-        ...selectionConDatosPartidoFutbol.autoFutbol,
-        fechaJuego: fechaJuegoFutbol,
-        estadoJuego: selectionConDatosPartidoFutbol.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
-      }
-    }
-    : selectionConDatosPartidoFutbol;
   const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
   if (marcadorSeleccion) return marcadorSeleccion;
-  if (selectionConFallbackFutbol?.autoFutbol?.mercado === "total_corners") return "";
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   if (jugada?.autoFutbol) {
     const fechaJuego = jugada.autoFutbol.fechaJuego || options.fallbackFechaJuego;
@@ -4201,7 +4179,7 @@ function apuestaTieneCornersFutbolIncompletos(apuesta) {
     (j?.selections || []).some(sel => {
       const auto = sel?.autoFutbol;
       if (auto?.mercado !== "total_corners") return false;
-      return getTotalCornersDesdeEquipos(auto.cornersEquipo) === null;
+      return !auto.cornersEquipo?.home || !auto.cornersEquipo?.away;
     })
   );
 }
@@ -4970,39 +4948,12 @@ function obtenerMarcadorTextoFutbol(marcador, equipos) {
   }
 }
 
-function normalizarNumeroCorners(value) {
-  if (value === undefined || value === null || String(value).trim() === "") return null;
-  const match = String(value).replace(",", ".").match(/-?\d+(?:\.\d+)?/);
-  if (!match) return null;
-  const numero = Number(match[0]);
-  return Number.isNaN(numero) ? null : numero;
-}
-
-function getValorCornersEquipo(equipo = {}) {
-  return normalizarNumeroCorners(
-    equipo.corners ??
-    equipo.corner ??
-    equipo.value ??
-    equipo.total ??
-    equipo.stats?.corners ??
-    equipo.statistics?.corners
-  );
-}
-
-function getTotalCornersDesdeEquipos(cornersEquipo = {}) {
-  cornersEquipo = cornersEquipo || {};
-  const homeCorners = getValorCornersEquipo(cornersEquipo.home);
-  const awayCorners = getValorCornersEquipo(cornersEquipo.away);
-  if (homeCorners !== null && awayCorners !== null) return homeCorners + awayCorners;
-  return normalizarNumeroCorners(cornersEquipo.total ?? cornersEquipo.totalCorners);
-}
-
 function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
   if (!cornersEquipo?.home || !cornersEquipo?.away) return "";
   const awayName = cornersEquipo.away.name || "Visitante";
   const homeName = cornersEquipo.home.name || "Local";
-  const awayCorners = getValorCornersEquipo(cornersEquipo.away) ?? cornersEquipo.away.corners;
-  const homeCorners = getValorCornersEquipo(cornersEquipo.home) ?? cornersEquipo.home.corners;
+  const awayCorners = cornersEquipo.away.corners;
+  const homeCorners = cornersEquipo.home.corners;
 
   const eq0 = equipos?.[0];
   const eq1 = equipos?.[1];
@@ -5021,8 +4972,8 @@ function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
 }
 
 function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
-  const total = normalizarNumeroCorners(autoFutbol.totalCorners);
-  if (total === null) return null;
+  const total = Number(autoFutbol.totalCorners);
+  if (Number.isNaN(total)) return null;
 
   const equipos = Array.isArray(autoFutbol.equipos) ? autoFutbol.equipos : [];
   const nombres = autoFutbol.marcador
@@ -5058,7 +5009,8 @@ function extraerValorCornersFutbol(stat = {}) {
   if (!/\b(corner|corners|esquina|esquinas)\b/.test(etiqueta)) return null;
 
   const rawValue = stat.value ?? stat.displayValue;
-  return normalizarNumeroCorners(rawValue);
+  const value = Number(String(rawValue).replace("%", "").trim());
+  return Number.isNaN(value) ? null : value;
 }
 
 function getCornersEquipoFutbol(summary, marcador = null) {
@@ -5086,8 +5038,8 @@ function getCornersEquipoFutbol(summary, marcador = null) {
     const stat = (teamInfo.statistics || []).find(item =>
       item.name === "wonCorners" || extraerValorCornersFutbol(item) !== null
     );
-    const value = normalizarNumeroCorners(stat?.value ?? stat?.displayValue);
-    if (!stat || value === null) return null;
+    const value = Number(stat?.value ?? stat?.displayValue);
+    if (!stat || Number.isNaN(value)) return null;
 
     return {
       name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
@@ -5622,7 +5574,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !apuestaTieneCornersFutbolIncompletos(a)) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     const fechaApuesta = a.fecha || a.dia;
@@ -5635,7 +5587,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasHorario = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !apuestaTieneCornersFutbolIncompletos(a)) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (!puedeDescubrirInicioFutbol(a, silencioso)) return false;
     return true;
   });
@@ -5882,17 +5834,16 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (horaHtml && estadoPrevio) return horaHtml;
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
-      const totalMostrado = getTotalCornersDesdeEquipos(cornersEquipo) ?? normalizarNumeroCorners(totalCorners);
-      const totalHtml = totalMostrado !== undefined && totalMostrado !== null
-        ? ` &middot; Total: ${escapeHtml(totalMostrado)}`
+      const totalHtml = totalCorners !== undefined && totalCorners !== null
+        ? ` &middot; Total: ${escapeHtml(totalCorners)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
       return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
     }
 
-    return totalCorners !== undefined && totalCorners !== null
-      ? `<div class="auto-mlb-score">Total corners: ${escapeHtml(totalCorners)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
-      : (horaHtml || (showAutoMeta && futbolAuto.estadoJuego ? `<div class="auto-mlb-score auto-mlb-score--status">Corners sin datos${liga}</div>${estadoFinalizadoHtml}` : ""));
+    return marcador
+      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+      : (horaHtml || "");
   }
 
   let marcadorActual = futbolAuto.marcador;
