@@ -1858,6 +1858,29 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
   return null;
 }
 
+function combinarAutoFutbolConDetectado(autoOriginal = null, autoDetectado = null) {
+  if (!autoOriginal) return autoDetectado;
+  if (!autoDetectado) return autoOriginal;
+
+  const camposDetectados = [
+    "mercado",
+    "equipos",
+    "seleccion",
+    "seleccionEquipo",
+    "seleccionEquipos",
+    "incluyeEmpate",
+    "tipoTotal",
+    "linea"
+  ];
+  const combinado = { ...autoOriginal };
+  camposDetectados.forEach(campo => {
+    if (autoDetectado[campo] !== undefined) {
+      combinado[campo] = autoDetectado[campo];
+    }
+  });
+  return combinado;
+}
+
 function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
   if (deporte !== "futbol") return jugadas;
 
@@ -5195,11 +5218,12 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     for (const sel of getSelectionsFromJugada(jugada)) {
       await cederControlNavegador();
       const autoOriginal = sel.autoFutbol || null;
-      let autoFutbol = autoOriginal || crearAutoFutbolSeleccion({
+      const autoDetectado = crearAutoFutbolSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
         jugada: sel.jugada || ""
       });
+      let autoFutbol = combinarAutoFutbolConDetectado(autoOriginal, autoDetectado);
       if (!autoFutbol) {
         const jugadaText = sel.jugada || sel.titulo || "";
         const juegosDescubrimiento = [...juegosEspnFecha, ...juegosFecha];
@@ -5222,7 +5246,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         continue;
       }
 
-      if (!autoOriginal) huboCambioMetadata = true;
+      if (!autoOriginal || JSON.stringify(autoOriginal) !== JSON.stringify(autoFutbol)) huboCambioMetadata = true;
       const apiGame = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
       const game = elegirJuegoFutbolPrincipal(apiGame, espnGame, autoFutbol);
