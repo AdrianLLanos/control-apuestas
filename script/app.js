@@ -4200,7 +4200,7 @@ function apuestaTieneCornersFutbolIncompletos(apuesta) {
     (j?.selections || []).some(sel => {
       const auto = sel?.autoFutbol;
       if (auto?.mercado !== "total_corners") return false;
-      return !(auto.cornersEquipo?.home && auto.cornersEquipo?.away);
+      return getTotalCornersDesdeEquipos(auto.cornersEquipo) === null;
     })
   );
 }
@@ -4977,12 +4977,31 @@ function normalizarNumeroCorners(value) {
   return Number.isNaN(numero) ? null : numero;
 }
 
+function getValorCornersEquipo(equipo = {}) {
+  return normalizarNumeroCorners(
+    equipo.corners ??
+    equipo.corner ??
+    equipo.value ??
+    equipo.total ??
+    equipo.stats?.corners ??
+    equipo.statistics?.corners
+  );
+}
+
+function getTotalCornersDesdeEquipos(cornersEquipo = {}) {
+  cornersEquipo = cornersEquipo || {};
+  const homeCorners = getValorCornersEquipo(cornersEquipo.home);
+  const awayCorners = getValorCornersEquipo(cornersEquipo.away);
+  if (homeCorners !== null && awayCorners !== null) return homeCorners + awayCorners;
+  return normalizarNumeroCorners(cornersEquipo.total ?? cornersEquipo.totalCorners);
+}
+
 function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
   if (!cornersEquipo?.home || !cornersEquipo?.away) return "";
   const awayName = cornersEquipo.away.name || "Visitante";
   const homeName = cornersEquipo.home.name || "Local";
-  const awayCorners = cornersEquipo.away.corners;
-  const homeCorners = cornersEquipo.home.corners;
+  const awayCorners = getValorCornersEquipo(cornersEquipo.away) ?? cornersEquipo.away.corners;
+  const homeCorners = getValorCornersEquipo(cornersEquipo.home) ?? cornersEquipo.home.corners;
 
   const eq0 = equipos?.[0];
   const eq1 = equipos?.[1];
@@ -5001,8 +5020,8 @@ function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
 }
 
 function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
-  const total = Number(autoFutbol.totalCorners);
-  if (Number.isNaN(total)) return null;
+  const total = normalizarNumeroCorners(autoFutbol.totalCorners);
+  if (total === null) return null;
 
   const equipos = Array.isArray(autoFutbol.equipos) ? autoFutbol.equipos : [];
   const nombres = autoFutbol.marcador
@@ -5602,7 +5621,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !apuestaTieneCornersFutbolIncompletos(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     const fechaApuesta = a.fecha || a.dia;
@@ -5615,7 +5634,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasHorario = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !apuestaTieneCornersFutbolIncompletos(a)) return false;
     if (!puedeDescubrirInicioFutbol(a, silencioso)) return false;
     return true;
   });
@@ -5862,11 +5881,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (horaHtml && estadoPrevio) return horaHtml;
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
-      const awayCorners = normalizarNumeroCorners(cornersEquipo.away.corners);
-      const homeCorners = normalizarNumeroCorners(cornersEquipo.home.corners);
-      const totalMostrado = awayCorners !== null && homeCorners !== null
-        ? awayCorners + homeCorners
-        : totalCorners;
+      const totalMostrado = getTotalCornersDesdeEquipos(cornersEquipo) ?? normalizarNumeroCorners(totalCorners);
       const totalHtml = totalMostrado !== undefined && totalMostrado !== null
         ? ` &middot; Total: ${escapeHtml(totalMostrado)}`
         : "";
