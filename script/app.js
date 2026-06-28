@@ -5086,6 +5086,43 @@ function getScoreEquipoMarcadorFutbol(equipo = "", marcador) {
   return null;
 }
 
+function crearJuegoFutbolDesdeAutoFutbol(autoFutbol = {}) {
+  if (!autoFutbol?.marcador || !esEstadoJuegoFinalizado(autoFutbol.estadoJuego)) return null;
+
+  const marcadorTexto = String(autoFutbol.marcador).replace(/\s+·.*$/g, "").trim();
+  const match = marcadorTexto.match(/^(.+?)\s+(\d+)\s*[-–—]\s*(\d+)\s+(.+)$/);
+  if (!match) return null;
+
+  const homeName = match[1].trim();
+  const awayName = match[4].trim();
+  const homeScore = Number(match[2]);
+  const awayScore = Number(match[3]);
+  if (Number.isNaN(homeScore) || Number.isNaN(awayScore) || !homeName || !awayName) return null;
+
+  return {
+    fixture: {
+      id: autoFutbol.id,
+      date: autoFutbol.fechaJuego || "",
+      status: {
+        short: "FT",
+        long: autoFutbol.estadoJuego || "Match Finished",
+        elapsed: 90
+      }
+    },
+    teams: {
+      home: { name: homeName },
+      away: { name: awayName }
+    },
+    goals: {
+      home: homeScore,
+      away: awayScore
+    },
+    league: {
+      name: autoFutbol.liga || ""
+    }
+  };
+}
+
 function getTotalCornersFutbol(summary) {
   return getCornersEquipoFutbol(summary)?.total ?? null;
 }
@@ -5258,6 +5295,26 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
       const game = elegirJuegoFutbolPrincipal(apiGame, espnGame, autoFutbol);
       if (!game) {
+        const gameGuardado = crearJuegoFutbolDesdeAutoFutbol(autoFutbol);
+        const evaluacionGuardada = gameGuardado ? evaluarAutoFutbol(autoFutbol, gameGuardado, null) : null;
+        if (evaluacionGuardada) {
+          const targetFechaJuego = getFechaJuegoFutbol(gameGuardado) || autoFutbol.fechaJuego;
+          const estadoJuego = getEstadoJuegoFutbol(gameGuardado) || autoFutbol.estadoJuego || "Final";
+          if ((sel.estado || "pendiente") !== evaluacionGuardada.estado) huboCambio = true;
+          selections.push({
+            ...sel,
+            estado: evaluacionGuardada.estado,
+            autoFutbol: {
+              ...autoFutbol,
+              estadoJuego,
+              estadoEspecial: null,
+              marcador: obtenerMarcadorTextoFutbol(evaluacionGuardada.marcador, autoFutbol.equipos),
+              fechaJuego: targetFechaJuego,
+              sincronizadoEn: Date.now()
+            }
+          });
+          continue;
+        }
         if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
         selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
         continue;
