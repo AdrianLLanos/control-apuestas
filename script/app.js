@@ -4078,6 +4078,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       aplicarUpdateLocalApuesta(apuesta.id, updateData);
       if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
+      renderSnapshotProgramado();
       actualizadas++;
       if (!debeSincronizarResultado) horariosActualizados++;
     }
@@ -5923,6 +5924,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      renderSnapshotProgramado();
       actualizadas++;
       if (idsHorario.has(apuesta.id)) horariosActualizados++;
     }
