@@ -4578,6 +4578,7 @@ function apuestaNecesitaEspnFutbol(apuesta = {}, juegosApiSports = [], fechaBet 
       if (autoFutbol) {
         const apiGame = buscarJuegoFutbol(juegosApiSports, autoFutbol.equipos, fechaBet);
         if (!apiGame) return true;
+        if (juegoFutbolEnCurso(apiGame)) return true;
         return !juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol);
       }
 
@@ -5072,6 +5073,47 @@ function getMarcadorFutbol(game) {
   };
 }
 
+function getMinutoJuegoFutbol(game = null) {
+  const apiElapsed = Number(game?.fixture?.status?.elapsed);
+  if (!Number.isNaN(apiElapsed) && apiElapsed > 0) return apiElapsed;
+
+  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  const texto = [
+    status.shortDetail,
+    status.detail,
+    status.description
+  ].filter(Boolean).join(" ");
+  const match = texto.match(/\b(\d{1,3})(?:'| min)?\b/i);
+  const minuto = match ? Number(match[1]) : NaN;
+  return !Number.isNaN(minuto) && minuto > 0 ? minuto : 0;
+}
+
+function elegirJuegoFutbolMasReciente(apiGame = null, espnGame = null) {
+  if (!apiGame) return espnGame;
+  if (!espnGame) return apiGame;
+
+  const apiMarcador = getMarcadorFutbol(apiGame);
+  const espnMarcador = getMarcadorFutbol(espnGame);
+  if (!apiMarcador) return espnGame;
+  if (!espnMarcador) return apiGame;
+
+  const apiEnCurso = juegoFutbolEnCurso(apiGame);
+  const espnEnCurso = juegoFutbolEnCurso(espnGame);
+  if (apiEnCurso && espnEnCurso) {
+    if (espnMarcador.total > apiMarcador.total) return espnGame;
+    if (apiMarcador.total > espnMarcador.total) return apiGame;
+
+    const apiMinuto = getMinutoJuegoFutbol(apiGame);
+    const espnMinuto = getMinutoJuegoFutbol(espnGame);
+    if (espnMinuto > apiMinuto) return espnGame;
+    if (apiMinuto > espnMinuto) return apiGame;
+  }
+
+  if (espnEnCurso && !apiEnCurso) return espnGame;
+  if (apiEnCurso && !espnEnCurso) return apiGame;
+  return apiGame;
+}
+
 function calcularResumenYEstadisticas() {
   let invertido = 0;
   let retornado = 0;
@@ -5120,7 +5162,16 @@ function calcularResumenYEstadisticas() {
 }
 
 function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null, autoFutbol = null) {
-  if (autoFutbol && juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol)) return apiGame;
+  if (autoFutbol) {
+    const apiActualizado = juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol);
+    const espnActualizado = juegoFutbolTieneResultadoActualizado(espnGame, autoFutbol);
+    if (apiActualizado && espnActualizado) return elegirJuegoFutbolMasReciente(apiGame, espnGame);
+    if (espnActualizado) return espnGame;
+    if (apiActualizado) return apiGame;
+  }
+  if (juegoFutbolTieneResultadoUtil(apiGame) && juegoFutbolTieneResultadoUtil(espnGame)) {
+    return elegirJuegoFutbolMasReciente(apiGame, espnGame);
+  }
   if (juegoFutbolTieneResultadoUtil(espnGame)) return espnGame;
   if (juegoFutbolTieneResultadoUtil(apiGame)) return apiGame;
   return apiGame || espnGame;
