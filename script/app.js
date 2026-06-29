@@ -4062,7 +4062,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const hitsHtml = autoMlb.mercado === "total_hits" && !Number.isNaN(totalHits)
     ? ` \u00b7 ${escapeHtml(hitsLabel)}: ${escapeHtml(totalHits)}`
     : "";
-  const marcadorHtml = marcador && !estadoPrevio
+  const marcadorHtml = marcador
     ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}${hitsHtml}</div>`
     : "";
 
@@ -4081,22 +4081,56 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   return marcadorHtml ? `${marcadorHtml}${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml;
 }
 
+function autoMlbTieneMetaVisible(autoMlb = {}) {
+  return Boolean(autoMlb?.marcador || autoMlb?.fechaJuego || autoMlb?.estadoJuego || autoMlb?.estadoEspecial);
+}
+
+function completarAutoMlbRenderDesdeJugada(selection = {}, jugada = {}) {
+  const autoActual = selection?.autoMlb || null;
+  if (autoMlbTieneMetaVisible(autoActual)) return selection;
+
+  const candidatos = [
+    ...(Array.isArray(jugada?.selections) ? jugada.selections.map(sel => sel?.autoMlb).filter(Boolean) : []),
+    jugada?.autoMlb
+  ].filter(autoMlbTieneMetaVisible);
+
+  if (candidatos.length === 0) return selection;
+  const base = candidatos.find(auto => {
+    if (!autoActual?.equipos || !auto?.equipos) return true;
+    return autoActual.equipos.every(eq => auto.equipos.some(candidato => equiposMlbCoinciden(eq, candidato)));
+  }) || candidatos[0];
+
+  return {
+    ...selection,
+    autoMlb: {
+      ...(autoActual || {}),
+      gamePk: autoActual?.gamePk ?? base.gamePk,
+      espnId: autoActual?.espnId ?? base.espnId,
+      estadoJuego: autoActual?.estadoJuego || base.estadoJuego,
+      estadoEspecial: autoActual?.estadoEspecial || base.estadoEspecial,
+      marcador: autoActual?.marcador || base.marcador,
+      fechaJuego: autoActual?.fechaJuego || base.fechaJuego
+    }
+  };
+}
+
 function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {}) {
-  const fechaJuegoFutbol = selection?.autoFutbol?.fechaJuego ||
+  const selectionMlbCompleta = completarAutoMlbRenderDesdeJugada(selection, jugada);
+  const fechaJuegoFutbol = selectionMlbCompleta?.autoFutbol?.fechaJuego ||
     jugada?.autoFutbol?.fechaJuego ||
     (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
     options.fallbackFechaJuego;
-  const selectionConFallbackFutbol = selection?.autoFutbol && fechaJuegoFutbol
+  const selectionConFallbackFutbol = selectionMlbCompleta?.autoFutbol && fechaJuegoFutbol
     ? {
-      ...selection,
+      ...selectionMlbCompleta,
       autoFutbol: {
-        ...selection.autoFutbol,
+        ...selectionMlbCompleta.autoFutbol,
         fechaJuego: fechaJuegoFutbol,
-        estadoJuego: selection.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
+        estadoJuego: selectionMlbCompleta.autoFutbol.estadoJuego || jugada?.autoFutbol?.estadoJuego || "Programado"
       }
     }
-    : selection;
-  const marcadorSeleccion = getAutoMlbMarcadorHtml(selection, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
+    : selectionMlbCompleta;
+  const marcadorSeleccion = getAutoMlbMarcadorHtml(selectionMlbCompleta, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
   if (marcadorSeleccion) return marcadorSeleccion;
   if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   if (jugada?.autoFutbol) {
