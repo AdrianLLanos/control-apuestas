@@ -157,6 +157,16 @@ function getCasasParaEdicion(apuesta) {
   return disponibles;
 }
 
+function getOrdenTablaApuesta(apuesta = {}) {
+  return Number(apuesta.ordenTabla ?? apuesta.creadoEn ?? 0);
+}
+
+function compararApuestasOrdenTabla(a, b) {
+  const ordenDiff = getOrdenTablaApuesta(a) - getOrdenTablaApuesta(b);
+  if (ordenDiff !== 0) return ordenDiff;
+  return String(a.id || "").localeCompare(String(b.id || ""));
+}
+
 function normalizarFechaDeApuesta(apuesta = {}) {
   const fecha = apuesta.fecha || apuesta.dia;
   if (!fecha) return apuesta;
@@ -886,7 +896,7 @@ function autocorregirApuestasCargadas(lista = []) {
 }
 
 function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
-  apuestas.sort((a, b) => (a.creadoEn || 0) - (b.creadoEn || 0));
+  apuestas.sort(compararApuestasOrdenTabla);
 
   const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
   const totalPags = Math.ceil(diasUnicos.length / porPagina);
@@ -2652,6 +2662,8 @@ async function agregarApuesta() {
   }
   // NOTE: paginaActual se calcula DESPUÉS de setear filtroCasaId para usar el filtro correcto
 
+  const ordenBase = Date.now();
+
   try {
     if (tipoApuesta === "simple") {
       // ── Guardar cada partido simple como apuesta independiente ──
@@ -2684,7 +2696,9 @@ async function agregarApuesta() {
           cuota: c,
           importe: importeSlot,
           resultado,
-          creadoEn: Date.now() + idx
+          creadoEn: ordenBase + idx,
+          ordenTabla: ordenBase + idx,
+          ordenFormulario: idx
         })));
       });
       await Promise.all(saves);
@@ -2725,7 +2739,9 @@ async function agregarApuesta() {
           cuota: optiOdds,
           importe: importeSlot,
           resultado: "pendiente",
-          creadoEn: Date.now() + idx
+          creadoEn: ordenBase + idx,
+          ordenTabla: ordenBase + idx,
+          ordenFormulario: idx
         })));
       });
       await Promise.all(saves);
@@ -2762,7 +2778,9 @@ async function agregarApuesta() {
           cuota: c,
           importe: importeSlot,
           resultado,
-          creadoEn: Date.now() + idx
+          creadoEn: ordenBase + idx,
+          ordenTabla: ordenBase + idx,
+          ordenFormulario: idx
         })));
       });
       await Promise.all(saves);
@@ -2773,7 +2791,9 @@ async function agregarApuesta() {
         fecha, evento, jugadas, tipoApuesta, cuota, importe,
         resultado,
         dia, hora,
-        creadoEn: Date.now()
+        creadoEn: ordenBase,
+        ordenTabla: ordenBase,
+        ordenFormulario: 0
       }));
     }
   } catch (e) {
@@ -6781,6 +6801,7 @@ function getApuestasPorDiaPagina(apuestasRender, diasPagina) {
       dias[diaKey].push(a);
     }
   });
+  Object.values(dias).forEach(apuestasDia => apuestasDia.sort(compararApuestasOrdenTabla));
   return dias;
 }
 
