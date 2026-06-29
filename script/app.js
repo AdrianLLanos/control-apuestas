@@ -2916,7 +2916,7 @@ async function cambiarEstado(id, nuevoEstado) {
   }
 
   const apuestaActualizada = index > -1 ? apuestas[index] : null;
-  const renderFluido = actualizarFilaCrearApuestaDom(apuestaActualizada, true);
+  const renderFluido = actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
   if (renderFluido) {
     renderSilenciosoApuestas.add(id);
     setTimeout(() => renderSilenciosoApuestas.delete(id), 2000);
@@ -6668,6 +6668,40 @@ function actualizarFilaCrearApuestaDom(apuesta, actualizarSelecciones = false) {
   return true;
 }
 
+function actualizarCeldasResultadoApuestaDom(apuesta) {
+  if (!apuesta) return false;
+
+  const cuotaCell = document.querySelector(`[data-cuota-cell="${apuesta.id}"]`);
+  const resultadoCell = document.querySelector(`[data-resultado-cell="${apuesta.id}"]`);
+  const retornoCell = document.querySelector(`[data-retorno-cell="${apuesta.id}"]`);
+  if (!cuotaCell && !resultadoCell && !retornoCell) return false;
+
+  if (cuotaCell) cuotaCell.textContent = formatDecimal(apuesta.cuota);
+  if (retornoCell) retornoCell.textContent = `$${calcularRetornoApuesta(apuesta).toFixed(2)}`;
+  if (resultadoCell) {
+    resultadoCell.className = apuesta.resultado || "pendiente";
+    const select = resultadoCell.querySelector("select");
+    if (select) {
+      select.value = apuesta.resultado || "pendiente";
+      select.style.color = getResultadoColor(apuesta.resultado);
+    }
+  }
+
+  actualizarResumenDiaDom(apuesta.dia);
+  actualizarResumenBankrollDom();
+  return true;
+}
+
+function actualizarApuestaParcialDom(apuesta, options = {}) {
+  if (!apuesta) return false;
+  if (esCrearApuestaTipo(apuesta.tipoApuesta)) {
+    return actualizarFilaCrearApuestaDom(apuesta, options.actualizarSelecciones === true);
+  }
+
+  if (apuesta.tipoApuesta !== "simple") return false;
+  return actualizarCeldasResultadoApuestaDom(apuesta);
+}
+
 function actualizarResumenDiaDom(dia) {
   if (!dia) return;
 
@@ -6724,11 +6758,7 @@ function renderSnapshotProgramado() {
   });
 }
 
-function _render() {
-  const contenido = document.getElementById("contenido");
-  if (!contenido) return;
-
-  const apuestasRender = getApuestasFiltradas();
+function getDiasKeysRender(apuestasRender) {
   const diasKeys = [...new Set(apuestasRender.map(a => a.fecha || a.dia || "").filter(Boolean))].sort(
     (a, b) => new Date(a) - new Date(b)
   );
@@ -6736,6 +6766,245 @@ function _render() {
     diasKeys.push(ultimoDiaAgregado);
     diasKeys.sort((a, b) => new Date(a) - new Date(b));
   }
+  return diasKeys;
+}
+
+function getApuestasPorDiaPagina(apuestasRender, diasPagina) {
+  const diasPaginaSet = new Set(diasPagina);
+  const dias = {};
+  diasPagina.forEach(dia => {
+    dias[dia] = [];
+  });
+  apuestasRender.forEach(a => {
+    const diaKey = a.fecha || a.dia || "";
+    if (diasPaginaSet.has(diaKey)) {
+      dias[diaKey].push(a);
+    }
+  });
+  return dias;
+}
+
+function renderPaginacionHtml(totalPaginas, scrollAlTop = false) {
+  if (totalPaginas > 1) {
+    return `
+      <div class="paginacion">
+        <button onclick="cambiarPagina(-1, ${scrollAlTop})" ${paginaActual === 1 && !hayMasApuestas ? 'disabled' : ''}>⬅</button>
+        <span> Página ${paginaActual} / ${totalPaginas} </span>
+        <button onclick="cambiarPagina(1, ${scrollAlTop})" ${paginaActual === totalPaginas ? 'disabled' : ''}>➡</button>
+      </div>
+    `;
+  }
+
+  if (hayMasApuestas) {
+    return `
+      <div class="paginacion">
+        <button onclick="cambiarPagina(-1, ${scrollAlTop})">Cargar más historial</button>
+      </div>
+    `;
+  }
+
+  return "";
+}
+
+function renderResumenBankrollHtml(resumenYStats) {
+  const total = resumenYStats.resumen;
+  const roi = total.invertido ? (total.balance / total.invertido) * 100 : 0;
+  const resumenCasaTitulo = filtroCasaId === CASA_TODAS_ID ? "Todas las casas" : getCasaNombre(filtroCasaId);
+  const puedeEditarFinal = filtroCasaId !== CASA_TODAS_ID;
+
+  return `
+    <div class="page" id="bankrollResumen">
+      <h2>Bankroll - ${escapeHtml(resumenCasaTitulo)}</h2>
+
+      <p>Inicial:
+        <strong data-bankroll-inicial>$${total.bankrollInicial.toFixed(2)}</strong>
+      </p>
+
+      <p>Invertido:
+        <strong data-bankroll-invertido>$${total.invertido.toFixed(2)}</strong>
+      </p>
+
+      <p>Pendiente:
+        <strong data-bankroll-pendiente style="color: white;">$${total.pendiente.toFixed(2)}</strong>
+      </p>
+
+      <p>Retornado:
+        <strong data-bankroll-retornado>$${total.retornado.toFixed(2)}</strong>
+      </p>
+
+      <p>
+        Balance:
+        <strong data-bankroll-balance class="${total.balance >= 0 ? 'ganada' : 'perdida'}">
+          $${total.balance.toFixed(2)}
+        </strong>
+      </p>
+
+      ${isEditingFinal && puedeEditarFinal ? `
+        <p style="display: flex; align-items: center; gap: 8px; margin: 0 0 8px 0; padding: 0;">
+          <span style="font-size: 16px; font-weight: 600; color: #cbd5e1; margin: 0; line-height: 1;">Final:</span>
+          <input type="number" step="0.01" id="editBankrollFinalInput" value="${total.bankrollFinal.toFixed(2)}" style="width: 100px; height: 34px; background: #1e293b; color: white; border: 1px solid #475569; padding: 0 10px; border-radius: 6px; font-weight: bold; font-family: inherit; font-size: 14px; box-sizing: border-box; outline: none; margin: 0;">
+          <button onclick="window.guardarAjusteFinal()" style="display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); border-radius: 6px; color: #4ade80; cursor: pointer; font-size: 14px; box-sizing: border-box; transition: background 0.2s; margin: 0;" title="Guardar">💾</button>
+          <button onclick="window.setEditingFinal(false)" style="display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; color: #f87171; cursor: pointer; font-size: 14px; box-sizing: border-box; transition: background 0.2s; margin: 0;" title="Cancelar">❌</button>
+        </p>
+      ` : `
+        <p style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          Final:
+          <strong data-bankroll-final class="${total.bankrollFinal >= total.bankrollInicial ? 'ganada' : 'perdida'}">
+            $${total.bankrollFinal.toFixed(2)}
+          </strong>
+          ${puedeEditarFinal ? `<button onclick="window.setEditingFinal(true)" style="background: none; border: none; cursor: pointer; font-size: 14px; opacity: 0.6; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin: 0;" title="Ajustar saldo final">✏️</button>` : ""}
+        </p>
+        ${!puedeEditarFinal ? `
+          <p style="font-size: 12px; color: #94a3b8; margin-top: -4px; margin-bottom: 12px;">
+            Filtra una casa especifica para ajustar el saldo final.
+          </p>
+        ` : ""}
+        ${total.bankrollAjuste !== 0 ? `
+          <p style="font-size: 12px; color: #94a3b8; margin-top: -4px; margin-bottom: 12px; font-style: italic;">
+            (Ajuste manual: ${total.bankrollAjuste >= 0 ? '+' : ''}$${total.bankrollAjuste.toFixed(2)})
+          </p>
+        ` : ''}
+      `}
+
+      <p>
+        ROI:
+        <strong data-bankroll-roi class="${roi >= 0 ? 'ganada' : 'perdida'}">
+          ${roi.toFixed(2)}%
+        </strong>
+      </p>
+    </div>
+  `;
+}
+
+function renderEstadisticasHtml(stats) {
+  return `
+    <div class="page stats-box">
+      <h2>📊 Estadísticas</h2>
+
+      <div class="stat">
+        <div class="stat-label">
+          Ganadas ${stats.pGanadas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill ganada"
+               style="width:${stats.pGanadas}%"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">
+          Perdidas ${stats.pPerdidas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill perdida"
+               style="width:${stats.pPerdidas}%"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">
+          Nulas ${stats.pNulas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill nula"
+               style="width:${stats.pNulas}%"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">
+          Pendientes ${stats.pPendientes.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill pendiente"
+               style="width:${stats.pPendientes}%"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBotonNuevaApuesta() {
+  let old = document.getElementById("btnNuevaApuestaBottom");
+  if (old) old.remove();
+
+  const btn = document.createElement("button");
+  btn.id = "btnNuevaApuestaBottom";
+  btn.innerText = "+";
+
+  Object.assign(btn.style, {
+    position: "fixed",
+    right: "20px",
+    bottom: "90px",
+    width: "55px",
+    height: "55px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "28px",
+    fontWeight: "bold",
+    color: "black",
+    borderRadius: "50%",
+    border: "none",
+    cursor: "pointer",
+    background: "linear-gradient(135deg,#00ff88,#00c6ff)",
+    boxShadow: "0 0 15px rgba(0,255,136,0.6)",
+    zIndex: 9999
+  });
+
+  btn.onclick = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setTimeout(() => {
+      document.getElementById("fecha")?.focus();
+    }, 300);
+  };
+
+  document.body.appendChild(btn);
+}
+
+function programarScrollUltimoDiaAgregado() {
+  if (!ultimoDiaAgregado) return;
+
+  const intentarScroll = () => {
+    const elemento = document.querySelector(`[data-dia="${ultimoDiaAgregado}"]`);
+    if (elemento) {
+      const tabla = elemento.querySelector("table");
+      elemento.scrollIntoView({ block: "start" });
+      if (tabla) {
+        tabla.scrollIntoView({ block: "center" });
+      }
+      ultimoDiaAgregado = null;
+      ultimoDiaAgregadoIntentos = 0;
+      return;
+    }
+
+    ultimoDiaAgregadoIntentos++;
+    if (ultimoDiaAgregadoIntentos < 10) {
+      setTimeout(intentarScroll, 300);
+    } else {
+      ultimoDiaAgregado = null;
+      ultimoDiaAgregadoIntentos = 0;
+    }
+  };
+  setTimeout(intentarScroll, 300);
+}
+
+function postRenderCompleto() {
+  if (editandoId) {
+    const editCard = document.getElementById(`edit-tarjeta-${editandoId}`);
+    if (editCard) habilitarAutocompleteMlb(editCard);
+  }
+
+  renderBotonNuevaApuesta();
+  programarScrollUltimoDiaAgregado();
+}
+
+function _render() {
+  const contenido = document.getElementById("contenido");
+  if (!contenido) return;
+
+  const apuestasRender = getApuestasFiltradas();
+  const diasKeys = getDiasKeysRender(apuestasRender);
 
   const totalPaginas = Math.ceil(diasKeys.length / porPagina);
 
@@ -6750,20 +7019,11 @@ function _render() {
   const fin = inicio + porPagina;
 
   const diasPagina = diasKeys.slice(inicio, fin);
-  const diasPaginaSet = new Set(diasPagina);
-  const dias = {};
-  diasPagina.forEach(dia => {
-    dias[dia] = [];
-  });
-  apuestasRender.forEach(a => {
-    const diaKey = a.fecha || a.dia || "";
-    if (diasPaginaSet.has(diaKey)) {
-      dias[diaKey].push(a);
-    }
-  });
+  const dias = getApuestasPorDiaPagina(apuestasRender, diasPagina);
 
-  let html = "";
+  let html = renderPaginacionHtml(totalPaginas, false);
 
+  if (false) {
   if (totalPaginas > 1) {
     html += `
       <div class="paginacion">
@@ -6778,6 +7038,7 @@ function _render() {
         <button onclick="cambiarPagina(-1, false)">Cargar más historial</button>
       </div>
     `;
+  }
   }
 
   diasPagina.forEach(dia => {
@@ -7366,6 +7627,9 @@ function _render() {
     `;
   });
 
+  html += renderPaginacionHtml(totalPaginas, true);
+
+  if (false) {
   if (totalPaginas > 1) {
     html += `
       <div class="paginacion">
@@ -7381,7 +7645,13 @@ function _render() {
       </div>
     `;
   }
+  }
 
+  const resumenYStatsRender = calcularResumenYEstadisticas();
+  html += renderResumenBankrollHtml(resumenYStatsRender);
+  html += renderEstadisticasHtml(resumenYStatsRender.stats);
+
+  if (false) {
   const resumenYStats = calcularResumenYEstadisticas();
   const total = resumenYStats.resumen;
   const roi = total.invertido ? (total.balance / total.invertido) * 100 : 0;
@@ -7499,72 +7769,10 @@ function _render() {
     </div>
   `;
 
+  }
+
   contenido.innerHTML = html;
-  if (editandoId) {
-    const editCard = document.getElementById(`edit-tarjeta-${editandoId}`);
-    if (editCard) habilitarAutocompleteMlb(editCard);
-  }
-
-  let old = document.getElementById("btnNuevaApuestaBottom");
-  if (old) old.remove();
-
-  const btn = document.createElement("button");
-  btn.id = "btnNuevaApuestaBottom";
-  btn.innerText = "+";
-
-  Object.assign(btn.style, {
-    position: "fixed",
-    right: "20px",
-    bottom: "90px",
-    width: "55px",
-    height: "55px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "28px",
-    fontWeight: "bold",
-    color: "black",
-    borderRadius: "50%",
-    border: "none",
-    cursor: "pointer",
-    background: "linear-gradient(135deg,#00ff88,#00c6ff)",
-    boxShadow: "0 0 15px rgba(0,255,136,0.6)",
-    zIndex: 9999
-  });
-
-  btn.onclick = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(() => {
-      document.getElementById("fecha")?.focus();
-    }, 300);
-  };
-
-  document.body.appendChild(btn);
-
-  if (ultimoDiaAgregado) {
-      const intentarScroll = () => {
-        const elemento = document.querySelector(`[data-dia="${ultimoDiaAgregado}"]`);
-        if (elemento) {
-          const tabla = elemento.querySelector("table");
-          elemento.scrollIntoView({ block: "start" });
-          if (tabla) {
-            tabla.scrollIntoView({ block: "center" });
-          }
-          ultimoDiaAgregado = null;
-          ultimoDiaAgregadoIntentos = 0;
-          return;
-        }
-
-        ultimoDiaAgregadoIntentos++;
-        if (ultimoDiaAgregadoIntentos < 10) {
-          setTimeout(intentarScroll, 300);
-        } else {
-          ultimoDiaAgregado = null;
-          ultimoDiaAgregadoIntentos = 0;
-        }
-      };
-      setTimeout(intentarScroll, 300);
-  }
+  postRenderCompleto();
 }
 
 function obtenerFechaActualLocal() {
