@@ -1,4 +1,5 @@
 [build]
+  command = "printf '{\"version\":\"%s\",\"deployedAt\":\"%s\"}\\n' \"${COMMIT_REF:-local}\" \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > version.json"
   publish = "."
 
 [[redirects]]
@@ -7,26 +8,41 @@
   status = 200
 
 [[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
   for = "/*.html"
   [headers.values]
-    Cache-Control = "no-store, max-age=0"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "no-store, max-age=0"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
   for = "/*.js"
   [headers.values]
-    Cache-Control = "no-store, max-age=0"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
   for = "/script/*"
   [headers.values]
-    Cache-Control = "no-store, max-age=0"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
   for = "/estilos/*"
   [headers.values]
-    Cache-Control = "no-store, max-age=0"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"

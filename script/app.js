@@ -754,12 +754,16 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const DEPLOY_VERSION_URL = "/version.json";
+const DEPLOY_VERSION_CHECK_MS = 60 * 1000;
 const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
 let cargandoApuestas = false;
 let unsubscribeApuestas = null;
 let apuestasExtraPaginadas = [];
+let deployVersionActual = "";
+let deployVersionReloading = false;
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
@@ -783,6 +787,52 @@ function cederControlNavegador() {
 
     setTimeout(resolve, 0);
   });
+}
+
+async function obtenerVersionDeployActual() {
+  try {
+    const response = await fetch(`${DEPLOY_VERSION_URL}?t=${Date.now()}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache"
+      }
+    });
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    return String(data?.version || "").trim();
+  } catch (error) {
+    console.warn("No se pudo revisar la version desplegada:", error.message);
+    return "";
+  }
+}
+
+async function revisarVersionDeploy() {
+  if (deployVersionReloading) return;
+
+  const version = await obtenerVersionDeployActual();
+  if (!version) return;
+
+  if (!deployVersionActual) {
+    deployVersionActual = version;
+    return;
+  }
+
+  if (version !== deployVersionActual) {
+    deployVersionReloading = true;
+    window.location.reload();
+  }
+}
+
+function iniciarMonitorVersionDeploy() {
+  revisarVersionDeploy();
+  setInterval(() => {
+    if (paginaEstaVisible()) revisarVersionDeploy();
+  }, DEPLOY_VERSION_CHECK_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (paginaEstaVisible()) revisarVersionDeploy();
+  });
+  window.addEventListener("focus", revisarVersionDeploy);
 }
 
 function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
@@ -7867,6 +7917,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   crearMlbTeamsDatalist();
   limpiarCacheLocalObsoleto();
+  iniciarMonitorVersionDeploy();
   escucharCasas();
   escucharApuestas();
   document.getElementById("btnAgregar").onclick = agregarApuesta;
