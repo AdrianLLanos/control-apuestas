@@ -3450,6 +3450,32 @@ function formatMarcadorSegunEvento(evento = "", marcador) {
   return `${marcador.awayTeam} ${marcador.away} - ${marcador.home} ${marcador.homeTeam}`;
 }
 
+function formatHitsMlbSegunEvento(evento = "", marcador) {
+  if (!marcador || marcador.homeHits === null || marcador.awayHits === null) return "";
+
+  const equiposEvento = extraerEquiposEvento(evento);
+  const totalHits = marcador.totalHits ?? (marcador.homeHits + marcador.awayHits);
+
+  const crearTexto = (equipoA, hitsA, equipoB, hitsB) =>
+    `${equipoA} Hits: ${hitsA} - ${equipoB} Hits: ${hitsB} \u00b7 Total hits: ${totalHits}`;
+
+  if (equiposEvento.length < 2) {
+    return crearTexto(marcador.awayTeam, marcador.awayHits, marcador.homeTeam, marcador.homeHits);
+  }
+
+  const [equipo1Evento] = equiposEvento.slice(0, 2);
+  const equipo1Norm = normalizarClaveMlb(equipo1Evento);
+  const homeNorm = normalizarClaveMlb(marcador.homeTeam);
+  const awayNorm = normalizarClaveMlb(marcador.awayTeam);
+  const equipo1EsHome = homeNorm === equipo1Norm || homeNorm.includes(equipo1Norm) || equipo1Norm.includes(homeNorm);
+  const equipo1EsAway = awayNorm === equipo1Norm || awayNorm.includes(equipo1Norm) || equipo1Norm.includes(awayNorm);
+
+  if (equipo1EsHome) return crearTexto(marcador.homeTeam, marcador.homeHits, marcador.awayTeam, marcador.awayHits);
+  if (equipo1EsAway) return crearTexto(marcador.awayTeam, marcador.awayHits, marcador.homeTeam, marcador.homeHits);
+
+  return crearTexto(marcador.awayTeam, marcador.awayHits, marcador.homeTeam, marcador.homeHits);
+}
+
 function getMarcadorMlb(game) {
   const home = Number(game?.teams?.home?.score ?? game?.linescore?.teams?.home?.runs);
   const away = Number(game?.teams?.away?.score ?? game?.linescore?.teams?.away?.runs);
@@ -3699,7 +3725,17 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         const marcadorTexto = marcador
           ? formatMarcadorSegunEvento(ev, marcador)
           : autoMlb.marcador;
-        if (autoMlb.gamePk !== game.gamePk || autoMlb.estadoJuego !== estadoJuego || autoMlb.marcador !== marcadorTexto || autoMlb.fechaJuego !== game.gameDate) {
+        const marcadorHitsTexto = marcador
+          ? formatHitsMlbSegunEvento(ev, marcador)
+          : autoMlb.marcadorHits;
+        const esMercadoHits = autoMlb.mercado === "total_hits";
+        if (
+          autoMlb.gamePk !== game.gamePk ||
+          autoMlb.estadoJuego !== estadoJuego ||
+          autoMlb.marcador !== marcadorTexto ||
+          (esMercadoHits && autoMlb.marcadorHits !== marcadorHitsTexto) ||
+          autoMlb.fechaJuego !== game.gameDate
+        ) {
           huboCambioMetadata = true;
         }
         return {
@@ -3710,14 +3746,17 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
             estadoJuego,
             estadoEspecial: null,
             marcador: marcadorTexto,
+            marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
             totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
-            totalHits: autoMlb.mercado === "total_hits" ? totalObjetivo : autoMlb.totalHits,
+            totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
             fechaJuego: game.gameDate
           }
         };
       }
 
       const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
+      const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
+      const esMercadoHits = autoMlb.mercado === "total_hits";
       const siguiente = {
         ...sel,
         estado: evaluacion.estado,
@@ -3727,15 +3766,16 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           estadoEspecial: null,
           marcador: formatMarcadorSegunEvento(ev, evaluacion.marcador),
+          marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
           totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
-          totalHits: autoMlb.mercado === "total_hits" ? totalObjetivo : autoMlb.totalHits,
+          totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
           fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
         }
       };
 
       if ((sel.estado || "pendiente") !== evaluacion.estado) huboCambio = true;
-      if (autoMlb.sincronizadoEn === undefined || autoMlb.fechaJuego !== game.gameDate) huboCambioMetadata = true;
+      if (autoMlb.sincronizadoEn === undefined || autoMlb.fechaJuego !== game.gameDate || (esMercadoHits && autoMlb.marcadorHits !== marcadorHitsTexto)) huboCambioMetadata = true;
       return siguiente;
     });
 
@@ -4059,11 +4099,12 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     ? ` · ${escapeHtml(carrerasLabel)}: ${escapeHtml(totalCarreras)}`
     : "";
   const hitsLabel = autoMlb.seleccionEquipo ? `Hits de ${autoMlb.seleccionEquipo}` : "Hits";
-  const hitsHtml = autoMlb.mercado === "total_hits" && !Number.isNaN(totalHits)
-    ? ` \u00b7 ${escapeHtml(hitsLabel)}: ${escapeHtml(totalHits)}`
-    : "";
-  const marcadorHtml = marcador
-    ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${carrerasHtml}${hitsHtml}</div>`
+  const marcadorVisible = autoMlb.mercado === "total_hits"
+    ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcador))
+    : marcador;
+  const marcadorExtra = autoMlb.mercado === "total_hits" ? "" : carrerasHtml;
+  const marcadorHtml = marcadorVisible
+    ? `<div class="auto-mlb-score">${escapeHtml(marcadorVisible)}${marcadorExtra}</div>`
     : "";
 
   let horaHtml = "";
