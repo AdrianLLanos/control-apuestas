@@ -3488,8 +3488,48 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
   }) || null;
 }
 
+function getOrdenMarcadorMlbSegunEvento(evento = "", marcador) {
+  if (!marcador) return null;
+  const equiposEvento = extraerEquiposEvento(evento);
+  if (equiposEvento.length < 2) return null;
+
+  const [equipo1Evento, equipo2Evento] = equiposEvento.slice(0, 2);
+  const equipo1EsHome = equiposMlbCoinciden(equipo1Evento, marcador.homeTeam);
+  const equipo1EsAway = equiposMlbCoinciden(equipo1Evento, marcador.awayTeam);
+  const equipo2EsHome = equiposMlbCoinciden(equipo2Evento, marcador.homeTeam);
+  const equipo2EsAway = equiposMlbCoinciden(equipo2Evento, marcador.awayTeam);
+
+  if (equipo1EsHome && equipo2EsAway) {
+    return {
+      equipoA: marcador.homeTeam,
+      equipoB: marcador.awayTeam,
+      scoreA: marcador.home,
+      scoreB: marcador.away,
+      hitsA: marcador.homeHits,
+      hitsB: marcador.awayHits
+    };
+  }
+
+  if (equipo1EsAway && equipo2EsHome) {
+    return {
+      equipoA: marcador.awayTeam,
+      equipoB: marcador.homeTeam,
+      scoreA: marcador.away,
+      scoreB: marcador.home,
+      hitsA: marcador.awayHits,
+      hitsB: marcador.homeHits
+    };
+  }
+
+  return null;
+}
+
 function formatMarcadorSegunEvento(evento = "", marcador) {
   if (!marcador) return null;
+  const ordenEvento = getOrdenMarcadorMlbSegunEvento(evento, marcador);
+  if (ordenEvento) {
+    return `${ordenEvento.equipoA} ${ordenEvento.scoreA} - ${ordenEvento.scoreB} ${ordenEvento.equipoB}`;
+  }
   
   // Extraer equipos del evento en el orden que aparecen
   const equiposEvento = extraerEquiposEvento(evento);
@@ -3528,6 +3568,8 @@ function formatHitsMlbSegunEvento(evento = "", marcador) {
 
   const crearTexto = (equipoA, hitsA, equipoB, hitsB) =>
     `${equipoA} Hits: ${hitsA} - ${equipoB} Hits: ${hitsB} \u00b7 Total hits: ${totalHits}`;
+  const ordenEvento = getOrdenMarcadorMlbSegunEvento(evento, marcador);
+  if (ordenEvento) return crearTexto(ordenEvento.equipoA, ordenEvento.hitsA, ordenEvento.equipoB, ordenEvento.hitsB);
 
   if (equiposEvento.length < 2) {
     return crearTexto(marcador.awayTeam, marcador.awayHits, marcador.homeTeam, marcador.homeHits);
@@ -4154,9 +4196,36 @@ async function sincronizarResultadosMlb(silencioso = false) {
   }
 }
 
+function reordenarMarcadorTextoMlb(marcadorTexto = "", equipos = []) {
+  if (!marcadorTexto || !Array.isArray(equipos) || equipos.length < 2) return marcadorTexto;
+
+  const match = String(marcadorTexto).match(/^(.+?)\s+(\d+)\s*[-–—]\s*(\d+)\s+(.+?)(\s+·.*)?$/);
+  if (!match) return marcadorTexto;
+
+  const equipoIzq = match[1].trim();
+  const scoreIzq = match[2];
+  const scoreDer = match[3];
+  const equipoDer = match[4].trim();
+  const extra = match[5] || "";
+  const [equipoA, equipoB] = equipos.slice(0, 2);
+
+  const izquierdaEsA = equiposMlbCoinciden(equipoIzq, equipoA);
+  const derechaEsB = equiposMlbCoinciden(equipoDer, equipoB);
+  if (izquierdaEsA && derechaEsB) return marcadorTexto;
+
+  const izquierdaEsB = equiposMlbCoinciden(equipoIzq, equipoB);
+  const derechaEsA = equiposMlbCoinciden(equipoDer, equipoA);
+  if (izquierdaEsB && derechaEsA) {
+    return `${equipoDer} ${scoreDer} - ${scoreIzq} ${equipoIzq}${extra}`;
+  }
+
+  return marcadorTexto;
+}
+
 function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
+  const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
   const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego);
   const estadoPrevio = (esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego)) || juegoPendientePorFecha;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
@@ -4171,8 +4240,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
   const hitsLabel = autoMlb.seleccionEquipo ? `Hits de ${autoMlb.seleccionEquipo}` : "Hits";
   const marcadorVisible = autoMlb.mercado === "total_hits"
-    ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcador))
-    : marcador;
+    ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
+    : marcadorOrdenado;
   const marcadorExtra = autoMlb.mercado === "total_hits" ? "" : carrerasHtml;
   const marcadorHtml = marcadorVisible
     ? `<div class="auto-mlb-score">${escapeHtml(marcadorVisible)}${marcadorExtra}</div>`
