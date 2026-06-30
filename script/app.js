@@ -3342,6 +3342,11 @@ function fechaJuegoYaPaso(fechaJuegoStr = "") {
   return Date.now() >= fechaJuego.getTime();
 }
 
+function debeMostrarHorarioJuego(fechaJuego = "", estadoJuego = "") {
+  if (!fechaJuego) return false;
+  return (esEstadoJuegoPrevio(estadoJuego) || !fechaJuegoYaPaso(fechaJuego)) && !fechaJuegoYaPaso(fechaJuego);
+}
+
 function getAutoMlbFechasJuego(apuesta = {}) {
   return (apuesta.jugadas || []).flatMap(jugada => {
     const fechas = [];
@@ -4247,8 +4252,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const marcador = autoMlb.marcador;
   const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
-  const juegoPendientePorFecha = autoMlb.fechaJuego && !fechaJuegoYaPaso(autoMlb.fechaJuego);
-  const estadoPrevio = (esEstadoJuegoPrevio(autoMlb.estadoJuego) && !fechaJuegoYaPaso(autoMlb.fechaJuego)) || juegoPendientePorFecha;
+  const estadoPrevio = debeMostrarHorarioJuego(autoMlb.fechaJuego, autoMlb.estadoJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
@@ -4269,7 +4273,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (showAutoMeta && autoMlb.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
+  if (showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -6479,10 +6483,9 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
-    const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
-    const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
+    const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     let horaHtml = "";
-    if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
+    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -6515,10 +6518,9 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const totalTarjetas = futbolAuto.totalTarjetas;
     const tarjetasEquipo = futbolAuto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
-    const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
-    const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
+    const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     let horaHtml = "";
-    if (showAutoMeta && futbolAuto.fechaJuego && (estadoPrevio || mostrarHoraConMarcador)) {
+    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -6548,9 +6550,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   let horaHtml = "";
-  const juegoPendientePorFecha = futbolAuto.fechaJuego && !fechaJuegoYaPaso(futbolAuto.fechaJuego);
-  const estadoPrevio = (esEstadoJuegoPrevio(futbolAuto.estadoJuego) && !fechaJuegoYaPaso(futbolAuto.fechaJuego)) || juegoPendientePorFecha;
-  if (showAutoMeta && futbolAuto.fechaJuego && (!marcadorActual || estadoPrevio || mostrarHoraConMarcador)) {
+  const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
+  if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
