@@ -7050,8 +7050,8 @@ function esCrearApuestaTipo(tipo) {
 }
 
 function getReglaTiempoFutbolHtml(apuesta = {}) {
-  if (!apuestaPareceFutbol(apuesta)) return "";
-  return `<div class="football-time-rule">en tiempo reglamentario</div>`;
+  if (!apuestaTieneAutoFutbol(apuesta)) return "";
+  return `<div class="football-time-rule">En Tiempo Reglamentario</div>`;
 }
 
 function getResultadoColor(resultado = "pendiente") {
