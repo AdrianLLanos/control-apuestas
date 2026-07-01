@@ -40,6 +40,13 @@ import {
   mostrarModalValidacion,
   registrarModalValidacionGlobal
 } from "./validation-modal.js";
+import {
+  combinarAutoMlbConDetectado,
+  debeForzarIconoGol,
+  debeMostrarReglaTiempoFutbol,
+  esContextoMlb,
+  quitarAutoFutbolSiEsMlb
+} from "./sports/market-conflicts.js?v=1.0";
 
 let paginaActual = 1;
 const porPagina = 1;
@@ -1449,6 +1456,34 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
 
+  if (autoMlb?.mercado === "total_hits") {
+    return {
+      titulo: formatearTituloTotalHitsMlb(),
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
+  if (autoMlb?.mercado === "total_carreras") {
+    return {
+      titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
+  if (autoMlb?.mercado === "handicap") {
+    return {
+      titulo: "HÃ¡ndicap",
+      jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
+    };
+  }
+
+  if (autoMlb?.mercado === "ganador_partido") {
+    return {
+      titulo: "Ganador del partido",
+      jugada: autoMlb.seleccionEquipo || limpiarEquipoGanador(jugadaActual || textoCompleto, evento)
+    };
+  }
+
   if (autoFutbol?.mercado === "total_goles") {
     return {
       titulo: "Total de goles",
@@ -1481,20 +1516,6 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: "Hándicap",
       jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
-    };
-  }
-
-  if (autoMlb?.mercado === "total_hits") {
-    return {
-      titulo: formatearTituloTotalHitsMlb(),
-      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
-    };
-  }
-
-  if (autoMlb?.mercado === "total_carreras") {
-    return {
-      titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
-      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
     };
   }
 
@@ -1532,6 +1553,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: formatearTituloTotalCarrerasMlb(equipoTotal),
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, [])
+    };
+  }
+
+  if (esContextoMlb(evento, seleccion, {}, detectarEquiposMlb) && /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado) && extraerNumeroJugada(textoCompleto) !== null) {
+    return {
+      titulo: formatearTituloTotalCarrerasMlb(detectarEquipoTotalMlb(textoCompleto, evento)),
+      jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["gol", "goles"])
     };
   }
 
@@ -3827,16 +3855,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         titulo: sel.titulo || "",
         jugada: sel.jugada || ""
       });
-      const autoMlb = autoMlbOriginal && autoMlbDetectado
-        ? {
-            ...autoMlbOriginal,
-            mercado: autoMlbDetectado.mercado || autoMlbOriginal.mercado,
-            equipos: autoMlbDetectado.equipos || autoMlbOriginal.equipos,
-            seleccionEquipo: autoMlbDetectado.seleccionEquipo || autoMlbOriginal.seleccionEquipo,
-            tipoTotal: autoMlbDetectado.tipoTotal || autoMlbOriginal.tipoTotal,
-            linea: autoMlbDetectado.linea ?? autoMlbOriginal.linea
-          }
-        : (autoMlbOriginal || autoMlbDetectado);
+      const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
 
       if (
@@ -4067,16 +4086,7 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
         titulo: sel.titulo || "",
         jugada: sel.jugada || ""
       });
-      const autoMlb = autoMlbOriginal && autoMlbDetectado
-        ? {
-          ...autoMlbOriginal,
-          mercado: autoMlbDetectado.mercado || autoMlbOriginal.mercado,
-          equipos: autoMlbDetectado.equipos || autoMlbOriginal.equipos,
-          seleccionEquipo: autoMlbDetectado.seleccionEquipo || autoMlbOriginal.seleccionEquipo,
-          tipoTotal: autoMlbDetectado.tipoTotal || autoMlbOriginal.tipoTotal,
-          linea: autoMlbDetectado.linea ?? autoMlbOriginal.linea
-        }
-        : (autoMlbOriginal || autoMlbDetectado);
+      const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
 
       const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
@@ -4365,12 +4375,12 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
       }
     }
     : selectionMlbCompleta;
-  const marcadorFutbol = selectionConFallbackFutbol?.autoFutbol
-    ? getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options)
-    : "";
   const tieneAutoFutbol = Boolean(selectionConFallbackFutbol?.autoFutbol);
   const tieneContextoMlb = (selectionMlbCompleta?.autoMlb?.equipos || []).length >= 2 ||
     (jugada?.autoMlb?.equipos || []).length >= 2;
+  const marcadorFutbol = selectionConFallbackFutbol?.autoFutbol && !tieneContextoMlb
+    ? getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options)
+    : "";
   const marcadorMlb = tieneAutoFutbol && !tieneContextoMlb
     ? ""
     : getAutoMlbMarcadorHtml(selectionMlbCompleta, options);
@@ -6937,14 +6947,8 @@ function getAutoMetaKey(selection = {}, jugada = {}, fallbackFechaJuego = "") {
 }
 
 function prepararSeleccionAutoFutbolRender(selection = {}, jugada = {}, evento = "") {
-  const tieneAutoMlb = Boolean(selection?.autoMlb || jugada?.autoMlb);
-  const tieneContextoMlb = detectarEquiposMlb(evento).length >= 2 ||
-    (selection?.autoMlb?.equipos || []).length >= 2 ||
-    (jugada?.autoMlb?.equipos || []).length >= 2;
-
-  if (tieneAutoMlb && tieneContextoMlb && !selection?.autoFutbol && !jugada?.autoFutbol) {
-    return selection;
-  }
+  const selectionSinChoqueMlb = quitarAutoFutbolSiEsMlb(selection, jugada, evento, detectarEquiposMlb);
+  if (selectionSinChoqueMlb !== selection) return selectionSinChoqueMlb;
 
   const autoDetectado = crearAutoFutbolSeleccion({
     evento,
@@ -7094,7 +7098,7 @@ function esCrearApuestaTipo(tipo) {
 }
 
 function getReglaTiempoFutbolHtml(apuesta = {}) {
-  if (!apuestaTieneAutoFutbol(apuesta)) return "";
+  if (!debeMostrarReglaTiempoFutbol(apuesta, { apuestaPareceMlb, apuestaTieneAutoFutbol })) return "";
   return `<div class="football-time-rule">En Tiempo Reglamentario</div>`;
 }
 
@@ -7662,7 +7666,8 @@ function _render() {
               const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
               const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
-              const forceGoalIcon = isSimpleOptionBet || tituloNormalizado === "total de goles";
+              const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
+              const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
               const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
               const forceCardIcon = tituloNormalizado === "total tarjetas";
               const formattedTitulo = formatTextWithMlbTeams(detalleSeleccion.titulo);
@@ -7761,7 +7766,8 @@ function _render() {
               const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
               const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
-              const forceGoalIcon = isSimpleOptionBet || tituloNormalizado === "total de goles";
+              const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
+              const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
               const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
               const forceCardIcon = tituloNormalizado === "total tarjetas";
               const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
