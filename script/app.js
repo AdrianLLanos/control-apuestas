@@ -1286,16 +1286,18 @@ function extraerLineaTotal(texto = "", palabras = []) {
 }
 
 function detectarEquipoTotalMlb(texto = "", evento = "") {
+  const equiposEvento = detectarEquiposMlb(evento);
+  const equipoExplicito = detectarEquipoMlbEnTexto(texto, equiposEvento.length >= 2 ? equiposEvento : []);
+  if (equipoExplicito) return equipoExplicito;
+
   const equiposTexto = detectarEquiposMlb(texto);
   if (equiposTexto.length === 1) {
-    const equiposEvento = detectarEquiposMlb(evento);
     if (equiposEvento.length < 2 || equiposEvento.some(equipo => normalizarClaveMlb(equipo) === normalizarClaveMlb(equiposTexto[0]))) {
       return equiposTexto[0];
     }
     return "";
   }
 
-  const equiposEvento = detectarEquiposMlb(evento);
   if (equiposEvento.length === 1) return equiposEvento[0];
   return "";
 }
@@ -1697,6 +1699,26 @@ function detectarEquiposMlb(texto = "") {
   return [...new Set(encontrados)];
 }
 
+function detectarEquipoMlbEnTexto(texto = "", equiposPermitidos = []) {
+  const normalizado = normalizarClaveMlb(texto);
+  if (!normalizado) return "";
+  const permitidos = (equiposPermitidos || []).map(normalizarClaveMlb).filter(Boolean);
+
+  const candidatos = MLB_TEAMS
+    .filter(team => permitidos.length === 0 || permitidos.includes(normalizarClaveMlb(team.name)))
+    .map(team => {
+      const aliases = [team.name, ...(team.aliases || [])]
+        .filter(alias => alias && !/^[A-Z]{2,3}$/.test(alias))
+        .sort((a, b) => b.length - a.length);
+      const match = aliases.find(alias => textoContieneAliasMlb(normalizado, alias));
+      return match ? { team: team.name, matchLength: normalizarClaveMlb(match).length } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.matchLength - a.matchLength);
+
+  return candidatos[0]?.team || "";
+}
+
 function detectarLadoTotal(texto = "") {
   const normalizado = normalizarTextoMercado(texto);
   const numeroConSigno = String(texto).replace(",", ".").match(/-?\d+(?:\.\d+)?/);
@@ -1743,7 +1765,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     const linea = extraerNumeroJugada(textoCompleto);
     const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
-    const seleccionEquipo = equiposJugada.length === 1 ? equiposJugada[0] : null;
+    const seleccionEquipo = detectarEquipoMlbEnTexto(textoCompleto, equiposEvento) || (equiposJugada.length === 1 ? equiposJugada[0] : null);
     if (linea !== null && tipoTotal) {
       return {
         deporte: "mlb",
@@ -1774,7 +1796,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     const linea = extraerNumeroJugada(textoCompleto);
     const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
-    const seleccionEquipo = equiposJugada.length === 1 ? equiposJugada[0] : null;
+    const seleccionEquipo = detectarEquipoMlbEnTexto(textoCompleto, equiposEvento) || (equiposJugada.length === 1 ? equiposJugada[0] : null);
     if (linea !== null && tipoTotal) {
       return {
         deporte: "mlb",
