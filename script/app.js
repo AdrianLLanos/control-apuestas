@@ -4494,6 +4494,7 @@ const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
+const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
 const FOOTBALL_MARKET_TIME_SCOPE = "90_minutos_mas_adicional";
 const apiSportsFootballCache = new Map();
 
@@ -5313,6 +5314,21 @@ function juegoFutbolFinalizado(game) {
   return status.completed === true || status.state === "post" || /\bfinal\b/i.test(status.description || status.detail || "");
 }
 
+function juegoFutbolReglamentarioProbablementeTerminado(game) {
+  if (juegoFutbolFinalizado(game)) return true;
+  if (juegoFutbolNoIniciado(game)) return false;
+  if (!getMarcadorFutbol(game)) return false;
+
+  const minuto = getMinutoJuegoFutbol(game);
+  if (minuto >= 90 && !juegoFutbolEnCurso(game)) return true;
+
+  const fechaJuego = getFechaJuegoFutbol(game);
+  if (!fechaJuego) return false;
+  const inicio = new Date(fechaJuego);
+  if (Number.isNaN(inicio.getTime())) return false;
+  return Date.now() - inicio.getTime() >= FOOTBALL_REGULATION_CLOSE_GRACE_MS;
+}
+
 function juegoFutbolNoIniciado(game) {
   const fechaJuego = getFechaJuegoFutbol(game);
   const horaProgramadaPaso = fechaJuego ? fechaJuegoYaPaso(fechaJuego) : false;
@@ -5858,7 +5874,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (juegoFutbolNoIniciado(game)) return null;
   const marcador = getMarcadorFutbol(game);
   if (!marcador) return null;
-  const finalizado = juegoFutbolFinalizado(game);
+  const finalizado = juegoFutbolReglamentarioProbablementeTerminado(game);
 
   if (autoFutbol.mercado === "ganador_partido") {
     if (!finalizado) return null;
@@ -6260,7 +6276,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         )
         : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
-      const finalizado = game ? juegoFutbolFinalizado(game) : false;
+      const finalizado = game ? juegoFutbolReglamentarioProbablementeTerminado(game) : false;
       const totalIrreversible = marcador && totalAuto && (
         finalizado ||
         (totalAuto.tipoTotal === "over" && marcador.total > Number(totalAuto.linea)) ||
