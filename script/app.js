@@ -1472,7 +1472,7 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 
   if (autoMlb?.mercado === "handicap") {
     return {
-      titulo: "HÃ¡ndicap",
+      titulo: "Hándicap",
       jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
     };
   }
