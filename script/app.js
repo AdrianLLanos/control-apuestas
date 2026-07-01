@@ -1444,9 +1444,38 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const tituloActual = limpiarEspaciosMercado(seleccion.titulo || "");
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
+  const autoFutbol = seleccion.autoFutbol || null;
   const autoMlb = seleccion.autoMlb || null;
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
+
+  if (autoFutbol?.mercado === "total_goles") {
+    return {
+      titulo: "Total de goles",
+      jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
+    };
+  }
+
+  if (autoFutbol?.mercado === "total_corners") {
+    return {
+      titulo: "Total tiros de esquina",
+      jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
+    };
+  }
+
+  if (autoFutbol?.mercado === "total_tarjetas") {
+    return {
+      titulo: "Total tarjetas",
+      jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
+    };
+  }
+
+  if (autoFutbol?.mercado === "doble_oportunidad") {
+    return {
+      titulo: "Doble oportunidad",
+      jugada: limpiarDobleOportunidad(jugadaActual || textoCompleto, evento)
+    };
+  }
 
   if (esHandicapMlbTexto(textoCompleto)) {
     return {
@@ -4336,9 +4365,17 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
       }
     }
     : selectionMlbCompleta;
-  const marcadorSeleccion = getAutoMlbMarcadorHtml(selectionMlbCompleta, options) || getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options);
+  const marcadorFutbol = selectionConFallbackFutbol?.autoFutbol
+    ? getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options)
+    : "";
+  const tieneAutoFutbol = Boolean(selectionConFallbackFutbol?.autoFutbol);
+  const tieneContextoMlb = (selectionMlbCompleta?.autoMlb?.equipos || []).length >= 2 ||
+    (jugada?.autoMlb?.equipos || []).length >= 2;
+  const marcadorMlb = tieneAutoFutbol && !tieneContextoMlb
+    ? ""
+    : getAutoMlbMarcadorHtml(selectionMlbCompleta, options);
+  const marcadorSeleccion = marcadorFutbol || marcadorMlb;
   if (marcadorSeleccion) return marcadorSeleccion;
-  if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   if (jugada?.autoFutbol) {
     const fechaJuego = jugada.autoFutbol.fechaJuego || options.fallbackFechaJuego;
     return getAutoFutbolMarcadorHtml({
@@ -4348,6 +4385,7 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
       }
     }, options);
   }
+  if (jugada?.autoMlb) return getAutoMlbMarcadorHtml({ autoMlb: jugada.autoMlb }, options);
   return "";
 }
 
@@ -6899,7 +6937,12 @@ function getAutoMetaKey(selection = {}, jugada = {}, fallbackFechaJuego = "") {
 }
 
 function prepararSeleccionAutoFutbolRender(selection = {}, jugada = {}, evento = "") {
-  if (selection?.autoMlb || jugada?.autoMlb) {
+  const tieneAutoMlb = Boolean(selection?.autoMlb || jugada?.autoMlb);
+  const tieneContextoMlb = detectarEquiposMlb(evento).length >= 2 ||
+    (selection?.autoMlb?.equipos || []).length >= 2 ||
+    (jugada?.autoMlb?.equipos || []).length >= 2;
+
+  if (tieneAutoMlb && tieneContextoMlb && !selection?.autoFutbol && !jugada?.autoFutbol) {
     return selection;
   }
 
@@ -7616,7 +7659,8 @@ function _render() {
                 ? `<div style="font-size:14px; color:#ffffff; font-weight:600; margin-bottom:2px;">${formattedEvText}${matchCuotaText}</div>`
                 : "";
 
-              const detalleSeleccion = detectarDetalleSeleccionCrear({ ...sel, evento: evText });
+              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+              const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
               const forceGoalIcon = isSimpleOptionBet || tituloNormalizado === "total de goles";
               const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
@@ -7625,7 +7669,6 @@ function _render() {
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
-              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
               const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, selAutoRender, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: mostrarAutoMeta,
@@ -7715,7 +7758,8 @@ function _render() {
               let styleMod = "";
               if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
-              const detalleSeleccion = detectarDetalleSeleccionCrear({ ...sel, evento: evText });
+              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+              const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
               const forceGoalIcon = isSimpleOptionBet || tituloNormalizado === "total de goles";
               const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
@@ -7724,7 +7768,6 @@ function _render() {
               const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
-              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
               const mostrarAutoMeta = debeMostrarAutoMetaAlFinal(autoMetaConteos, selAutoRender, j, fallbackFechaJuegoApuesta);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: mostrarAutoMeta,
