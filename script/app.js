@@ -4294,7 +4294,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoPrevio = debeMostrarHorarioJuego(autoMlb.fechaJuego, autoMlb.estadoJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
-  const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(autoMlb) : "";
+  const showFinalStatus = options.showFinalStatus !== false;
+  const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(autoMlb) : "";
   const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   const totalCarreras = Number(autoMlb.totalCarreras);
   const totalHits = Number(autoMlb.totalHits);
@@ -6570,7 +6571,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
   const showAutoMeta = options.showAutoMeta !== false;
-  const estadoFinalizadoHtml = showAutoMeta ? getEstadoFinalizadoHtml(futbolAuto) : "";
+  const showFinalStatus = options.showFinalStatus !== false;
+  const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(futbolAuto) : "";
   const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
@@ -7684,6 +7686,7 @@ function _render() {
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: true,
+                showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -7783,6 +7786,7 @@ function _render() {
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: true,
+                showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
