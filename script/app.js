@@ -1451,38 +1451,11 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const tituloActual = limpiarEspaciosMercado(seleccion.titulo || "");
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
+  const contextoFutbolSinMlb = extraerEquiposEventoFutbol(evento).length >= 2 && detectarEquiposMlb(evento).length < 2;
   const autoFutbol = seleccion.autoFutbol || null;
-  const autoMlb = seleccion.autoMlb || null;
+  const autoMlb = contextoFutbolSinMlb ? null : (seleccion.autoMlb || null);
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
-
-  if (autoMlb?.mercado === "total_hits") {
-    return {
-      titulo: formatearTituloTotalHitsMlb(),
-      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
-    };
-  }
-
-  if (autoMlb?.mercado === "total_carreras") {
-    return {
-      titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
-      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
-    };
-  }
-
-  if (autoMlb?.mercado === "handicap") {
-    return {
-      titulo: "Hándicap",
-      jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
-    };
-  }
-
-  if (autoMlb?.mercado === "ganador_partido") {
-    return {
-      titulo: "Ganador del partido",
-      jugada: autoMlb.seleccionEquipo || limpiarEquipoGanador(jugadaActual || textoCompleto, evento)
-    };
-  }
 
   if (autoFutbol?.mercado === "total_goles") {
     return {
@@ -1509,6 +1482,34 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: "Doble oportunidad",
       jugada: limpiarDobleOportunidad(jugadaActual || textoCompleto, evento)
+    };
+  }
+
+  if (autoMlb?.mercado === "total_hits") {
+    return {
+      titulo: formatearTituloTotalHitsMlb(),
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
+  if (autoMlb?.mercado === "total_carreras") {
+    return {
+      titulo: formatearTituloTotalCarrerasMlb(autoMlb.seleccionEquipo),
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
+    };
+  }
+
+  if (autoMlb?.mercado === "handicap") {
+    return {
+      titulo: "Hándicap",
+      jugada: limpiarHandicap(jugadaActual || textoCompleto, evento)
+    };
+  }
+
+  if (autoMlb?.mercado === "ganador_partido") {
+    return {
+      titulo: "Ganador del partido",
+      jugada: autoMlb.seleccionEquipo || limpiarEquipoGanador(jugadaActual || textoCompleto, evento)
     };
   }
 
@@ -4432,8 +4433,10 @@ function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {})
     }
     : selectionAutoCompleta;
   const tieneAutoFutbol = Boolean(selectionConFallbackFutbol?.autoFutbol);
-  const tieneContextoMlb = (selectionAutoCompleta?.autoMlb?.equipos || []).length >= 2 ||
-    (jugada?.autoMlb?.equipos || []).length >= 2;
+  const tieneContextoMlb = !tieneAutoFutbol && (
+    (selectionAutoCompleta?.autoMlb?.equipos || []).length >= 2 ||
+    (jugada?.autoMlb?.equipos || []).length >= 2
+  );
   const marcadorFutbol = selectionConFallbackFutbol?.autoFutbol && !tieneContextoMlb
     ? getAutoFutbolMarcadorHtml(selectionConFallbackFutbol, options)
     : "";
@@ -6994,16 +6997,23 @@ function formatTextWithCorners(texto, forceGoalIcon = false, forceCornerIcon = f
 }
 
 function prepararSeleccionAutoFutbolRender(selection = {}, jugada = {}, evento = "") {
-  const selectionSinChoqueMlb = quitarAutoFutbolSiEsMlb(selection, jugada, evento, detectarEquiposMlb);
-  if (selectionSinChoqueMlb !== selection) return selectionSinChoqueMlb;
+  const contextoFutbolSinMlb = extraerEquiposEventoFutbol(evento).length >= 2 && detectarEquiposMlb(evento).length < 2;
+  const selectionBase = contextoFutbolSinMlb
+    ? (() => {
+      const { autoMlb, ...sinAutoMlb } = selection;
+      return sinAutoMlb;
+    })()
+    : selection;
+  const selectionSinChoqueMlb = quitarAutoFutbolSiEsMlb(selectionBase, jugada, evento, detectarEquiposMlb);
+  if (selectionSinChoqueMlb !== selectionBase) return selectionSinChoqueMlb;
 
   const autoDetectado = crearAutoFutbolSeleccion({
     evento,
-    titulo: selection.titulo || "",
-    jugada: selection.jugada || selection.jug || ""
+    titulo: selectionBase.titulo || "",
+    jugada: selectionBase.jugada || selectionBase.jug || ""
   });
-  const autoFutbol = combinarAutoFutbolConDetectado(selection.autoFutbol || jugada.autoFutbol || null, autoDetectado);
-  return autoFutbol ? { ...selection, autoFutbol } : selection;
+  const autoFutbol = combinarAutoFutbolConDetectado(selectionBase.autoFutbol || jugada.autoFutbol || null, autoDetectado);
+  return autoFutbol ? { ...selectionBase, autoFutbol } : selectionBase;
 }
 
 function getEstadoSeleccionRender(selection = {}, jugada = {}, evento = "") {
