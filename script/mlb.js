@@ -1,4 +1,4 @@
-import { COUNTRY_FLAG_ENTRIES } from "./countries.js";
+import { COUNTRY_FLAG_ENTRIES } from "./countries.js?v=1.1";
 
 export const MLB_TEAMS = [
   { name: "Arizona Diamondbacks", logo: "arizona-diamondbacks.svg", aliases: ["Arizona Diamondbacks", "Arizona", "Diamondbacks", "D-backs", "Dbacks", "ARI"] },
@@ -65,6 +65,13 @@ const LOGO_ALIAS_PATTERN = new RegExp(
 const PRELOADED_LOGOS = new Set();
 const FORMAT_TEXT_CACHE = new Map();
 const AUTOCORRECT_TEXT_CACHE = new Map();
+const EVENT_AUTOCOMPLETE_OPTIONS = [...new Set(LOGO_ENTRIES.flatMap(entry => [entry.name, ...entry.aliases]))]
+  .filter(Boolean)
+  .sort((a, b) => a.localeCompare(b));
+const EVENT_AUTOCOMPLETE_SEARCH = EVENT_AUTOCOMPLETE_OPTIONS.map(option => ({
+  value: option,
+  key: normalizeLookupKey(option)
+}));
 const FUZZY_LOGO_STOPWORDS = new Set([
   "gana", "gano", "ganar", "ganador", "ganadora", "ganan", "empate",
   "handicap", "handi", "hcap", "mas", "menos", "over", "under", "total",
@@ -286,13 +293,38 @@ export function crearMlbTeamsDatalist() {
 
   const datalist = document.createElement("datalist");
   datalist.id = "mlbTeamsList";
-  const options = [...new Set(LOGO_ENTRIES.flatMap(entry => [entry.name, ...entry.aliases]))]
-    .sort((a, b) => a.localeCompare(b));
+  actualizarOpcionesEventoDatalist(datalist, "");
+  document.body.appendChild(datalist);
+}
 
-  datalist.innerHTML = options
+function getEventoAutocompleteParts(value = "") {
+  const match = String(value).match(/^(.*(?:^|\s)(?:vs\.?|versus|contra|v)\s+)(.*)$/i);
+  if (!match) return { prefix: "", query: value };
+  return {
+    prefix: match[1],
+    query: match[2] || ""
+  };
+}
+
+function actualizarOpcionesEventoDatalist(datalist, value = "") {
+  if (!datalist) return;
+
+  const { prefix, query } = getEventoAutocompleteParts(value);
+  const queryKey = normalizeLookupKey(query);
+  const opciones = EVENT_AUTOCOMPLETE_SEARCH
+    .filter(option => !queryKey || option.key.startsWith(queryKey) || option.key.includes(queryKey))
+    .slice(0, 120)
+    .map(option => `${prefix}${option.value}`);
+
+  datalist.innerHTML = opciones
     .map(option => `<option value="${escapeHtml(option)}"></option>`)
     .join("");
-  document.body.appendChild(datalist);
+}
+
+function prepararAutocompleteEvento(input) {
+  const datalist = document.getElementById("mlbTeamsList");
+  if (!datalist) return;
+  actualizarOpcionesEventoDatalist(datalist, input.value);
 }
 
 export function habilitarAutocompleteMlb(root = document) {
@@ -301,6 +333,13 @@ export function habilitarAutocompleteMlb(root = document) {
   root.querySelectorAll(".jugada-ev-input, .edit-jugada-ev-input, .evento-principal-input, [id^='edit-evento-']")
     .forEach(input => {
       input.setAttribute("list", "mlbTeamsList");
+      if (input.dataset.eventAutocompleteReady !== "1") {
+        const actualizar = () => prepararAutocompleteEvento(input);
+        input.addEventListener("focus", actualizar);
+        input.addEventListener("input", actualizar);
+        input.addEventListener("keydown", actualizar);
+        input.dataset.eventAutocompleteReady = "1";
+      }
     });
 
   root.querySelectorAll(".jugada-jug-input, .edit-jugada-jug-input")

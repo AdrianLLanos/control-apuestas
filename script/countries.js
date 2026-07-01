@@ -133,6 +133,8 @@ export const COUNTRY_FLAG_ENTRIES = [
     "name": "Bosnia y Herzegovina",
     "flag": "flag-ba.png",
     "aliases": [
+      "Bosnia",
+      "Bosnia Herzegovina",
       "Bosnia and Herzegovina",
       "Bosnia y Herzegovina"
     ]

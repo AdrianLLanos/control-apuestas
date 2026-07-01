@@ -33,8 +33,8 @@ import {
   crearMlbTeamsDatalist,
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
-} from "./mlb.js?v=2.0";
-import { COUNTRY_FLAG_ENTRIES } from "./countries.js";
+} from "./mlb.js?v=2.1";
+import { COUNTRY_FLAG_ENTRIES } from "./countries.js?v=1.1";
 import {
   cerrarModalValidacion,
   mostrarModalValidacion,
