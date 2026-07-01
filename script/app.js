@@ -4835,6 +4835,7 @@ function apuestaNecesitaEspnFutbol(apuesta = {}, juegosApiSports = [], fechaBet 
         const apiGame = buscarJuegoFutbol(juegosApiSports, autoFutbol.equipos, fechaBet);
         if (!apiGame) return true;
         if (juegoFutbolEnCurso(apiGame)) return true;
+        if (juegoFutbolTieneResultadoUtil(apiGame) && !autoFutbol.marcador) return true;
         return !juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol);
       }
 
@@ -5412,10 +5413,10 @@ function elegirJuegoFutbolMasReciente(apiGame = null, espnGame = null) {
 
   const apiEnCurso = juegoFutbolEnCurso(apiGame);
   const espnEnCurso = juegoFutbolEnCurso(espnGame);
-  if (apiEnCurso && espnEnCurso) {
-    if (espnMarcador.total > apiMarcador.total) return espnGame;
-    if (apiMarcador.total > espnMarcador.total) return apiGame;
+  if (espnMarcador.total > apiMarcador.total) return espnGame;
+  if (apiMarcador.total > espnMarcador.total) return apiGame;
 
+  if (apiEnCurso && espnEnCurso) {
     const apiMinuto = getMinutoJuegoFutbol(apiGame);
     const espnMinuto = getMinutoJuegoFutbol(espnGame);
     if (espnMinuto > apiMinuto) return espnGame;
