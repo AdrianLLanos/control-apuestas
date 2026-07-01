@@ -1624,10 +1624,26 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 function crearSeleccionDetectada(jugada, estado = "pendiente", tituloActual = "", evento = "") {
   const eventoCorregido = autocorregirTextoApuesta(evento);
   const jugadaCorregida = autocorregirTextoApuesta(jugada, eventoCorregido);
-  const detalle = detectarDetalleSeleccionCrear({ titulo: tituloActual, jugada: jugadaCorregida, evento: eventoCorregido });
+  const jugadaOriginal = limpiarEspaciosMercado(jugadaCorregida);
+  const autoMlbDetectado = esContextoMlb(
+    eventoCorregido,
+    { titulo: tituloActual, jugada: jugadaOriginal },
+    {},
+    detectarEquiposMlb
+  )
+    ? crearAutoMlbSeleccion({ evento: eventoCorregido, titulo: tituloActual, jugada: jugadaOriginal })
+    : null;
+  const detalle = detectarDetalleSeleccionCrear({
+    titulo: tituloActual,
+    jugada: jugadaCorregida,
+    evento: eventoCorregido,
+    autoMlb: autoMlbDetectado
+  });
   return {
     titulo: detalle.titulo,
-    jugada: detalle.jugada || limpiarEspaciosMercado(jugadaCorregida),
+    jugada: detalle.jugada || jugadaOriginal,
+    jugadaOriginal,
+    ...(autoMlbDetectado ? { autoMlb: autoMlbDetectado } : {}),
     estado
   };
 }
@@ -1847,7 +1863,7 @@ function enriquecerJugadasAutoMlb(jugadas = [], deporte = "") {
       const autoMlb = crearAutoMlbSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
-        jugada: sel.jugada || ""
+        jugada: sel.jugadaOriginal || sel.jugada || ""
       });
 
       return autoMlb ? { ...sel, autoMlb } : sel;
@@ -2119,7 +2135,7 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
       const autoDetectado = crearAutoFutbolSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
-        jugada: sel.jugada || ""
+        jugada: sel.jugadaOriginal || sel.jugada || ""
       });
       const autoFutbol = combinarAutoFutbolConDetectado(sel.autoFutbol || null, autoDetectado);
 
@@ -3876,7 +3892,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       const autoMlbDetectado = crearAutoMlbSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
-        jugada: sel.jugada || ""
+        jugada: sel.jugadaOriginal || sel.jugada || ""
       });
       const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
@@ -4107,7 +4123,7 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       const autoMlbDetectado = crearAutoMlbSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
-        jugada: sel.jugada || ""
+        jugada: sel.jugadaOriginal || sel.jugada || ""
       });
       const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
@@ -7734,7 +7750,7 @@ function _render() {
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
-                showAutoMeta: true,
+                showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
@@ -7834,7 +7850,7 @@ function _render() {
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
-                showAutoMeta: true,
+                showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
