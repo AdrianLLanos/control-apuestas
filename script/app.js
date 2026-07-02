@@ -4457,7 +4457,6 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const showAutoMeta = options.showAutoMeta !== false;
   const showFinalStatus = options.showFinalStatus !== false;
   const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(autoMlb) : "";
-  const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   const totalCarreras = Number(autoMlb.totalCarreras);
   const totalHits = Number(autoMlb.totalHits);
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
@@ -4481,11 +4480,11 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     }
   }
 
-  if (estadoEspecialHtml) return `${marcadorHtml}${mostrarHoraConMarcador ? horaHtml : ""}${estadoEspecialHtml}`;
+  if (estadoEspecialHtml) return `${marcadorHtml || horaHtml}${estadoEspecialHtml}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
   }
-  return marcadorHtml ? `${marcadorHtml}${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}` : horaHtml;
+  return marcadorHtml ? `${marcadorHtml}${estadoFinalizadoHtml}` : horaHtml;
 }
 
 function autoMlbTieneMetaVisible(autoMlb = {}) {
@@ -6934,7 +6933,6 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const showAutoMeta = options.showAutoMeta !== false;
   const showFinalStatus = options.showFinalStatus !== false;
   const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(futbolAuto) : "";
-  const mostrarHoraConMarcador = options.showScheduleWithScore === true;
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
 
   if (futbolAuto.mercado === "total_corners") {
@@ -6964,11 +6962,11 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? ` &middot; Total: ${escapeHtml(totalCorners)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
     }
 
     return marcador
-      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}`
       : (horaHtml || "");
   }
 
@@ -6999,11 +6997,11 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? ` &middot; Total: ${escapeHtml(totalTarjetas)}`
         : "";
       const detalle = obtenerTarjetasDetalleEnOrden(tarjetasEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
     }
 
     return marcador
-      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}`
       : (horaHtml || "");
   }
 
@@ -7027,7 +7025,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   if (!marcadorActual && futbolAuto.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(futbolAuto.estadoJuego)) {
     return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
-  if (horaHtml && (!marcadorActual || estadoPrevio)) return horaHtml;
+  if (horaHtml && !marcadorActual) return horaHtml;
   const totalGoles = Number(futbolAuto.totalGoles);
   const totalGolesHtml = futbolAuto.mercado === "total_goles" &&
     futbolAuto.seleccionEquipo &&
@@ -7035,7 +7033,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     ? ` &middot; Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
     : "";
   return marcadorActual
-    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}${totalGolesHtml}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}${totalGolesHtml}</div>${estadoFinalizadoHtml}`
     : horaHtml;
 }
 
@@ -8066,7 +8064,6 @@ function _render() {
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
-                showScheduleWithScore: true,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -8167,7 +8164,6 @@ function _render() {
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
-                showScheduleWithScore: true,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
