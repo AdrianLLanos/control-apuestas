@@ -3557,7 +3557,8 @@ function fechaJuegoYaPaso(fechaJuegoStr = "") {
 
 function debeMostrarHorarioJuego(fechaJuego = "", estadoJuego = "") {
   if (!fechaJuego) return false;
-  return (esEstadoJuegoPrevio(estadoJuego) || !fechaJuegoYaPaso(fechaJuego)) && !fechaJuegoYaPaso(fechaJuego);
+  if (esEstadoJuegoPrevio(estadoJuego)) return true;
+  return !fechaJuegoYaPaso(fechaJuego);
 }
 
 function getAutoMlbFechasJuego(apuesta = {}) {
@@ -4521,6 +4522,7 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
 }
 
 function autoTieneResultadoVisible(auto = {}) {
+  if (esEstadoJuegoPrevio(auto?.estadoJuego)) return false;
   return Boolean(auto?.marcador) ||
     auto?.totalCarreras !== undefined ||
     auto?.totalHits !== undefined ||
