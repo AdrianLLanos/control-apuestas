@@ -1504,7 +1504,7 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const jugadaActual = limpiarEspaciosMercado(seleccion.jugada || seleccion.jug || "");
   const evento = limpiarEspaciosMercado(seleccion.evento || seleccion.ev || "");
   const contextoFutbolSinMlb = extraerEquiposEventoFutbol(evento).length >= 2 && detectarEquiposMlb(evento).length < 2;
-  const autoFutbol = seleccion.autoFutbol || null;
+  const autoFutbol = contextoFutbolSinMlb ? (seleccion.autoFutbol || null) : null;
   const autoMlb = contextoFutbolSinMlb ? null : (seleccion.autoMlb || null);
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
@@ -3987,6 +3987,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       });
       const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
+      const { autoFutbol, ...selMlb } = sel;
+      if (autoFutbol) huboCambioMetadata = true;
 
       if (
         !autoMlbOriginal ||
@@ -4018,7 +4020,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           huboCambioMetadata = true;
         }
         return {
-          ...sel,
+          ...selMlb,
           estado: siguienteEstado,
           autoMlb: {
             ...autoMlb,
@@ -4031,7 +4033,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           }
         };
       }
-      if (!game) return { ...sel, autoMlb };
+      if (!game) return { ...selMlb, autoMlb };
 
       const evaluacion = evaluarAutoMlb(autoMlb, game);
       if (!evaluacion) {
@@ -4055,7 +4057,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           huboCambioMetadata = true;
         }
         return {
-          ...sel,
+          ...selMlb,
           autoMlb: {
             ...autoMlb,
             gamePk: game.gamePk,
@@ -4074,7 +4076,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
       const esMercadoHits = autoMlb.mercado === "total_hits";
       const siguiente = {
-        ...sel,
+        ...selMlb,
         estado: evaluacion.estado,
         autoMlb: {
           ...autoMlb,
@@ -4218,6 +4220,7 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       });
       const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
+      const { autoFutbol, ...selMlb } = sel;
 
       const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
       const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet);
@@ -4226,7 +4229,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       if (!primeraHora && hora) primeraHora = hora;
       if (!game && !espnGame) {
         if (!autoMlbOriginal && autoMlbDetectado) huboCambio = true;
-        return autoMlbOriginal || autoMlbDetectado ? { ...sel, autoMlb } : sel;
+        if (autoFutbol) huboCambio = true;
+        return autoMlbOriginal || autoMlbDetectado ? { ...selMlb, autoMlb } : selMlb;
       }
 
       const estadoJuego = game?.status?.detailedState ||
@@ -4252,9 +4256,10 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       ) {
         huboCambio = true;
       }
+      if (autoFutbol) huboCambio = true;
 
       return {
-        ...sel,
+        ...selMlb,
         autoMlb: siguienteAuto
       };
     });
@@ -4300,9 +4305,11 @@ async function sincronizarResultadosMlb(silencioso = false) {
     if (apuestaSyncCerrada(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
     if (!apuestaResultadoPendiente(a)) return false;
-    if (!apuestaMlbYaDebeSincronizar(a)) return false;
+    const fechaApuesta = a.fecha || a.dia;
+    const esApuestaHoy = fechaApuesta === hoy;
+    if (!apuestaMlbYaDebeSincronizar(a) && !esApuestaHoy) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
-    if (silencioso && (a.fecha || a.dia) !== hoy) return false;
+    if (silencioso && !esApuestaHoy) return false;
     return true;
   });
   const candidatasHorario = apuestas.filter(a => {
@@ -4545,10 +4552,14 @@ function completarAutoFutbolRenderDesdeJugada(selection = {}, jugada = {}) {
 }
 
 function getAutoMarcadorSeleccionHtml(selection = {}, jugada = {}, options = {}) {
-  const selectionAutoCompleta = completarAutoFutbolRenderDesdeJugada(
-    completarAutoMlbRenderDesdeJugada(selection, jugada),
-    jugada
-  );
+  const selectionMlbCompleta = completarAutoMlbRenderDesdeJugada(selection, jugada);
+  const evento = options.evento || jugada?.ev || jugada?.evento || "";
+  const tieneContextoMlbDirecto = esContextoMlb(evento, selectionMlbCompleta, jugada, detectarEquiposMlb);
+  if (tieneContextoMlbDirecto) {
+    return getAutoMlbMarcadorHtml(selectionMlbCompleta, options);
+  }
+
+  const selectionAutoCompleta = completarAutoFutbolRenderDesdeJugada(selectionMlbCompleta, jugada);
   const fechaJuegoFutbol = selectionAutoCompleta?.autoFutbol?.fechaJuego ||
     jugada?.autoFutbol?.fechaJuego ||
     (jugada?.selections || []).find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol?.fechaJuego ||
@@ -8034,6 +8045,7 @@ function _render() {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
+                evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
               allTimelineItems.push({
@@ -8134,6 +8146,7 @@ function _render() {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 showScheduleWithScore: true,
+                evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
               return `
