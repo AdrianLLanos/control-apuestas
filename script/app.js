@@ -4475,9 +4475,11 @@ function reordenarMarcadorTextoMlb(marcadorTexto = "", equipos = []) {
 
 function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
+  const fechaJuego = autoMlb.fechaJuego || options.fallbackFechaJuego || "";
   const marcador = autoMlb.marcador;
   const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
-  const estadoPrevio = debeMostrarHorarioJuego(autoMlb.fechaJuego, autoMlb.estadoJuego);
+  const estadoPrevio = debeMostrarHorarioJuego(fechaJuego, autoMlb.estadoJuego);
+  const ocultarResultadoPorHorario = estadoPrevio;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
@@ -4490,7 +4492,9 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     ? ` · ${escapeHtml(carrerasLabel)}: ${escapeHtml(totalCarreras)}`
     : "";
   const hitsLabel = autoMlb.seleccionEquipo ? `Hits de ${autoMlb.seleccionEquipo}` : "Hits";
-  const marcadorVisible = autoMlb.mercado === "total_hits"
+  const marcadorVisible = ocultarResultadoPorHorario
+    ? ""
+    : autoMlb.mercado === "total_hits"
     ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
     : marcadorOrdenado;
   const marcadorExtra = autoMlb.mercado === "total_hits" ? "" : carrerasHtml;
@@ -4499,8 +4503,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (!suppressSchedule && showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
-    const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
+  if (!suppressSchedule && showAutoMeta && fechaJuego && estadoPrevio) {
+    const formattedTime = formatFechaJuego(fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
     }
@@ -4529,7 +4533,7 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
 }
 
 function autoTieneResultadoVisible(auto = {}) {
-  if (esEstadoJuegoPrevio(auto?.estadoJuego)) return false;
+  if (debeMostrarHorarioJuego(auto?.fechaJuego || "", auto?.estadoJuego || "")) return false;
   return Boolean(auto?.marcador) ||
     auto?.totalCarreras !== undefined ||
     auto?.totalHits !== undefined ||
@@ -6992,6 +6996,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
+    if (estadoPrevio) marcador = "";
     let horaHtml = "";
     if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
@@ -7027,6 +7032,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const tarjetasEquipo = futbolAuto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(futbolAuto);
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
+    if (estadoPrevio) marcador = "";
     let horaHtml = "";
     if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
@@ -7059,6 +7065,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   }
   let horaHtml = "";
   const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
+  if (estadoPrevio) marcadorActual = "";
   if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
