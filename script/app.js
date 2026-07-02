@@ -849,7 +849,14 @@ async function obtenerVersionDeployActual() {
     });
     if (!response.ok) return "";
 
-    const data = await response.json();
+    const text = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      return text.trim();
+    }
+
     return [
       data?.version,
       data?.deployId,
