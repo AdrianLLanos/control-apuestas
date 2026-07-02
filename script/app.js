@@ -5719,6 +5719,40 @@ function getTarjetasInicialesFutbol(marcador = null) {
   };
 }
 
+function crearResumenEstadisticasGuardadasFutbol(autoFutbol = {}) {
+  const teams = [];
+
+  if (autoFutbol.mercado === "total_corners" && autoFutbol.cornersEquipo?.home && autoFutbol.cornersEquipo?.away) {
+    [autoFutbol.cornersEquipo.home, autoFutbol.cornersEquipo.away].forEach(team => {
+      teams.push({
+        team: {
+          displayName: team.name || "",
+          name: team.name || "",
+          shortDisplayName: team.name || "",
+          abbreviation: ""
+        },
+        statistics: [{ name: "wonCorners", value: team.corners, displayValue: String(team.corners) }]
+      });
+    });
+  }
+
+  if (autoFutbol.mercado === "total_tarjetas" && autoFutbol.tarjetasEquipo?.home && autoFutbol.tarjetasEquipo?.away) {
+    [autoFutbol.tarjetasEquipo.home, autoFutbol.tarjetasEquipo.away].forEach(team => {
+      teams.push({
+        team: {
+          displayName: team.name || "",
+          name: team.name || "",
+          shortDisplayName: team.name || "",
+          abbreviation: ""
+        },
+        statistics: [{ name: "totalCards", value: team.tarjetas, displayValue: String(team.tarjetas) }]
+      });
+    });
+  }
+
+  return teams.length ? { boxscore: { teams }, proveedor: "auto_futbol_guardado_reglamentario" } : null;
+}
+
 function extraerValorCornersFutbol(stat = {}) {
   const etiqueta = normalizarTextoMercado(
     stat.name || stat.type || stat.displayName || stat.label || stat.key || ""
@@ -6190,11 +6224,18 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       }
 
       const juegoNoIniciado = juegoFutbolNoIniciado(game);
-      const summary = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado
+      const juegoConAlargue =
+        juegoFutbolTieneAlargueOPenales(game) ||
+        juegoFutbolTieneAlargueOPenales(apiGame) ||
+        juegoFutbolTieneAlargueOPenales(espnGame);
+      const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
+      const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado && !juegoConAlargue;
+      const summaryProveedor = puedeCargarStatsProveedor
         ? await cargarResumenFutbol(apiGame, espnGame)
         : null;
-      const juegoConAlargue = juegoFutbolTieneAlargueOPenales(game);
-      const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
+      const summary = juegoConAlargue && statsReglamentariasGuardadas
+        ? crearResumenEstadisticasGuardadasFutbol(autoFutbol)
+        : summaryProveedor;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
@@ -6217,7 +6258,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           : autoFutbol.mercado === "total_tarjetas"
             ? Boolean(tarjetasEquipoDetectado)
             : false;
-        const puedeUsarStatsGuardadas = !juegoConAlargue || summaryTieneStatsMercado || statsReglamentariasGuardadas;
+        const puedeUsarStatsGuardadas = !juegoConAlargue || statsReglamentariasGuardadas;
         const cornersEquipo = autoFutbol.mercado === "total_corners"
           ? (cornersEquipoDetectado || (puedeUsarStatsGuardadas ? autoFutbol.cornersEquipo : null))
           : autoFutbol.cornersEquipo;
