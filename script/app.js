@@ -839,6 +839,21 @@ function cederControlNavegador() {
   });
 }
 
+function crearTokenVersionDeploy(version = "") {
+  let hash = 0;
+  const texto = String(version);
+  for (let i = 0; i < texto.length; i += 1) {
+    hash = ((hash * 31) + texto.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36) || String(Date.now());
+}
+
+function recargarPorNuevoDeploy(version = "") {
+  const url = new URL(window.location.href);
+  url.searchParams.set("deploy", crearTokenVersionDeploy(version));
+  window.location.replace(url.toString());
+}
+
 async function obtenerVersionDeployActual() {
   try {
     const response = await fetch(`${DEPLOY_VERSION_URL}?t=${Date.now()}`, {
@@ -882,7 +897,7 @@ async function revisarVersionDeploy() {
   if (version !== deployVersionActual) {
     if (usuarioEstaEditandoFormulario()) return;
     deployVersionReloading = true;
-    ejecutarCuandoEsteLibre(() => window.location.reload(), 30000);
+    ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(version), 30000);
   }
 }
 
