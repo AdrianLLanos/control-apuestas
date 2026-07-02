@@ -1508,6 +1508,8 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   const autoMlb = contextoFutbolSinMlb ? null : (seleccion.autoMlb || null);
   const textoCompleto = limpiarEspaciosMercado(`${tituloActual} ${jugadaActual}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
+  const normalizadoJugada = normalizarTextoMercado(jugadaActual);
+  const contextoMlb = !contextoFutbolSinMlb && esContextoMlb(evento, seleccion, {}, detectarEquiposMlb);
 
   if (autoFutbol?.mercado === "total_goles") {
     return {
@@ -1565,6 +1567,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
+  if (contextoMlb && /\b(gana|ganan|ganador|ganadora|winner|moneyline|ml)\b/.test(normalizadoJugada || normalizado)) {
+    return {
+      titulo: "Ganador del partido",
+      jugada: limpiarEquipoGanador(jugadaActual || textoCompleto, evento)
+    };
+  }
+
   if (esHandicapMlbTexto(textoCompleto)) {
     return {
       titulo: "Hándicap",
@@ -1572,14 +1581,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
-  if (tienePalabraMercado(normalizado, ["corner", "corners", "corne", "esquina", "esquinas"])) {
+  if (!contextoMlb && tienePalabraMercado(normalizado, ["corner", "corners", "corne", "esquina", "esquinas"])) {
     return {
       titulo: "Total tiros de esquina",
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["corner", "corners", "tiro", "tiros", "esquina", "esquinas"])
     };
   }
 
-  if (tienePalabraMercado(normalizado, ["tarjeta", "tarjetas", "card", "cards"])) {
+  if (!contextoMlb && tienePalabraMercado(normalizado, ["tarjeta", "tarjetas", "card", "cards"])) {
     return {
       titulo: "Total tarjetas",
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["tarjeta", "tarjetas", "card", "cards"])
@@ -1609,21 +1618,21 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
-  if (esContextoMlb(evento, seleccion, {}, detectarEquiposMlb) && /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado) && extraerNumeroJugada(textoCompleto) !== null) {
+  if (contextoMlb && /\b(over|under|mas|menos|mayor|menor|alta|baja)\b/.test(normalizado) && extraerNumeroJugada(textoCompleto) !== null) {
     return {
       titulo: formatearTituloTotalCarrerasMlb(detectarEquipoTotalMlb(textoCompleto, evento)),
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["gol", "goles"])
     };
   }
 
-  if (tienePalabraMercado(normalizado, ["ambos", "marcan", "anotan"]) && !/\b(mas|menos|over|under)\b/.test(normalizado)) {
+  if (!contextoMlb && tienePalabraMercado(normalizado, ["ambos", "marcan", "anotan"]) && !/\b(mas|menos|over|under)\b/.test(normalizado)) {
     return {
       titulo: "Ambos equipos marcan",
       jugada: extraerSiNo(jugadaActual || textoCompleto)
     };
   }
 
-  if (tienePalabraMercado(normalizado, ["gol", "goles"])) {
+  if (!contextoMlb && tienePalabraMercado(normalizado, ["gol", "goles"])) {
     const seleccionEquipo = extraerEquiposEventoFutbol(evento)
       .find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
     return {
@@ -1820,6 +1829,19 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
   const normalizado = normalizarTextoMercado(textoCompleto);
   const equiposEvento = detectarEquiposMlb(evento);
   const equiposTexto = detectarEquiposMlb(`${evento} ${textoCompleto}`);
+
+  if (/\b(gana|ganan|ganador|ganadora|winner|moneyline|ml)\b/.test(normalizado)) {
+    const equiposJugada = detectarEquiposMlb(jugada || textoCompleto);
+    const seleccionEquipo = detectarEquipoMlbEnTexto(jugada || textoCompleto, equiposEvento) || equiposJugada[0] || null;
+    if (seleccionEquipo) {
+      return {
+        deporte: "mlb",
+        mercado: "ganador_partido",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        seleccionEquipo
+      };
+    }
+  }
 
   if (esHandicapMlbTexto(textoCompleto) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
     const linea = extraerNumeroConSigno(textoCompleto);
