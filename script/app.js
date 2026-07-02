@@ -5197,14 +5197,59 @@ async function cargarResumenEspnFutbol(event) {
   return summary;
 }
 
-async function cargarResumenFutbol(apiGame, espnGame = null) {
+function getTotalEstadisticaFutbol(summary = null, autoFutbol = {}, marcador = null) {
+  if (!summary || !autoFutbol) return null;
+  if (autoFutbol.mercado === "total_corners") {
+    return getCornersEquipoFutbol(summary, marcador)?.total ?? null;
+  }
+  if (autoFutbol.mercado === "total_tarjetas") {
+    return getTarjetasEquipoFutbol(summary, marcador)?.total ?? null;
+  }
+  return null;
+}
+
+function getTotalEstadisticaGuardadaFutbol(autoFutbol = {}) {
+  if (autoFutbol.mercado === "total_corners") {
+    const total = Number(autoFutbol.totalCorners);
+    return Number.isNaN(total) ? null : total;
+  }
+  if (autoFutbol.mercado === "total_tarjetas") {
+    const total = Number(autoFutbol.totalTarjetas);
+    return Number.isNaN(total) ? null : total;
+  }
+  return null;
+}
+
+function elegirResumenEstadisticasFutbol(apiSummary = null, espnSummary = null, autoFutbol = {}, marcador = null) {
+  const apiTotal = getTotalEstadisticaFutbol(apiSummary, autoFutbol, marcador);
+  const espnTotal = getTotalEstadisticaFutbol(espnSummary, autoFutbol, marcador);
+  const guardadoTotal = getTotalEstadisticaGuardadaFutbol(autoFutbol);
+
+  if (espnTotal !== null && apiTotal === null) return espnSummary;
+  if (apiTotal !== null && espnTotal === null) return apiSummary;
+  if (apiTotal === null && espnTotal === null) return apiSummary || espnSummary;
+
+  const referencia = Math.max(apiTotal ?? -1, guardadoTotal ?? -1);
+  if (espnTotal > referencia) return espnSummary;
+  return apiSummary || espnSummary;
+}
+
+async function cargarResumenFutbol(apiGame, espnGame = null, options = {}) {
   let apiSummary = null;
   const juegoConAlargue = juegoFutbolTieneAlargueOPenales(apiGame) || juegoFutbolTieneAlargueOPenales(espnGame);
+  const autoFutbol = options.autoFutbol || null;
+  const marcador = options.marcador || getMarcadorFutbol(apiGame || espnGame);
 
   if (apiGame) {
     try {
       apiSummary = await cargarResumenApiSportsFutbol(apiGame);
-      if (getCornersEquipoFutbol(apiSummary) || getTarjetasEquipoFutbol(apiSummary)) return apiSummary;
+      if (autoFutbol && esMercadoEstadisticasFutbol(autoFutbol)) {
+        const apiTotal = getTotalEstadisticaFutbol(apiSummary, autoFutbol, marcador);
+        const guardadoTotal = getTotalEstadisticaGuardadaFutbol(autoFutbol);
+        if (apiTotal !== null && (guardadoTotal === null || apiTotal > guardadoTotal)) {
+          return apiSummary;
+        }
+      }
     } catch (e) {
       console.warn("No se pudo cargar estadisticas API-Sports futbol:", e);
     }
@@ -5213,7 +5258,12 @@ async function cargarResumenFutbol(apiGame, espnGame = null) {
   if (juegoConAlargue) return apiSummary;
 
   const espnSummary = await cargarResumenEspnFutbol(espnGame);
-  if (getCornersEquipoFutbol(espnSummary) || getTarjetasEquipoFutbol(espnSummary)) return espnSummary;
+  if (autoFutbol && esMercadoEstadisticasFutbol(autoFutbol)) {
+    return elegirResumenEstadisticasFutbol(apiSummary, espnSummary, autoFutbol, marcador);
+  }
+
+  if (getCornersEquipoFutbol(apiSummary, marcador) || getTarjetasEquipoFutbol(apiSummary, marcador)) return apiSummary;
+  if (getCornersEquipoFutbol(espnSummary, marcador) || getTarjetasEquipoFutbol(espnSummary, marcador)) return espnSummary;
 
   return apiSummary || espnSummary;
 }
@@ -6343,7 +6393,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
       const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado && !juegoConAlargue;
       const summaryProveedor = puedeCargarStatsProveedor
-        ? await cargarResumenFutbol(apiGame, espnGame)
+        ? await cargarResumenFutbol(apiGame, espnGame, { autoFutbol })
         : null;
       const summary = juegoConAlargue && statsReglamentariasGuardadas
         ? crearResumenEstadisticasGuardadasFutbol(autoFutbol)
