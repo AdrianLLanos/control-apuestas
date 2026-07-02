@@ -4455,6 +4455,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoPrevio = debeMostrarHorarioJuego(autoMlb.fechaJuego, autoMlb.estadoJuego);
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
+  const suppressSchedule = options.suppressSchedule === true;
   const showFinalStatus = options.showFinalStatus !== false;
   const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(autoMlb) : "";
   const totalCarreras = Number(autoMlb.totalCarreras);
@@ -4473,7 +4474,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
+  if (!suppressSchedule && showAutoMeta && autoMlb.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(autoMlb.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -4499,6 +4500,22 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
     autoFutbol?.estadoEspecial ||
     autoFutbol?.totalCorners !== undefined ||
     autoFutbol?.totalTarjetas !== undefined
+  );
+}
+
+function autoTieneResultadoVisible(auto = {}) {
+  return Boolean(auto?.marcador) ||
+    auto?.totalCarreras !== undefined ||
+    auto?.totalHits !== undefined ||
+    auto?.totalGoles !== undefined ||
+    auto?.totalCorners !== undefined ||
+    auto?.totalTarjetas !== undefined;
+}
+
+function jugadaTieneResultadoAutoVisible(jugada = {}) {
+  if (autoTieneResultadoVisible(jugada?.autoMlb) || autoTieneResultadoVisible(jugada?.autoFutbol)) return true;
+  return (jugada?.selections || []).some(sel =>
+    autoTieneResultadoVisible(sel?.autoMlb) || autoTieneResultadoVisible(sel?.autoFutbol)
   );
 }
 
@@ -6931,6 +6948,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
   const showAutoMeta = options.showAutoMeta !== false;
+  const suppressSchedule = options.suppressSchedule === true;
   const showFinalStatus = options.showFinalStatus !== false;
   const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(futbolAuto) : "";
   if (!futbolAuto.marcador && estadoEspecialHtml) return estadoEspecialHtml;
@@ -6949,7 +6967,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     let horaHtml = "";
-    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+    if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -6984,7 +7002,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     let horaHtml = "";
-    if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+    if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -7015,7 +7033,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   }
   let horaHtml = "";
   const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
-  if (showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+  if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(futbolAuto.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -8034,6 +8052,8 @@ function _render() {
             } else {
               selections = [{ titulo: "", jugada: j || "", estado: "pendiente" }];
             }
+            const jugadaRender = (typeof j === "object" && j) ? { ...j, selections } : { selections };
+            const suppressScheduleForMatch = jugadaTieneResultadoAutoVisible(jugadaRender);
 
             selections.forEach((sel, selIndex) => {
               const jEstado = getEstadoSeleccionRender(sel, j, evText);
@@ -8064,6 +8084,7 @@ function _render() {
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
+                suppressSchedule: suppressScheduleForMatch,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -8140,6 +8161,8 @@ function _render() {
             } else {
               selections = [{ titulo: "", jugada: j || "", estado: "pendiente" }];
             }
+            const jugadaRender = (typeof j === "object" && j) ? { ...j, selections } : { selections };
+            const suppressScheduleForMatch = jugadaTieneResultadoAutoVisible(jugadaRender);
 
             const selectionsHtml = selections.map((sel, selIndex) => {
               const jEstado = getEstadoSeleccionRender(sel, j, evText);
@@ -8164,6 +8187,7 @@ function _render() {
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
+                suppressSchedule: suppressScheduleForMatch,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
