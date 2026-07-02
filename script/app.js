@@ -754,6 +754,42 @@ function debeRecalcularCuotaCombinada(tipoApuesta) {
     tipoApuesta === "crear_apuesta_simple";
 }
 
+function apuestaResultadoPendiente(apuesta = {}) {
+  return (apuesta.resultado || "pendiente") === "pendiente";
+}
+
+function crearAutoSyncEstado(apuesta = {}, resultado = apuesta.resultado) {
+  const base = apuesta.autoSync || {};
+  const now = Date.now();
+
+  if ((resultado || "pendiente") === "pendiente") {
+    return {
+      ...base,
+      estado: "pendiente",
+      cerradaEn: null,
+      ultimaRevision: now
+    };
+  }
+
+  return {
+    ...base,
+    estado: "cerrada",
+    cerradaEn: base.cerradaEn || now,
+    ultimaRevision: now
+  };
+}
+
+function crearAutoSyncPayload(apuesta = {}, resultado = apuesta.resultado, payload = {}) {
+  return {
+    ...crearAutoSyncEstado(apuesta, resultado),
+    ...payload
+  };
+}
+
+function apuestaSyncCerrada(apuesta = {}) {
+  return !apuestaResultadoPendiente(apuesta) && apuesta?.autoSync?.estado === "cerrada";
+}
+
 /* =========================
    FIREBASE LIVE
  ========================= */
@@ -917,6 +953,7 @@ function autocorregirApuestasCargadas(lista = []) {
       if (a.resultado !== resultadoPatente) {
         a.resultado = resultadoPatente;
         updateData.resultado = resultadoPatente;
+        updateData.autoSync = crearAutoSyncPayload(a, resultadoPatente);
       }
 
       if (formatDecimal(a.cuota) !== formatDecimal(cuotaPatente)) {
@@ -934,6 +971,7 @@ function autocorregirApuestasCargadas(lista = []) {
       if (a.resultado !== resultadoRecalculado) {
         a.resultado = resultadoRecalculado;
         updateData.resultado = resultadoRecalculado;
+        updateData.autoSync = crearAutoSyncPayload(a, resultadoRecalculado);
       }
       if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
         const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
@@ -2871,6 +2909,7 @@ async function agregarApuesta() {
           cuota: c,
           importe: importeSlot,
           resultado,
+          autoSync: crearAutoSyncPayload({}, resultado),
           creadoEn: ordenBase + idx,
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
@@ -2914,6 +2953,7 @@ async function agregarApuesta() {
           cuota: optiOdds,
           importe: importeSlot,
           resultado: "pendiente",
+          autoSync: crearAutoSyncPayload({}, "pendiente"),
           creadoEn: ordenBase + idx,
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
@@ -2953,6 +2993,7 @@ async function agregarApuesta() {
           cuota: c,
           importe: importeSlot,
           resultado,
+          autoSync: crearAutoSyncPayload({}, resultado),
           creadoEn: ordenBase + idx,
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
@@ -2965,6 +3006,7 @@ async function agregarApuesta() {
         deporte,
         fecha, evento, jugadas, tipoApuesta, cuota, importe,
         resultado,
+        autoSync: crearAutoSyncPayload({}, resultado),
         dia, hora,
         creadoEn: ordenBase,
         ordenTabla: ordenBase,
@@ -3063,6 +3105,7 @@ async function cambiarEstado(id, nuevoEstado) {
   const index = apuestas.findIndex(a => a.id === id);
   let updatedJugadas = null;
   let updatedCuota = null;
+  let updatedAutoSync = null;
   if (index > -1) {
     const a = apuestas[index];
     a.resultado = nuevoEstado;
@@ -3108,6 +3151,8 @@ async function cambiarEstado(id, nuevoEstado) {
         }
       }
     }
+    updatedAutoSync = crearAutoSyncPayload(a, nuevoEstado);
+    a.autoSync = updatedAutoSync;
   }
 
   const apuestaActualizada = index > -1 ? apuestas[index] : null;
@@ -3127,6 +3172,9 @@ async function cambiarEstado(id, nuevoEstado) {
     }
     if (updatedCuota !== null) {
       updateData.cuota = updatedCuota;
+    }
+    if (updatedAutoSync) {
+      updateData.autoSync = updatedAutoSync;
     }
     await updateDoc(doc(db, "apuestas", id), updateData);
   } catch (e) {
@@ -3179,6 +3227,7 @@ async function actualizarResultadoTotalSimpleOption(id, valor) {
   apuesta.jugadas = jugadas;
   apuesta.resultado = nuevoResultado;
   apuesta.cuota = nuevaCuota;
+  apuesta.autoSync = crearAutoSyncPayload(apuesta, nuevoResultado);
 
   render();
   window.scrollTo(0, scrollPosition);
@@ -3187,7 +3236,8 @@ async function actualizarResultadoTotalSimpleOption(id, valor) {
     await updateDoc(doc(db, "apuestas", id), {
       jugadas,
       resultado: nuevoResultado,
-      cuota: nuevaCuota
+      cuota: nuevaCuota,
+      autoSync: apuesta.autoSync
     });
   } catch (e) {
     console.error("Error actualizando resultado total:", e);
@@ -4083,10 +4133,10 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     resultado,
     cuota,
     deporte: "mlb",
-    autoSync: {
+    autoSync: crearAutoSyncPayload(apuesta, resultado, {
       proveedor: "mlb_stats_api",
       ultimaRevision: Date.now()
-    }
+    })
   };
 
   if ((!apuesta.fecha && !apuesta.dia) && fechaExtraida) {
@@ -4214,8 +4264,9 @@ async function sincronizarResultadosMlb(silencioso = false) {
   const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    if (apuestaSyncCerrada(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
-    if ((a.resultado || "pendiente") !== "pendiente") return false;
+    if (!apuestaResultadoPendiente(a)) return false;
     if (!apuestaMlbYaDebeSincronizar(a)) return false;
     // En modo automático/silencioso, solo procesar apuestas de hoy
     if (silencioso && (a.fecha || a.dia) !== hoy) return false;
@@ -4223,6 +4274,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
   });
   const candidatasHorario = apuestas.filter(a => {
     if (!apuestaMlbNecesitaHorario(a)) return false;
+    if (apuestaSyncCerrada(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
     return true;
   });
@@ -6469,10 +6521,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     resultado,
     cuota,
     deporte: "futbol",
-    autoSync: {
+    autoSync: crearAutoSyncPayload(apuesta, resultado, {
       proveedor: "api_sports_football_primary+espn_scoreboard_fallback",
       ultimaRevision: Date.now()
-    }
+    })
   };
 
   if ((!apuesta.fecha && !apuesta.dia) && fechaExtraidaFutbol) {
@@ -6497,6 +6549,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    if (apuestaSyncCerrada(a)) return false;
+    if (!apuestaResultadoPendiente(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
@@ -6510,6 +6564,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasHorario = apuestas.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
+    if (apuestaSyncCerrada(a)) return false;
+    if (!apuestaResultadoPendiente(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (!puedeDescubrirInicioFutbol(a, silencioso)) return false;
     return true;
@@ -7041,6 +7097,7 @@ async function guardarEdicion(id) {
       if (nuevasJugadas[0]) nuevasJugadas[0].c = nuevaCuota;
     }
 
+    let nuevoAutoSync = crearAutoSyncPayload(index > -1 ? apuestas[index] : {}, nuevoResultado);
     if (index > -1) {
       apuestas[index].tipoApuesta = nuevoTipo;
       apuestas[index].evento = nuevoEvento;
@@ -7053,6 +7110,8 @@ async function guardarEdicion(id) {
       apuestas[index].fecha = nuevoFecha;
       apuestas[index].dia = nuevoFecha;
       apuestas[index].hora = nuevoHora;
+      nuevoAutoSync = crearAutoSyncPayload(apuestas[index], nuevoResultado);
+      apuestas[index].autoSync = nuevoAutoSync;
     }
 
     render();
@@ -7073,7 +7132,8 @@ async function guardarEdicion(id) {
       casaNombre: nuevaCasa.nombre,
       fecha: nuevoFecha,
       dia: nuevoFecha,
-      hora: nuevoHora
+      hora: nuevoHora,
+      autoSync: nuevoAutoSync
     };
     updateData.resultado = nuevoResultado;
 
@@ -9084,6 +9144,7 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
     apuesta.cuota = calcularCuotaMaximaPatente(apuesta.jugadas);
     const overallResultado = determinarResultadoPatente(apuesta);
     apuesta.resultado = overallResultado;
+    apuesta.autoSync = crearAutoSyncPayload(apuesta, overallResultado);
 
     const scrollPosition = window.scrollY;
     render();
@@ -9093,7 +9154,8 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
       await updateDoc(doc(db, "apuestas", apuesta.id), {
         jugadas: apuesta.jugadas,
         resultado: overallResultado,
-        cuota: apuesta.cuota
+        cuota: apuesta.cuota,
+        autoSync: apuesta.autoSync
       });
     } catch (e) {
       console.error(e);
@@ -9107,6 +9169,7 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
   if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta) && nuevaCuotaTotal > 0) {
     apuesta.cuota = nuevaCuotaTotal;
   }
+  apuesta.autoSync = crearAutoSyncPayload(apuesta, overallResultado);
 
   const scrollPosition = window.scrollY;
   if (esCrearApuestaTipo(apuesta.tipoApuesta)) {
@@ -9123,7 +9186,8 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
     await updateDoc(doc(db, "apuestas", apuesta.id), {
       jugadas: apuesta.jugadas,
       resultado: overallResultado,
-      cuota: apuesta.cuota
+      cuota: apuesta.cuota,
+      autoSync: apuesta.autoSync
     });
   } catch (e) {
     console.error(e);
