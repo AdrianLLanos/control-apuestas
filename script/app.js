@@ -1360,6 +1360,10 @@ function formatearTituloTotalCarrerasMlb(equipo = "") {
   return equipo ? `${obtenerNombreCortoMlb(equipo)} total carreras` : "Total carreras";
 }
 
+function formatearTituloTotalGolesFutbol(equipo = "") {
+  return equipo ? `Goles de ${equipo}` : "Total de goles";
+}
+
 const TITULO_TOTAL_HITS_MLB = "Hits M\u00e1s de/Menos de (incl. extra innings)";
 
 function formatearTituloTotalHitsMlb() {
@@ -1507,7 +1511,7 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 
   if (autoFutbol?.mercado === "total_goles") {
     return {
-      titulo: "Total de goles",
+      titulo: formatearTituloTotalGolesFutbol(autoFutbol.seleccionEquipo),
       jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
     };
   }
@@ -1620,8 +1624,10 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
   }
 
   if (tienePalabraMercado(normalizado, ["gol", "goles"])) {
+    const seleccionEquipo = extraerEquiposEventoFutbol(evento)
+      .find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
     return {
-      titulo: "Total de goles",
+      titulo: formatearTituloTotalGolesFutbol(seleccionEquipo),
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["gol", "goles"])
     };
   }
@@ -1671,6 +1677,8 @@ function crearSeleccionDetectada(jugada, estado = "pendiente", tituloActual = ""
   const eventoCorregido = autocorregirTextoApuesta(evento);
   const jugadaCorregida = autocorregirTextoApuesta(jugada, eventoCorregido);
   const jugadaOriginal = limpiarEspaciosMercado(jugadaCorregida);
+  const contextoFutbolSinMlb = extraerEquiposEventoFutbol(eventoCorregido).length >= 2 &&
+    detectarEquiposMlb(eventoCorregido).length < 2;
   const autoMlbDetectado = esContextoMlb(
     eventoCorregido,
     { titulo: tituloActual, jugada: jugadaOriginal },
@@ -1679,17 +1687,22 @@ function crearSeleccionDetectada(jugada, estado = "pendiente", tituloActual = ""
   )
     ? crearAutoMlbSeleccion({ evento: eventoCorregido, titulo: tituloActual, jugada: jugadaOriginal })
     : null;
+  const autoFutbolDetectado = contextoFutbolSinMlb
+    ? crearAutoFutbolSeleccion({ evento: eventoCorregido, titulo: tituloActual, jugada: jugadaOriginal })
+    : null;
   const detalle = detectarDetalleSeleccionCrear({
     titulo: tituloActual,
     jugada: jugadaCorregida,
     evento: eventoCorregido,
-    autoMlb: autoMlbDetectado
+    autoMlb: autoMlbDetectado,
+    autoFutbol: autoFutbolDetectado
   });
   return {
     titulo: detalle.titulo,
     jugada: detalle.jugada || jugadaOriginal,
     jugadaOriginal,
     ...(autoMlbDetectado ? { autoMlb: autoMlbDetectado } : {}),
+    ...(autoFutbolDetectado ? { autoFutbol: autoFutbolDetectado } : {}),
     estado
   };
 }
@@ -2027,6 +2040,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
 
   const textoCompleto = limpiarEspaciosMercado(`${titulo} ${jugada}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
+  const seleccionEquipoTotal = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo)) || "";
 
   if (tienePalabraMercado(normalizado, ["corner", "corners", "esquina", "esquinas"])) {
     const linea = extraerNumeroJugada(textoCompleto);
@@ -2078,6 +2092,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
         deporte: "futbol",
         mercado: "total_goles",
         equipos,
+        ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
         tipoTotal,
         linea
       };
@@ -2095,6 +2110,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
         deporte: "futbol",
         mercado: "total_goles",
         equipos,
+        ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
         tipoTotal,
         linea
       };
@@ -2169,6 +2185,23 @@ function combinarAutoFutbolConDetectado(autoOriginal = null, autoDetectado = nul
   return combinado;
 }
 
+function aplicarDetalleAutoFutbolSeleccion(selection = {}, autoFutbol = null, evento = "") {
+  if (!autoFutbol) return selection;
+  const detalle = detectarDetalleSeleccionCrear({
+    titulo: selection.titulo || "",
+    jugada: selection.jugadaOriginal || selection.jugada || "",
+    evento,
+    autoFutbol
+  });
+
+  return {
+    ...selection,
+    titulo: detalle.titulo || selection.titulo,
+    jugada: detalle.jugada || selection.jugada,
+    autoFutbol
+  };
+}
+
 function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
   if (deporte !== "futbol") return jugadas;
 
@@ -2185,7 +2218,7 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
       });
       const autoFutbol = combinarAutoFutbolConDetectado(sel.autoFutbol || null, autoDetectado);
 
-      return autoFutbol ? { ...sel, autoFutbol } : sel;
+      return autoFutbol ? aplicarDetalleAutoFutbolSeleccion(sel, autoFutbol, ev) : sel;
     });
 
     return {
@@ -5398,6 +5431,7 @@ function limpiarDatosJuegoAutoFutbol(autoFutbol = {}) {
     estadoJuego,
     estadoEspecial,
     marcador,
+    totalGoles,
     totalCorners,
     cornersEquipo,
     totalTarjetas,
@@ -5420,6 +5454,7 @@ function autoFutbolTieneDatosJuego(autoFutbol = {}) {
     autoFutbol?.estadoJuego ||
     autoFutbol?.estadoEspecial ||
     autoFutbol?.marcador ||
+    autoFutbol?.totalGoles !== undefined ||
     autoFutbol?.totalCorners !== undefined ||
     autoFutbol?.cornersEquipo ||
     autoFutbol?.totalTarjetas !== undefined ||
@@ -5909,6 +5944,13 @@ function getScoreEquipoMarcadorFutbol(equipo = "", marcador) {
   return null;
 }
 
+function getTotalGolesObjetivoFutbol(autoFutbol = {}, marcador = null) {
+  if (!marcador) return null;
+  if (!autoFutbol?.seleccionEquipo) return marcador.total;
+  const equipo = getScoreEquipoMarcadorFutbol(autoFutbol.seleccionEquipo, marcador);
+  return equipo ? equipo.seleccionado : null;
+}
+
 function crearJuegoFutbolDesdeAutoFutbol(autoFutbol = {}) {
   if (!autoFutbol?.marcador || !esEstadoJuegoFinalizado(autoFutbol.estadoJuego)) return null;
   if (
@@ -6092,16 +6134,19 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (autoFutbol.mercado === "total_goles") {
     const linea = Number(autoFutbol.linea);
     if (Number.isNaN(linea)) return null;
+    const totalGolesObjetivo = getTotalGolesObjetivoFutbol(autoFutbol, marcador);
+    if (totalGolesObjetivo === null) return null;
     if (!finalizado) {
-      if (autoFutbol.tipoTotal === "over" && marcador.total > linea) return { estado: "ganada", marcador };
-      if (autoFutbol.tipoTotal === "under" && marcador.total > linea) return { estado: "perdida", marcador };
+      if (autoFutbol.tipoTotal === "over" && totalGolesObjetivo > linea) return { estado: "ganada", marcador, totalGoles: totalGolesObjetivo };
+      if (autoFutbol.tipoTotal === "under" && totalGolesObjetivo > linea) return { estado: "perdida", marcador, totalGoles: totalGolesObjetivo };
       return null;
     }
-    if (marcador.total === linea) return { estado: "nula", marcador };
-    const ganaOver = marcador.total > linea;
+    if (totalGolesObjetivo === linea) return { estado: "nula", marcador, totalGoles: totalGolesObjetivo };
+    const ganaOver = totalGolesObjetivo > linea;
     return {
       estado: (autoFutbol.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida",
-      marcador
+      marcador,
+      totalGoles: totalGolesObjetivo
     };
   }
 
@@ -6187,7 +6232,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const autoDetectado = crearAutoFutbolSeleccion({
         evento: ev,
         titulo: sel.titulo || "",
-        jugada: sel.jugada || ""
+        jugada: sel.jugadaOriginal || sel.jugada || ""
       });
       let autoFutbol = combinarAutoFutbolConDetectado(autoOriginal, autoDetectado);
       if (!autoFutbol) {
@@ -6213,6 +6258,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       }
 
       if (!autoOriginal || JSON.stringify(autoOriginal) !== JSON.stringify(autoFutbol)) huboCambioMetadata = true;
+      const selConDetalle = aplicarDetalleAutoFutbolSeleccion(sel, autoFutbol, ev);
+      if (selConDetalle.titulo !== sel.titulo || selConDetalle.jugada !== sel.jugada) {
+        huboCambioMetadata = true;
+      }
       const apiGame = buscarJuegoFutbol(juegosFecha, autoFutbol.equipos, fechaBet);
       const espnGame = buscarJuegoEspnFutbol(juegosEspnFecha, autoFutbol.equipos, fechaBet);
       const game = elegirJuegoFutbolPrincipal(apiGame, espnGame, autoFutbol);
@@ -6224,7 +6273,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           const estadoJuego = getEstadoJuegoFutbol(gameGuardado) || autoFutbol.estadoJuego || "Final";
           if ((sel.estado || "pendiente") !== evaluacionGuardada.estado) huboCambio = true;
           selections.push({
-            ...sel,
+            ...selConDetalle,
             estado: evaluacionGuardada.estado,
             autoFutbol: {
               ...autoFutbol,
@@ -6239,7 +6288,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           continue;
         }
         if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
-        selections.push({ ...sel, autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol) });
+        selections.push({
+          ...selConDetalle,
+          autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol)
+        });
         continue;
       }
 
@@ -6264,7 +6316,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           huboCambioMetadata = true;
         }
         selections.push({
-          ...sel,
+          ...selConDetalle,
           estado: siguienteEstado,
           autoFutbol: {
             ...autoFutbol,
@@ -6307,6 +6359,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         const marcadorTexto = marcador
           ? obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos)
           : autoFutbol.marcador;
+        const totalGolesDetectado = autoFutbol.mercado === "total_goles" && !juegoNoIniciado
+          ? getTotalGolesObjetivoFutbol(autoFutbol, marcador)
+          : null;
         const cornersEquipoDetectado = autoFutbol.mercado === "total_corners" && !juegoNoIniciado && summary
           ? getCornersEquipoFutbol(summary, marcador)
           : null;
@@ -6332,6 +6387,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           ? tarjetasEquipo?.total ?? (puedeUsarStatsGuardadas ? autoFutbol.totalTarjetas : undefined)
           : autoFutbol.totalTarjetas;
         const siguienteMarcador = juegoNoIniciado ? null : marcadorTexto;
+        const siguienteTotalGoles = juegoNoIniciado ? undefined : (totalGolesDetectado ?? autoFutbol.totalGoles);
         const siguienteTotalCorners = juegoNoIniciado ? undefined : totalCorners;
         const siguienteCornersEquipo = cornersEquipo || null;
         const siguienteTotalTarjetas = juegoNoIniciado ? undefined : totalTarjetas;
@@ -6344,6 +6400,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           autoFutbol.id !== getIdJuegoFutbol(game) ||
           autoFutbol.estadoJuego !== estadoJuego ||
           autoFutbol.marcador !== siguienteMarcador ||
+          autoFutbol.totalGoles !== siguienteTotalGoles ||
           autoFutbol.totalCorners !== siguienteTotalCorners ||
           autoFutbol.totalTarjetas !== siguienteTotalTarjetas ||
           JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguienteCornersEquipo) ||
@@ -6356,7 +6413,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           huboCambioMetadata = true;
         }
         selections.push({
-          ...sel,
+          ...selConDetalle,
           autoFutbol: {
             ...autoFutbol,
             id: getIdJuegoFutbol(apiGame || game),
@@ -6366,6 +6423,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
             estadoEspecial: null,
             marcador: siguienteMarcador,
             marcadorTiempo: siguienteMarcador ? getMarcadorTiempoReglamentarioMeta() : autoFutbol.marcadorTiempo,
+            totalGoles: siguienteTotalGoles,
             totalCorners: siguienteTotalCorners,
             cornersEquipo: siguienteCornersEquipo,
             totalTarjetas: siguienteTotalTarjetas,
@@ -6400,6 +6458,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           estadoEspecial: null,
           marcador: obtenerMarcadorTextoFutbol(evaluacion.marcador, autoFutbol.equipos),
           marcadorTiempo: getMarcadorTiempoReglamentarioMeta(),
+          totalGoles: evaluacion.totalGoles ?? autoFutbol.totalGoles,
           totalCorners: evaluacion.totalCorners ?? autoFutbol.totalCorners,
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           totalTarjetas: evaluacion.totalTarjetas ?? autoFutbol.totalTarjetas,
@@ -6420,6 +6479,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         autoFutbol.liga !== getLigaJuegoFutbol(game) ||
         autoFutbol.estadoJuego !== siguiente.autoFutbol.estadoJuego ||
         autoFutbol.marcador !== siguiente.autoFutbol.marcador ||
+        autoFutbol.totalGoles !== siguiente.autoFutbol.totalGoles ||
         autoFutbol.totalCorners !== siguiente.autoFutbol.totalCorners ||
         autoFutbol.totalTarjetas !== siguiente.autoFutbol.totalTarjetas ||
         JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null) ||
@@ -6468,13 +6528,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         : null;
       const marcador = game ? getMarcadorFutbol(game) : null;
       const finalizado = game ? juegoFutbolReglamentarioProbablementeTerminado(game) : false;
-      const totalIrreversible = marcador && totalAuto && (
+      const totalObjetivo = getTotalGolesObjetivoFutbol(totalAuto, marcador);
+      const totalIrreversible = totalObjetivo !== null && totalAuto && (
         finalizado ||
-        (totalAuto.tipoTotal === "over" && marcador.total > Number(totalAuto.linea)) ||
-        (totalAuto.tipoTotal === "under" && marcador.total > Number(totalAuto.linea))
+        (totalAuto.tipoTotal === "over" && totalObjetivo > Number(totalAuto.linea)) ||
+        (totalAuto.tipoTotal === "under" && totalObjetivo > Number(totalAuto.linea))
       );
-      if (totalIrreversible && jugadaActualizada.resultadoTotal !== marcador.total) {
-        jugadaActualizada.resultadoTotal = marcador.total;
+      if (totalIrreversible && jugadaActualizada.resultadoTotal !== totalObjetivo) {
+        jugadaActualizada.resultadoTotal = totalObjetivo;
         huboCambio = true;
       }
     }
@@ -6884,8 +6945,14 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     return getEstadoJuegoLegacyHtml(futbolAuto.estadoJuego);
   }
   if (horaHtml && (!marcadorActual || estadoPrevio)) return horaHtml;
+  const totalGoles = Number(futbolAuto.totalGoles);
+  const totalGolesHtml = futbolAuto.mercado === "total_goles" &&
+    futbolAuto.seleccionEquipo &&
+    !Number.isNaN(totalGoles)
+    ? ` &middot; Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
+    : "";
   return marcadorActual
-    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
+    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}${totalGolesHtml}</div>${mostrarHoraConMarcador ? horaHtml : ""}${estadoFinalizadoHtml}`
     : horaHtml;
 }
 
