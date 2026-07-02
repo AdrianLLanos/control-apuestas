@@ -833,8 +833,9 @@ async function revisarVersionDeploy() {
   }
 
   if (version !== deployVersionActual) {
+    if (usuarioEstaEditandoFormulario()) return;
     deployVersionReloading = true;
-    window.location.reload();
+    ejecutarCuandoEsteLibre(() => window.location.reload(), 30000);
   }
 }
 
@@ -1056,11 +1057,11 @@ function programarSyncInicialVisible() {
   const hayMlb = apuestas.some(apuesta => apuestaPareceMlb(apuesta));
 
   if (hayFutbol) {
-    programarSyncSilenciosa("futbol", 2500);
+    programarSyncSilenciosa("futbol", 12000);
   }
 
   if (hayMlb) {
-    programarSyncSilenciosa("mlb", 4000);
+    programarSyncSilenciosa("mlb", 16000);
   }
 }
 
