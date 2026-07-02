@@ -798,6 +798,7 @@ let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const DEPLOY_VERSION_URL = "/version.json";
+const DEPLOY_INDEX_URL = "/index.html";
 const DEPLOY_VERSION_CHECK_MS = 30 * 1000;
 const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
@@ -848,9 +849,21 @@ function crearTokenVersionDeploy(version = "") {
   return hash.toString(36) || String(Date.now());
 }
 
-function recargarPorNuevoDeploy(version = "") {
+async function limpiarCachesNavegador() {
+  if (typeof window === "undefined" || !("caches" in window)) return;
+  try {
+    const keys = await window.caches.keys();
+    await Promise.all(keys.map(key => window.caches.delete(key)));
+  } catch (error) {
+    console.warn("No se pudo limpiar cache del navegador:", error.message);
+  }
+}
+
+async function recargarPorNuevoDeploy(version = "") {
+  await limpiarCachesNavegador();
   const url = new URL(window.location.href);
   url.searchParams.set("deploy", crearTokenVersionDeploy(version));
+  url.searchParams.set("t", Date.now().toString(36));
   window.location.replace(url.toString());
 }
 
@@ -883,21 +896,48 @@ async function obtenerVersionDeployActual() {
   }
 }
 
+async function obtenerFirmaIndexDeployActual() {
+  try {
+    const response = await fetch(`${DEPLOY_INDEX_URL}?t=${Date.now()}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache"
+      }
+    });
+    if (!response.ok) return "";
+
+    const text = await response.text();
+    const mainScript = text.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/i)?.[1] || "";
+    return crearTokenVersionDeploy(`${mainScript}|${text}`);
+  } catch (error) {
+    console.warn("No se pudo revisar el index desplegado:", error.message);
+    return "";
+  }
+}
+
+async function obtenerFirmaDeployActual() {
+  const [version, index] = await Promise.all([
+    obtenerVersionDeployActual(),
+    obtenerFirmaIndexDeployActual()
+  ]);
+  return [version, index].filter(Boolean).join("::");
+}
+
 async function revisarVersionDeploy() {
   if (deployVersionReloading) return;
 
-  const version = await obtenerVersionDeployActual();
-  if (!version) return;
+  const firma = await obtenerFirmaDeployActual();
+  if (!firma) return;
 
   if (!deployVersionActual) {
-    deployVersionActual = version;
+    deployVersionActual = firma;
     return;
   }
 
-  if (version !== deployVersionActual) {
+  if (firma !== deployVersionActual) {
     if (usuarioEstaEditandoFormulario()) return;
     deployVersionReloading = true;
-    ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(version), 30000);
+    ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(firma), 30000);
   }
 }
 
