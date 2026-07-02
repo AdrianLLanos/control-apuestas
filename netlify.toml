@@ -1,5 +1,5 @@
 [build]
-  command = "printf '{\"version\":\"%s\",\"deployedAt\":\"%s\"}\\n' \"${COMMIT_REF:-local}\" \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > version.json"
+  command = "printf '{\"version\":\"%s\",\"deployId\":\"%s\",\"deployedAt\":\"%s\"}\\n' \"${COMMIT_REF:-${COMMIT_SHA:-local}}\" \"${DEPLOY_ID:-local}\" \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > version.json"
   publish = "."
 
 [[redirects]]

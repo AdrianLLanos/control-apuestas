@@ -798,7 +798,7 @@ let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const DEPLOY_VERSION_URL = "/version.json";
-const DEPLOY_VERSION_CHECK_MS = 5 * 60 * 1000;
+const DEPLOY_VERSION_CHECK_MS = 30 * 1000;
 const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
@@ -850,7 +850,11 @@ async function obtenerVersionDeployActual() {
     if (!response.ok) return "";
 
     const data = await response.json();
-    return String(data?.version || "").trim();
+    return [
+      data?.version,
+      data?.deployId,
+      data?.deployedAt
+    ].filter(Boolean).map(item => String(item).trim()).join("|");
   } catch (error) {
     console.warn("No se pudo revisar la version desplegada:", error.message);
     return "";
@@ -3897,6 +3901,13 @@ function juegoMlbFinalizado(game) {
   return state === "final" || /\b(final|game over)\b/i.test(detail);
 }
 
+function juegoMlbNoIniciado(game) {
+  const state = String(game?.status?.abstractGameState || "").toLowerCase();
+  const detail = String(game?.status?.detailedState || "").toLowerCase();
+  return /\b(preview|pre-game|pre game|scheduled|warmup)\b/.test(state) ||
+    /\b(preview|pre-game|pre game|scheduled|warmup)\b/.test(detail);
+}
+
 function juegoMlbEnCurso(game) {
   const state = String(game?.status?.abstractGameState || "").toLowerCase();
   const detail = String(game?.status?.detailedState || "").toLowerCase();
@@ -3907,6 +3918,7 @@ function juegoMlbEnCurso(game) {
 
 function evaluarAutoMlb(autoMlb, game) {
   if (!autoMlb) return null;
+  if (juegoMlbNoIniciado(game)) return null;
   const marcador = getMarcadorMlb(game);
   if (!marcador) return null;
   const finalizado = juegoMlbFinalizado(game);
@@ -4059,22 +4071,27 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
       const evaluacion = evaluarAutoMlb(autoMlb, game);
       if (!evaluacion) {
-        const marcador = getMarcadorMlb(game);
+        const juegoNoIniciado = juegoMlbNoIniciado(game);
+        const marcador = juegoNoIniciado ? null : getMarcadorMlb(game);
         const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
         const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
         const marcadorTexto = marcador
           ? formatMarcadorSegunEvento(ev, marcador)
-          : autoMlb.marcador;
+          : null;
         const marcadorHitsTexto = marcador
           ? formatHitsMlbSegunEvento(ev, marcador)
-          : autoMlb.marcadorHits;
+          : null;
         const esMercadoHits = autoMlb.mercado === "total_hits";
         if (
           autoMlb.gamePk !== game.gamePk ||
           autoMlb.estadoJuego !== estadoJuego ||
           autoMlb.marcador !== marcadorTexto ||
           (esMercadoHits && autoMlb.marcadorHits !== marcadorHitsTexto) ||
-          autoMlb.fechaJuego !== game.gameDate
+          autoMlb.fechaJuego !== game.gameDate ||
+          (juegoNoIniciado && (
+            autoMlb.totalCarreras !== undefined ||
+            autoMlb.totalHits !== undefined
+          ))
         ) {
           huboCambioMetadata = true;
         }
@@ -4087,8 +4104,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
             estadoEspecial: null,
             marcador: marcadorTexto,
             marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
-            totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
-            totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
+            totalCarreras: autoMlb.mercado === "total_carreras" && !juegoNoIniciado ? totalObjetivo : undefined,
+            totalHits: esMercadoHits && !juegoNoIniciado ? totalObjetivo : undefined,
             fechaJuego: game.gameDate
           }
         };
