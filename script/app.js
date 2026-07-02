@@ -762,7 +762,7 @@ let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const DEPLOY_VERSION_URL = "/version.json";
-const DEPLOY_VERSION_CHECK_MS = 60 * 1000;
+const DEPLOY_VERSION_CHECK_MS = 5 * 60 * 1000;
 const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
@@ -774,6 +774,13 @@ let deployVersionReloading = false;
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
+}
+
+function usuarioEstaEditandoFormulario() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return false;
+  if (el.isContentEditable) return true;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 }
 
 function ejecutarCuandoEsteLibre(callback, timeout = 8000) {
@@ -2976,7 +2983,7 @@ async function agregarApuesta() {
   const diasUnicosPost = [...new Set([...getApuestasFiltradas().map(a => a.dia), dia])].sort((a, b) => new Date(a) - new Date(b));
   paginaActual = Math.ceil((diasUnicosPost.indexOf(dia) + 1) / porPagina) || 1;
   renderCasasControls();
-  await cargarApuestasIniciales();
+  renderSnapshotProgramado();
 
   // ── Reset form ──
   document.getElementById("importe").value = "";
@@ -6664,6 +6671,7 @@ let _ultimoAutoSyncFutbol = 0;
 
 async function ejecutarAutoSyncFutbol(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!force && usuarioEstaEditandoFormulario()) return;
   if (_autoSyncFutbolEnCurso) return;
   if (!force && Date.now() - _ultimoAutoSyncFutbol < AUTO_SYNC_INTERVAL_MS) return;
 
@@ -6695,6 +6703,7 @@ let _ultimoAutoSyncMlb = 0;
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!force && usuarioEstaEditandoFormulario()) return;
   if (_autoSyncMlbEnCurso) return;
   if (!force && Date.now() - _ultimoAutoSyncMlb < AUTO_SYNC_INTERVAL_MS) return;
 
@@ -7506,11 +7515,15 @@ function getApuestasPorDiaPagina(apuestasRender, diasPagina) {
 }
 
 function renderPaginacionHtml(totalPaginas, scrollAlTop = false) {
+  const total = Math.max(totalPaginas || 1, 1);
+  if (paginaActual < 1) paginaActual = 1;
+  if (paginaActual > total) paginaActual = total;
+
   if (totalPaginas > 1) {
     return `
       <div class="paginacion">
         <button onclick="cambiarPagina(-1, ${scrollAlTop})" ${paginaActual === 1 && !hayMasApuestas ? 'disabled' : ''}>⬅</button>
-        <span> Página ${paginaActual} / ${totalPaginas} </span>
+        <span> Página ${paginaActual} / ${total} </span>
         <button onclick="cambiarPagina(1, ${scrollAlTop})" ${paginaActual === totalPaginas ? 'disabled' : ''}>➡</button>
       </div>
     `;
@@ -7730,10 +7743,7 @@ function _render() {
   const totalPaginas = Math.ceil(diasKeys.length / porPagina);
 
   if (paginaActual > totalPaginas) {
-    const recienAgregado = ultimoDiaAgregadoTime && (Date.now() - ultimoDiaAgregadoTime < 2500);
-    if (!recienAgregado) {
-      paginaActual = totalPaginas || 1;
-    }
+    paginaActual = totalPaginas || 1;
   }
 
   const inicio = (paginaActual - 1) * porPagina;
