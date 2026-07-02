@@ -5070,7 +5070,7 @@ async function cargarResumenApiSportsFutbol(game) {
     throw new Error(`API-Sports estadisticas devolvio error: ${JSON.stringify(errors)}`);
   }
 
-  const summary = { apiSportsStatistics: data?.response || [] };
+  const summary = { apiSportsStatistics: data?.response || [], proveedor: "api_sports_football_statistics" };
   apiSportsFootballCache.set(cacheKey, {
     createdAt: Date.now(),
     summary
@@ -5093,7 +5093,10 @@ async function cargarResumenEspnFutbol(event) {
   const response = await fetch(url);
   if (!response.ok) return null;
 
-  const summary = await response.json();
+  const summary = {
+    ...(await response.json()),
+    proveedor: "espn_football_summary"
+  };
   apiSportsFootballCache.set(cacheKey, {
     createdAt: Date.now(),
     summary
@@ -5103,6 +5106,7 @@ async function cargarResumenEspnFutbol(event) {
 
 async function cargarResumenFutbol(apiGame, espnGame = null) {
   let apiSummary = null;
+  const juegoConAlargue = juegoFutbolTieneAlargueOPenales(apiGame) || juegoFutbolTieneAlargueOPenales(espnGame);
 
   if (apiGame) {
     try {
@@ -5112,6 +5116,8 @@ async function cargarResumenFutbol(apiGame, espnGame = null) {
       console.warn("No se pudo cargar estadisticas API-Sports futbol:", e);
     }
   }
+
+  if (juegoConAlargue) return apiSummary;
 
   const espnSummary = await cargarResumenEspnFutbol(espnGame);
   if (getCornersEquipoFutbol(espnSummary) || getTarjetasEquipoFutbol(espnSummary)) return espnSummary;
@@ -5149,6 +5155,7 @@ function toScoreNumberFutbol(value) {
 function getMarcadorReglamentarioApiSports(event, lado) {
   const fulltime = toScoreNumberFutbol(event?.score?.fulltime?.[lado]);
   if (!Number.isNaN(fulltime)) return fulltime;
+  if (juegoFutbolTieneAlargueOPenales(event)) return NaN;
   return toScoreNumberFutbol(event?.goals?.[lado]);
 }
 
@@ -5159,6 +5166,26 @@ function getMarcadorTiempoReglamentarioMeta() {
 function esEstadoAlargueOPenalesFutbol(estado = "") {
   const texto = normalizarEstadoExternoTexto(estado);
   return /\b(aet|after extra time|extra time|prorroga|alargue|pen|penalties|penales)\b/.test(texto);
+}
+
+function juegoFutbolTieneAlargueOPenales(game = {}) {
+  const apiStatus = game?.fixture?.status || {};
+  const apiShort = String(apiStatus.short || "").toUpperCase();
+  if (["AET", "PEN", "ET", "BT", "P"].includes(apiShort)) return true;
+
+  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  const texto = [
+    apiStatus.short,
+    apiStatus.long,
+    apiStatus.elapsed,
+    status.name,
+    status.state,
+    status.description,
+    status.detail,
+    status.shortDetail
+  ].filter(Boolean).join(" ");
+
+  return esEstadoAlargueOPenalesFutbol(texto);
 }
 
 function esPeriodoReglamentarioEspn(line = {}, index = 0) {
@@ -5177,7 +5204,7 @@ function esPeriodoReglamentarioEspn(line = {}, index = 0) {
   return index < 2;
 }
 
-function getScoreReglamentarioEspnCompetidor(item = {}) {
+function getScoreReglamentarioEspnCompetidor(item = {}, event = {}) {
   const lineas = Array.isArray(item.linescores) ? item.linescores : [];
   const reglamentarias = lineas
     .filter(esPeriodoReglamentarioEspn)
@@ -5188,6 +5215,7 @@ function getScoreReglamentarioEspnCompetidor(item = {}) {
     return reglamentarias.slice(0, 2).reduce((acc, value) => acc + value, 0);
   }
 
+  if (juegoFutbolTieneAlargueOPenales(event)) return NaN;
   return toScoreNumberFutbol(item.score);
 }
 
@@ -5216,7 +5244,7 @@ function getCompetidoresFutbol(event) {
   const competitors = event?.competitions?.[0]?.competitors || [];
   return competitors.map(item => ({
     homeAway: item.homeAway,
-    score: getScoreReglamentarioEspnCompetidor(item),
+    score: getScoreReglamentarioEspnCompetidor(item, event),
     name: item.team?.displayName || item.team?.name || item.team?.shortDisplayName || "",
     shortName: item.team?.shortDisplayName || item.team?.name || "",
     abbreviation: item.team?.abbreviation || ""
@@ -6165,6 +6193,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const summary = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado
         ? await cargarResumenFutbol(apiGame, espnGame)
         : null;
+      const juegoConAlargue = juegoFutbolTieneAlargueOPenales(game);
+      const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
@@ -6176,23 +6206,38 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         const marcadorTexto = marcador
           ? obtenerMarcadorTextoFutbol(marcador, autoFutbol.equipos)
           : autoFutbol.marcador;
+        const cornersEquipoDetectado = autoFutbol.mercado === "total_corners" && !juegoNoIniciado && summary
+          ? getCornersEquipoFutbol(summary, marcador)
+          : null;
+        const tarjetasEquipoDetectado = autoFutbol.mercado === "total_tarjetas" && !juegoNoIniciado && summary
+          ? getTarjetasEquipoFutbol(summary, marcador)
+          : null;
+        const summaryTieneStatsMercado = autoFutbol.mercado === "total_corners"
+          ? Boolean(cornersEquipoDetectado)
+          : autoFutbol.mercado === "total_tarjetas"
+            ? Boolean(tarjetasEquipoDetectado)
+            : false;
+        const puedeUsarStatsGuardadas = !juegoConAlargue || summaryTieneStatsMercado || statsReglamentariasGuardadas;
         const cornersEquipo = autoFutbol.mercado === "total_corners"
-          ? (juegoNoIniciado ? null : getCornersEquipoFutbol(summary, marcador))
+          ? (cornersEquipoDetectado || (puedeUsarStatsGuardadas ? autoFutbol.cornersEquipo : null))
           : autoFutbol.cornersEquipo;
         const totalCorners = autoFutbol.mercado === "total_corners"
-          ? cornersEquipo?.total ?? autoFutbol.totalCorners
+          ? cornersEquipo?.total ?? (puedeUsarStatsGuardadas ? autoFutbol.totalCorners : undefined)
           : autoFutbol.totalCorners;
         const tarjetasEquipo = autoFutbol.mercado === "total_tarjetas"
-          ? (juegoNoIniciado ? null : getTarjetasEquipoFutbol(summary, marcador))
+          ? (tarjetasEquipoDetectado || (puedeUsarStatsGuardadas ? autoFutbol.tarjetasEquipo : null))
           : autoFutbol.tarjetasEquipo;
         const totalTarjetas = autoFutbol.mercado === "total_tarjetas"
-          ? tarjetasEquipo?.total ?? autoFutbol.totalTarjetas
+          ? tarjetasEquipo?.total ?? (puedeUsarStatsGuardadas ? autoFutbol.totalTarjetas : undefined)
           : autoFutbol.totalTarjetas;
         const siguienteMarcador = juegoNoIniciado ? null : marcadorTexto;
         const siguienteTotalCorners = juegoNoIniciado ? undefined : totalCorners;
         const siguienteCornersEquipo = cornersEquipo || null;
         const siguienteTotalTarjetas = juegoNoIniciado ? undefined : totalTarjetas;
         const siguienteTarjetasEquipo = tarjetasEquipo || null;
+        const siguienteEstadisticasTiempo = (siguienteTotalCorners !== undefined || siguienteTotalTarjetas !== undefined)
+          ? getMarcadorTiempoReglamentarioMeta()
+          : undefined;
         const targetFechaJuego = getFechaJuegoFutbol(game);
         if (
           autoFutbol.id !== getIdJuegoFutbol(game) ||
@@ -6202,6 +6247,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           autoFutbol.totalTarjetas !== siguienteTotalTarjetas ||
           JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguienteCornersEquipo) ||
           JSON.stringify(autoFutbol.tarjetasEquipo || null) !== JSON.stringify(siguienteTarjetasEquipo) ||
+          autoFutbol.estadisticasTiempo !== siguienteEstadisticasTiempo ||
           autoFutbol.fechaJuego !== targetFechaJuego ||
           (autoFutbol.pausaMedioTiempoHasta || null) !== pausaMedioTiempoHasta ||
           (autoFutbol.pausaEstadoEspecialHasta || null) !== null
@@ -6223,6 +6269,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
             cornersEquipo: siguienteCornersEquipo,
             totalTarjetas: siguienteTotalTarjetas,
             tarjetasEquipo: siguienteTarjetasEquipo,
+            estadisticasTiempo: siguienteEstadisticasTiempo,
             fechaJuego: targetFechaJuego,
             pausaMedioTiempoHasta,
             pausaEstadoEspecialHasta: null
@@ -6237,6 +6284,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         estadoJuego,
         autoFutbol.pausaMedioTiempoHasta
       );
+      const siguienteEstadisticasTiempo = esMercadoEstadisticasFutbol(autoFutbol)
+        ? getMarcadorTiempoReglamentarioMeta()
+        : autoFutbol.estadisticasTiempo;
       const siguiente = {
         ...sel,
         estado: evaluacion.estado,
@@ -6253,6 +6303,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           cornersEquipo: evaluacion.cornersEquipo || autoFutbol.cornersEquipo || null,
           totalTarjetas: evaluacion.totalTarjetas ?? autoFutbol.totalTarjetas,
           tarjetasEquipo: evaluacion.tarjetasEquipo || autoFutbol.tarjetasEquipo || null,
+          estadisticasTiempo: siguienteEstadisticasTiempo,
           fechaJuego: targetFechaJuego,
           pausaMedioTiempoHasta,
           pausaEstadoEspecialHasta: null,
@@ -6272,6 +6323,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         autoFutbol.totalTarjetas !== siguiente.autoFutbol.totalTarjetas ||
         JSON.stringify(autoFutbol.cornersEquipo || null) !== JSON.stringify(siguiente.autoFutbol.cornersEquipo || null) ||
         JSON.stringify(autoFutbol.tarjetasEquipo || null) !== JSON.stringify(siguiente.autoFutbol.tarjetasEquipo || null) ||
+        autoFutbol.estadisticasTiempo !== siguiente.autoFutbol.estadisticasTiempo ||
         autoFutbol.fechaJuego !== targetFechaJuego ||
         (autoFutbol.pausaMedioTiempoHasta || null) !== siguiente.autoFutbol.pausaMedioTiempoHasta ||
         (autoFutbol.pausaEstadoEspecialHasta || null) !== null
