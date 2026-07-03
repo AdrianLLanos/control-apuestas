@@ -4747,13 +4747,16 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
 }
 
 function autoTieneResultadoVisible(auto = {}) {
-  if (debeMostrarHorarioJuego(auto?.fechaJuego || "", auto?.estadoJuego || "")) return false;
   return Boolean(auto?.marcador) ||
-    auto?.totalCarreras !== undefined ||
-    auto?.totalHits !== undefined ||
-    auto?.totalGoles !== undefined ||
-    auto?.totalCorners !== undefined ||
-    auto?.totalTarjetas !== undefined;
+    (
+      !debeMostrarHorarioJuego(auto?.fechaJuego || "", auto?.estadoJuego || "") && (
+        auto?.totalCarreras !== undefined ||
+        auto?.totalHits !== undefined ||
+        auto?.totalGoles !== undefined ||
+        auto?.totalCorners !== undefined ||
+        auto?.totalTarjetas !== undefined
+      )
+    );
 }
 
 function jugadaTieneResultadoAutoVisible(jugada = {}) {
