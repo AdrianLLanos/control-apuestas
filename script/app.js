@@ -1,4 +1,26 @@
-import {
+const deployModuleToken = new URL(import.meta.url).searchParams.get("deploy") ||
+  new URL(import.meta.url).searchParams.get("v") ||
+  Date.now().toString(36);
+const withDeployToken = (path) =>
+  `${path}${path.includes("?") ? "&" : "?"}deploy=${encodeURIComponent(deployModuleToken)}`;
+
+const [
+  firebaseStore,
+  calculations,
+  mlbModule,
+  countriesModule,
+  validationModal,
+  marketConflicts
+] = await Promise.all([
+  import(withDeployToken("./firebase-store.js")),
+  import(withDeployToken("./calculations.js")),
+  import(withDeployToken("./mlb.js?v=2.1")),
+  import(withDeployToken("./countries.js?v=1.1")),
+  import(withDeployToken("./validation-modal.js")),
+  import(withDeployToken("./sports/market-conflicts.js?v=1.0"))
+]);
+
+const {
   db,
   collection,
   addDoc,
@@ -14,8 +36,8 @@ import {
   startAfter,
   updateDoc,
   where
-} from "./firebase-store.js";
-import {
+} = firebaseStore;
+const {
   PATENTE_MIN_SELECTIONS,
   PATENTE_MAX_SELECTIONS,
   calcularCuotaMaximaPatente,
@@ -27,27 +49,27 @@ import {
   extraerNumeroJugada,
   formatCuotaTabla,
   formatDecimal
-} from "./calculations.js";
-import {
+} = calculations;
+const {
   MLB_TEAMS,
   autocorregirTextoConLogos,
   crearMlbTeamsDatalist,
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
-} from "./mlb.js?v=2.1";
-import { COUNTRY_FLAG_ENTRIES } from "./countries.js?v=1.1";
-import {
+} = mlbModule;
+const { COUNTRY_FLAG_ENTRIES } = countriesModule;
+const {
   cerrarModalValidacion,
   mostrarModalValidacion,
   registrarModalValidacionGlobal
-} from "./validation-modal.js";
-import {
+} = validationModal;
+const {
   combinarAutoMlbConDetectado,
   debeForzarIconoGol,
   debeMostrarReglaTiempoFutbol,
   esContextoMlb,
   quitarAutoFutbolSiEsMlb
-} from "./sports/market-conflicts.js?v=1.0";
+} = marketConflicts;
 
 let paginaActual = 1;
 const porPagina = 1;
@@ -817,14 +839,27 @@ const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
 const DEPLOY_VERSION_CHECK_MS = 30 * 1000;
+const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
+const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
 const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
 let cargandoApuestas = false;
 let unsubscribeApuestas = null;
 let apuestasExtraPaginadas = [];
-let deployVersionActual = "";
+let deployVersionActual = window.__APUESTAS_DEPLOY_SIGNATURE__ ||
+  getStorageItemSeguro(sessionStorage, DEPLOY_SIGNATURE_KEY) ||
+  getStorageItemSeguro(localStorage, DEPLOY_SIGNATURE_KEY) ||
+  "";
 let deployVersionReloading = false;
+
+function getStorageItemSeguro(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch (error) {
+    return "";
+  }
+}
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
@@ -878,8 +913,17 @@ async function limpiarCachesNavegador() {
 
 async function recargarPorNuevoDeploy(version = "") {
   await limpiarCachesNavegador();
+  const deployToken = crearTokenVersionDeploy(version);
+  try {
+    sessionStorage.setItem(DEPLOY_TOKEN_KEY, deployToken);
+    localStorage.setItem(DEPLOY_TOKEN_KEY, deployToken);
+    sessionStorage.setItem(DEPLOY_SIGNATURE_KEY, version);
+    localStorage.setItem(DEPLOY_SIGNATURE_KEY, version);
+  } catch (error) {
+    console.warn("No se pudo guardar el token del deploy:", error.message);
+  }
   const url = new URL(window.location.href);
-  url.searchParams.set("deploy", crearTokenVersionDeploy(version));
+  url.searchParams.set("deploy", deployToken);
   url.searchParams.set("t", Date.now().toString(36));
   window.location.replace(url.toString());
 }

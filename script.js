@@ -1,1 +1,1 @@
-import "./script/main.js?v=11.17";
+import "./script/loader.js?v=1.0";
