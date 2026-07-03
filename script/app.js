@@ -839,7 +839,7 @@ const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
-const DEPLOY_VERSION_CHECK_MS = 15 * 1000;
+const DEPLOY_VERSION_CHECK_MS = 5 * 1000;
 const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
 const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
 const autoSyncTimers = new Map();
@@ -1012,9 +1012,8 @@ async function revisarVersionDeploy() {
     }
 
     if (firma !== deployVersionActual) {
-      if (usuarioEstaEditandoFormulario()) return;
       deployVersionReloading = true;
-      ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(firma), 30000);
+      setTimeout(() => recargarPorNuevoDeploy(firma), 500);
     }
   } finally {
     deployVersionChecking = false;
@@ -1040,7 +1039,7 @@ function iniciarMonitorVersionDeploy() {
   document.addEventListener("visibilitychange", () => {
     if (paginaEstaVisible()) {
       registrarReactivacionPagina();
-      programarRevisionVersionDeploy(5000);
+      programarRevisionVersionDeploy(0);
     } else if (deployVersionTimerId !== null) {
       clearTimeout(deployVersionTimerId);
       deployVersionTimerId = null;
@@ -1048,7 +1047,7 @@ function iniciarMonitorVersionDeploy() {
   });
   window.addEventListener("focus", () => {
     registrarReactivacionPagina();
-    programarRevisionVersionDeploy(5000);
+    programarRevisionVersionDeploy(0);
   });
 }
 
