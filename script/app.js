@@ -5504,11 +5504,11 @@ function getTotalEstadisticaFutbol(summary = null, autoFutbol = {}, marcador = n
 
 function getTotalEstadisticaGuardadaFutbol(autoFutbol = {}) {
   if (autoFutbol.mercado === "total_corners") {
-    const total = Number(autoFutbol.totalCorners);
+    const total = getTotalCornersDesdeEquiposFutbol(autoFutbol.cornersEquipo) ?? Number(autoFutbol.totalCorners);
     return Number.isNaN(total) ? null : total;
   }
   if (autoFutbol.mercado === "total_tarjetas") {
-    const total = Number(autoFutbol.totalTarjetas);
+    const total = getTotalTarjetasDesdeEquiposFutbol(autoFutbol.tarjetasEquipo) ?? Number(autoFutbol.totalTarjetas);
     return Number.isNaN(total) ? null : total;
   }
   return null;
@@ -6158,6 +6158,18 @@ function obtenerTarjetasDetalleEnOrden(tarjetasEquipo, equipos) {
   }
 }
 
+function getTotalCornersDesdeEquiposFutbol(cornersEquipo = {}) {
+  const home = Number(cornersEquipo?.home?.corners);
+  const away = Number(cornersEquipo?.away?.corners);
+  return Number.isNaN(home) || Number.isNaN(away) ? null : home + away;
+}
+
+function getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo = {}) {
+  const home = Number(tarjetasEquipo?.home?.tarjetas);
+  const away = Number(tarjetasEquipo?.away?.tarjetas);
+  return Number.isNaN(home) || Number.isNaN(away) ? null : home + away;
+}
+
 function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
   const total = Number(autoFutbol.totalCorners);
   if (Number.isNaN(total)) return null;
@@ -6328,7 +6340,6 @@ function getCornersEquipoFutbol(summary, marcador = null) {
 
   if (cornersEquipos.length === 0) return null;
 
-  const total = cornersEquipos.reduce((sum, team) => sum + team.corners, 0);
   let home = null;
   let away = null;
 
@@ -6342,8 +6353,15 @@ function getCornersEquipoFutbol(summary, marcador = null) {
     away = away || cornersEquipos.find(team => team !== home) || cornersEquipos[1];
   }
 
+  const totalPartido = home && away
+    ? getTotalCornersDesdeEquiposFutbol({
+      home: { corners: home.corners },
+      away: { corners: away.corners }
+    })
+    : cornersEquipos.reduce((sum, team) => sum + team.corners, 0);
+
   return {
-    total,
+    total: totalPartido,
     home: home ? { name: home.name, corners: home.corners } : null,
     away: away ? { name: away.name, corners: away.corners } : null
   };
@@ -6456,7 +6474,6 @@ function getTarjetasEquipoFutbol(summary, marcador = null) {
 
   if (tarjetasEquipos.length === 0) return null;
 
-  const total = tarjetasEquipos.reduce((sum, team) => sum + team.tarjetas, 0);
   let home = null;
   let away = null;
 
@@ -6470,8 +6487,15 @@ function getTarjetasEquipoFutbol(summary, marcador = null) {
     away = away || tarjetasEquipos.find(team => team !== home) || tarjetasEquipos[1];
   }
 
+  const totalPartido = home && away
+    ? getTotalTarjetasDesdeEquiposFutbol({
+      home: { tarjetas: home.tarjetas },
+      away: { tarjetas: away.tarjetas }
+    })
+    : tarjetasEquipos.reduce((sum, team) => sum + team.tarjetas, 0);
+
   return {
-    total,
+    total: totalPartido,
     home: home ? { name: home.name, tarjetas: home.tarjetas } : null,
     away: away ? { name: away.name, tarjetas: away.tarjetas } : null
   };
@@ -7361,8 +7385,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
     }
 
-    const totalCorners = futbolAuto.totalCorners;
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
+    const totalCorners = getTotalCornersDesdeEquiposFutbol(cornersEquipo) ?? futbolAuto.totalCorners;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     if (estadoPrevio) marcador = "";
@@ -7397,8 +7421,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
     }
 
-    const totalTarjetas = futbolAuto.totalTarjetas;
     const tarjetasEquipo = futbolAuto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(futbolAuto);
+    const totalTarjetas = getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo) ?? futbolAuto.totalTarjetas;
     const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = debeMostrarHorarioJuego(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     if (estadoPrevio) marcador = "";
