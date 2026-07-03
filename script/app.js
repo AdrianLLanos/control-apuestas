@@ -4116,6 +4116,7 @@ function juegoMlbFinalizado(game) {
 }
 
 function juegoMlbNoIniciado(game) {
+  if (getMarcadorMlb(game)) return false;
   const state = String(game?.status?.abstractGameState || "").toLowerCase();
   const detail = String(game?.status?.detailedState || "").toLowerCase();
   return /\b(preview|pre-game|pre game|scheduled|warmup)\b/.test(state) ||
@@ -4692,7 +4693,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const marcador = autoMlb.marcador;
   const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
   const estadoPrevio = debeMostrarHorarioJuego(fechaJuego, autoMlb.estadoJuego);
-  const ocultarResultadoPorHorario = estadoPrevio;
+  const ocultarResultadoPorHorario = estadoPrevio && !marcador;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
