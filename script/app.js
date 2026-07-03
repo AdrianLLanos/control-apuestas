@@ -9744,6 +9744,7 @@ window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selInde
     mostrarModalValidacion(["Ingresa dos valores validos. Ejemplo: 4-3"]);
     return;
   }
+  window.ocultarAjusteEstadisticaFutbol(apuestaId, matchIndex, selIndex);
 
   const homeFinal = Math.round(home);
   const awayFinal = Math.round(away);
