@@ -12,7 +12,8 @@ import {
   query,
   setDoc,
   startAfter,
-  updateDoc
+  updateDoc,
+  where
 } from "./firebase-store.js";
 import {
   PATENTE_MIN_SELECTIONS,
@@ -146,6 +147,12 @@ function normalizarNombreCasa(nombre = "") {
 }
 
 function getApuestasFiltradas() {
+  if (filtroCasaId === CASA_TODAS_ID) return apuestas;
+  return apuestas.filter(a => getCasaIdApuesta(a) === filtroCasaId);
+}
+
+function getApuestasSyncScope(silencioso = false) {
+  if (!silencioso) return getApuestasFiltradas();
   if (filtroCasaId === CASA_TODAS_ID) return apuestas;
   return apuestas.filter(a => getCasaIdApuesta(a) === filtroCasaId);
 }
@@ -344,12 +351,17 @@ async function crearCasa() {
       creadoEn: nuevaCasa.creadoEn
     });
 
+    const filtroAnterior = filtroCasaId;
     casas = [...casas.filter(c => c.id !== id), nuevaCasa];
     casaFormularioId = id;
     filtroCasaId = id;
     if (input) input.value = "";
     renderCasasControls();
-    render();
+    if (filtroAnterior !== filtroCasaId) {
+      cargarApuestasIniciales();
+    } else {
+      render();
+    }
     await mostrarModalCasa({
       tipo: "success",
       titulo: "Casa de apuestas creada",
@@ -389,6 +401,7 @@ async function eliminarCasaSeleccionada() {
 
   if (!confirmado) return;
 
+  const filtroAnterior = filtroCasaId;
   if (tieneApuestas) {
     await setDoc(doc(db, "casas", casa.id), {
       activa: false
@@ -403,7 +416,11 @@ async function eliminarCasaSeleccionada() {
   const siguienteCasa = getCasasDisponibles()[0] || normalizarCasa();
   casaFormularioId = siguienteCasa.id;
   renderCasasControls();
-  render();
+  if (filtroAnterior !== filtroCasaId) {
+    cargarApuestasIniciales();
+  } else {
+    render();
+  }
   await mostrarModalCasa({
     tipo: "aviso",
     titulo: "Casa eliminada",
@@ -983,10 +1000,14 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   autoSyncTimers.set(deporte, timerId);
 }
 
-function getConsultaApuestasPaginada(cursor = null) {
-  const constraints = [
-    orderBy("creadoEn", "desc")
-  ];
+function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId) {
+  const constraints = [];
+
+  if (casaId && casaId !== CASA_TODAS_ID) {
+    constraints.push(where("casaId", "==", casaId));
+  }
+
+  constraints.push(orderBy("creadoEn", "desc"));
 
   if (cursor) {
     constraints.push(startAfter(cursor));
@@ -1157,8 +1178,9 @@ function escucharApuestas() {
 }
 
 function programarSyncInicialVisible() {
-  const hayFutbol = apuestas.some(apuesta => apuestaPareceFutbol(apuesta));
-  const hayMlb = apuestas.some(apuesta => apuestaPareceMlb(apuesta));
+  const apuestasVisibles = getApuestasFiltradas();
+  const hayFutbol = apuestasVisibles.some(apuesta => apuestaPareceFutbol(apuesta));
+  const hayMlb = apuestasVisibles.some(apuesta => apuestaPareceMlb(apuesta));
 
   if (hayFutbol) {
     programarSyncSilenciosa("futbol", 12000);
@@ -3142,12 +3164,17 @@ async function agregarApuesta() {
 
   // Siempre apunta el filtro a la casa de la apuesta recién guardada
   // para que el usuario vea la nueva apuesta de inmediato en el historial.
+  const filtroAnterior = filtroCasaId;
   filtroCasaId = casaFormularioId;
   // Calcular la página después de actualizar filtroCasaId para usar el filtro correcto
   const diasUnicosPost = [...new Set([...getApuestasFiltradas().map(a => a.dia), dia])].sort((a, b) => new Date(a) - new Date(b));
   paginaActual = Math.ceil((diasUnicosPost.indexOf(dia) + 1) / porPagina) || 1;
   renderCasasControls();
-  renderSnapshotProgramado();
+  if (filtroAnterior !== filtroCasaId) {
+    cargarApuestasIniciales();
+  } else {
+    renderSnapshotProgramado();
+  }
 
   // ── Reset form ──
   document.getElementById("importe").value = "";
@@ -4401,7 +4428,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
 
 async function sincronizarResultadosMlb(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const candidatasResultados = apuestas.filter(a => {
+  const apuestasSync = getApuestasSyncScope(silencioso);
+  const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaSyncCerrada(a)) return false;
@@ -4414,7 +4442,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
     if (silencioso && !esApuestaHoy) return false;
     return true;
   });
-  const candidatasHorario = apuestas.filter(a => {
+  const candidatasHorario = apuestasSync.filter(a => {
     if (!apuestaMlbNecesitaHorario(a)) return false;
     if (apuestaSyncCerrada(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
@@ -6791,7 +6819,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
 async function sincronizarResultadosFutbol(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const candidatasResultados = apuestas.filter(a => {
+  const apuestasSync = getApuestasSyncScope(silencioso);
+  const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaSyncCerrada(a)) return false;
@@ -6806,7 +6835,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
     return true;
   });
-  const candidatasHorario = apuestas.filter(a => {
+  const candidatasHorario = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaSyncCerrada(a)) return false;

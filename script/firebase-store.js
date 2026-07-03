@@ -13,7 +13,8 @@ export {
   query,
   setDoc,
   startAfter,
-  updateDoc
+  updateDoc,
+  where
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 export { db };
