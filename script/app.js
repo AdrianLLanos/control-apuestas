@@ -5600,27 +5600,69 @@ function getMarcadorTiempoReglamentarioMeta() {
 
 function esEstadoAlargueOPenalesFutbol(estado = "") {
   const texto = normalizarEstadoExternoTexto(estado);
-  return /\b(aet|after extra time|extra time|prorroga|alargue|pen|penalties|penales)\b/.test(texto);
+  return /\b(aet|after extra time|extra time|extra-time|overtime|over time|ot|prorroga|alargue|suplementario|tiempo suplementario|pen|penalties|penales|shootout|end regulation|end of regulation|fin del tiempo reglamentario)\b/.test(texto);
+}
+
+function getPeriodoJuegoFutbol(game = {}) {
+  const apiStatus = game?.fixture?.status || {};
+  const status = game?.status || {};
+  const type = status.type || game?.competitions?.[0]?.status?.type || {};
+  const competitionStatus = game?.competitions?.[0]?.status || {};
+  const candidates = [
+    apiStatus.period,
+    status.period,
+    type.period,
+    competitionStatus.period,
+    competitionStatus.type?.period
+  ];
+
+  for (const value of candidates) {
+    const periodo = Number(value);
+    if (!Number.isNaN(periodo) && periodo > 0) return periodo;
+  }
+
+  return 0;
+}
+
+function juegoFutbolTieneMarcadorReglamentarioCerrado(game = {}) {
+  const fulltimeHome = toScoreNumberFutbol(game?.score?.fulltime?.home);
+  const fulltimeAway = toScoreNumberFutbol(game?.score?.fulltime?.away);
+  return !Number.isNaN(fulltimeHome) && !Number.isNaN(fulltimeAway);
 }
 
 function juegoFutbolTieneAlargueOPenales(game = {}) {
   const apiStatus = game?.fixture?.status || {};
   const apiShort = String(apiStatus.short || "").toUpperCase();
-  if (["AET", "PEN", "ET", "BT", "P"].includes(apiShort)) return true;
+  if (["AET", "PEN", "ET", "BT", "P", "OT"].includes(apiShort)) return true;
+  if (getPeriodoJuegoFutbol(game) > 2) return true;
 
-  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  const statusRoot = game?.status || {};
+  const competitionStatus = game?.competitions?.[0]?.status || {};
+  const status = statusRoot.type || competitionStatus.type || {};
   const texto = [
     apiStatus.short,
     apiStatus.long,
     apiStatus.elapsed,
+    apiStatus.extra,
     status.name,
     status.state,
     status.description,
     status.detail,
-    status.shortDetail
+    status.shortDetail,
+    statusRoot.displayClock,
+    competitionStatus.displayClock
   ].filter(Boolean).join(" ");
 
-  return esEstadoAlargueOPenalesFutbol(texto);
+  if (esEstadoAlargueOPenalesFutbol(texto)) return true;
+
+  const competitors = game?.competitions?.[0]?.competitors || [];
+  return competitors.some(item => {
+    const lineas = Array.isArray(item.linescores) ? item.linescores : [];
+    return lineas.some(line => {
+      const periodo = Number(line.period ?? line.periodNumber ?? line.number ?? line.sequence);
+      return !Number.isNaN(periodo) && periodo > 2;
+    });
+  });
 }
 
 function esPeriodoReglamentarioEspn(line = {}, index = 0) {
@@ -5821,6 +5863,7 @@ function juegoFutbolReglamentarioProbablementeTerminado(game) {
   if (juegoFutbolFinalizado(game)) return true;
   if (juegoFutbolNoIniciado(game)) return false;
   if (!getMarcadorFutbol(game)) return false;
+  if (juegoFutbolTieneMarcadorReglamentarioCerrado(game)) return true;
   if (juegoFutbolTieneAlargueOPenales(game)) return true;
 
   const minuto = getMinutoJuegoFutbol(game);
@@ -5909,14 +5952,29 @@ function getMarcadorFutbol(game) {
 
 function getMinutoJuegoFutbol(game = null) {
   const apiElapsed = Number(game?.fixture?.status?.elapsed);
-  if (!Number.isNaN(apiElapsed) && apiElapsed > 0) return apiElapsed;
+  const apiExtra = Number(game?.fixture?.status?.extra);
+  if (!Number.isNaN(apiElapsed) && apiElapsed > 0) {
+    return !Number.isNaN(apiExtra) && apiExtra > 0 ? apiElapsed + apiExtra : apiElapsed;
+  }
 
-  const status = game?.status?.type || game?.competitions?.[0]?.status?.type || {};
+  const statusRoot = game?.status || {};
+  const competitionStatus = game?.competitions?.[0]?.status || {};
+  const status = statusRoot.type || competitionStatus.type || {};
   const texto = [
     status.shortDetail,
     status.detail,
-    status.description
+    status.description,
+    statusRoot.displayClock,
+    competitionStatus.displayClock
   ].filter(Boolean).join(" ");
+
+  const stoppage = texto.match(/\b(\d{1,3})\s*\+\s*(\d{1,2})\b/);
+  if (stoppage) {
+    const base = Number(stoppage[1]);
+    const extra = Number(stoppage[2]);
+    if (!Number.isNaN(base) && !Number.isNaN(extra)) return base + extra;
+  }
+
   const match = texto.match(/\b(\d{1,3})(?:'| min)?\b/i);
   const minuto = match ? Number(match[1]) : NaN;
   return !Number.isNaN(minuto) && minuto > 0 ? minuto : 0;
