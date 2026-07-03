@@ -5547,7 +5547,7 @@ async function cargarResumenFutbol(apiGame, espnGame = null, options = {}) {
     }
   }
 
-  if (juegoConAlargue) return apiSummary;
+  if (juegoConAlargue && (!autoFutbol || !esMercadoEstadisticasFutbol(autoFutbol))) return apiSummary;
 
   const espnSummary = await cargarResumenEspnFutbol(espnGame);
   if (autoFutbol && esMercadoEstadisticasFutbol(autoFutbol)) {
@@ -6263,7 +6263,7 @@ function extraerValorCornersFutbol(stat = {}) {
   const etiqueta = normalizarTextoMercado(
     stat.name || stat.type || stat.displayName || stat.label || stat.key || ""
   );
-  if (!/\b(corner|corners|esquina|esquinas)\b/.test(etiqueta)) return null;
+  if (!/\b(corner|corners|cornerkick|cornerkicks|corner kick|corner kicks|woncorners|won corners|esquina|esquinas)\b/.test(etiqueta)) return null;
 
   const rawValue = stat.value ?? stat.displayValue;
   const value = Number(String(rawValue).replace("%", "").trim());
