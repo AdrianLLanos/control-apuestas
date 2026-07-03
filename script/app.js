@@ -17,7 +17,7 @@ const [
   import(withDeployToken("./mlb.js?v=2.1")),
   import(withDeployToken("./countries.js?v=1.1")),
   import(withDeployToken("./validation-modal.js")),
-  import(withDeployToken("./sports/market-conflicts.js?v=1.0"))
+  import(withDeployToken("./sports/market-conflicts.js?v=1.1"))
 ]);
 
 const {
@@ -4234,8 +4234,13 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         titulo: sel.titulo || "",
         jugada: sel.jugadaOriginal || sel.jugada || ""
       });
-      const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
+      let autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
+      const equiposBusqueda = getEquiposBusquedaAutoMlb(autoMlb, jugada, ev);
+      if (equiposBusqueda.length >= 2 && JSON.stringify(autoMlb.equipos || []) !== JSON.stringify(equiposBusqueda)) {
+        autoMlb = { ...autoMlb, equipos: equiposBusqueda };
+        huboCambioMetadata = true;
+      }
       const { autoFutbol, ...selMlb } = sel;
       if (autoFutbol) huboCambioMetadata = true;
 
@@ -4472,8 +4477,13 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
         titulo: sel.titulo || "",
         jugada: sel.jugadaOriginal || sel.jugada || ""
       });
-      const autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
+      let autoMlb = combinarAutoMlbConDetectado(autoMlbOriginal, autoMlbDetectado);
       if (!autoMlb) return sel;
+      const equiposBusqueda = getEquiposBusquedaAutoMlb(autoMlb, jugada, ev);
+      if (equiposBusqueda.length >= 2 && JSON.stringify(autoMlb.equipos || []) !== JSON.stringify(equiposBusqueda)) {
+        autoMlb = { ...autoMlb, equipos: equiposBusqueda };
+        huboCambio = true;
+      }
       const { autoFutbol, ...selMlb } = sel;
 
       const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
@@ -5801,6 +5811,15 @@ function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
     }
     return textoJuegoContieneEquiposFutbol(game, equipos);
   }) || null;
+}
+
+function getEquiposBusquedaAutoMlb(autoMlb = {}, jugada = {}, evento = "") {
+  const candidatos = [
+    autoMlb?.equipos,
+    jugada?.autoMlb?.equipos,
+    detectarEquiposMlb(evento)
+  ];
+  return candidatos.find(equipos => Array.isArray(equipos) && equipos.length >= 2) || [];
 }
 
 function buscarJuegoEspnFutbol(juegos = [], equipos = [], fechaBet = "") {

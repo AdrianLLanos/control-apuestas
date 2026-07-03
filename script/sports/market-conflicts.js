@@ -20,6 +20,13 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
   if (!autoOriginal) return autoDetectado;
   if (!autoDetectado) return autoOriginal;
 
+  const equiposDetectados = Array.isArray(autoDetectado.equipos) && autoDetectado.equipos.length >= 2
+    ? autoDetectado.equipos
+    : null;
+  const equiposOriginales = Array.isArray(autoOriginal.equipos) && autoOriginal.equipos.length >= 2
+    ? autoOriginal.equipos
+    : null;
+
   const mercadoDetectado = autoDetectado.mercado || "";
   const mercadoOriginal = autoOriginal.mercado || "";
   const mantenerMercadoOriginal = Boolean(mercadoOriginal) && (
@@ -30,7 +37,7 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
   return {
     ...autoOriginal,
     mercado: mantenerMercadoOriginal ? mercadoOriginal : (mercadoDetectado || mercadoOriginal),
-    equipos: autoDetectado.equipos || autoOriginal.equipos,
+    equipos: equiposDetectados || equiposOriginales || autoOriginal.equipos || autoDetectado.equipos,
     seleccionEquipo: autoDetectado.seleccionEquipo || autoOriginal.seleccionEquipo,
     tipoTotal: autoDetectado.tipoTotal || autoOriginal.tipoTotal,
     linea: autoDetectado.linea ?? autoOriginal.linea
