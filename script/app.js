@@ -5925,6 +5925,11 @@ function elegirJuegoFutbolMasReciente(apiGame = null, espnGame = null) {
   if (!apiGame) return espnGame;
   if (!espnGame) return apiGame;
 
+  const apiFinalizado = juegoFutbolFinalizado(apiGame);
+  const espnFinalizado = juegoFutbolFinalizado(espnGame);
+  if (apiFinalizado && !espnFinalizado) return apiGame;
+  if (espnFinalizado && !apiFinalizado) return espnGame;
+
   const apiMarcador = getMarcadorFutbol(apiGame);
   const espnMarcador = getMarcadorFutbol(espnGame);
   if (!apiMarcador) return espnGame;
@@ -5995,6 +6000,11 @@ function calcularResumenYEstadisticas() {
 }
 
 function elegirJuegoFutbolPrincipal(apiGame = null, espnGame = null, autoFutbol = null) {
+  const apiFinalizado = juegoFutbolFinalizado(apiGame);
+  const espnFinalizado = juegoFutbolFinalizado(espnGame);
+  if (apiFinalizado && !espnFinalizado) return apiGame;
+  if (espnFinalizado && !apiFinalizado) return espnGame;
+
   if (autoFutbol) {
     const apiActualizado = juegoFutbolTieneResultadoActualizado(apiGame, autoFutbol);
     const espnActualizado = juegoFutbolTieneResultadoActualizado(espnGame, autoFutbol);
