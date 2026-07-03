@@ -6489,6 +6489,36 @@ function esMercadoEstadisticasFutbol(autoFutbol = {}) {
   return autoFutbol?.mercado === "total_corners" || autoFutbol?.mercado === "total_tarjetas";
 }
 
+function getEstadisticaManualFutbol(autoFutbol = {}) {
+  const ajuste = autoFutbol?.ajusteManual;
+  if (!ajuste || ajuste.mercado !== autoFutbol.mercado) return null;
+
+  const home = Number(ajuste.home);
+  const away = Number(ajuste.away);
+  if (Number.isNaN(home) || Number.isNaN(away)) return null;
+
+  const homeName = ajuste.homeName || autoFutbol.cornersEquipo?.home?.name || autoFutbol.tarjetasEquipo?.home?.name || "Local";
+  const awayName = ajuste.awayName || autoFutbol.cornersEquipo?.away?.name || autoFutbol.tarjetasEquipo?.away?.name || "Visitante";
+
+  if (autoFutbol.mercado === "total_corners") {
+    return {
+      total: home + away,
+      home: { name: homeName, corners: home },
+      away: { name: awayName, corners: away }
+    };
+  }
+
+  if (autoFutbol.mercado === "total_tarjetas") {
+    return {
+      total: home + away,
+      home: { name: homeName, tarjetas: home },
+      away: { name: awayName, tarjetas: away }
+    };
+  }
+
+  return null;
+}
+
 function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (!autoFutbol) return null;
   if (juegoFutbolNoIniciado(game)) return null;
@@ -6584,7 +6614,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   }
 
   if (autoFutbol.mercado === "total_corners") {
-    const cornersEquipo = getCornersEquipoFutbol(summary, marcador);
+    const cornersEquipo = getEstadisticaManualFutbol(autoFutbol) || getCornersEquipoFutbol(summary, marcador);
     const totalCorners = cornersEquipo?.total ?? null;
     const linea = Number(autoFutbol.linea);
     if (totalCorners === null || Number.isNaN(linea)) return null;
@@ -6604,7 +6634,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   }
 
   if (autoFutbol.mercado === "total_tarjetas") {
-    const tarjetasEquipo = getTarjetasEquipoFutbol(summary, marcador);
+    const tarjetasEquipo = getEstadisticaManualFutbol(autoFutbol) || getTarjetasEquipoFutbol(summary, marcador);
     const totalTarjetas = tarjetasEquipo?.total ?? null;
     const linea = Number(autoFutbol.linea);
     if (totalTarjetas === null || Number.isNaN(linea)) return null;
@@ -7289,6 +7319,14 @@ function startAutoSyncMlb() {
   });
 }
 
+function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
+  if (!options.apuestaId && options.apuestaId !== 0) return "";
+  if (!Number.isInteger(options.matchIndex) || !Number.isInteger(options.selIndex)) return "";
+  if (!["total_corners", "total_tarjetas"].includes(autoFutbol?.mercado)) return "";
+
+  return ` <button type="button" class="auto-stat-adjust-btn" title="Ajustar dato manual" onclick="window.ajustarEstadisticaFutbol('${escapeHtml(options.apuestaId)}', ${options.matchIndex}, ${options.selIndex})" style="border:0; background:rgba(148,163,184,0.18); color:#dbeafe; border-radius:4px; padding:1px 5px; font-size:10px; font-weight:700; cursor:pointer; vertical-align:middle;">Ajustar</button>`;
+}
+
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
@@ -7326,7 +7364,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? ` &middot; Total: ${escapeHtml(totalCorners)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}${getAjusteManualFutbolHtml(futbolAuto, options)}</div>${estadoFinalizadoHtml}`;
     }
 
     return marcador
@@ -7362,7 +7400,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
         ? ` &middot; Total: ${escapeHtml(totalTarjetas)}`
         : "";
       const detalle = obtenerTarjetasDetalleEnOrden(tarjetasEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}</div>${estadoFinalizadoHtml}`;
+      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}${getAjusteManualFutbolHtml(futbolAuto, options)}</div>${estadoFinalizadoHtml}`;
     }
 
     return marcador
@@ -8437,6 +8475,9 @@ function _render() {
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                apuestaId: a.id,
+                matchIndex,
+                selIndex,
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 suppressSchedule: suppressScheduleForMatch,
@@ -8540,6 +8581,9 @@ function _render() {
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
               const selectionTextClass = isPatente ? 'patente-selection-text' : '';
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                apuestaId: a.id,
+                matchIndex,
+                selIndex,
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 suppressSchedule: suppressScheduleForMatch,
@@ -9630,6 +9674,109 @@ window.calcularCuotaEditSimpleOption = function (id) {
   const cuotaMain = document.getElementById(`edit-cuota-${id}`);
   if (cuotaMain) {
     cuotaMain.value = (optiOdds || 0).toFixed(3);
+  }
+};
+
+window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selIndex) {
+  const apuesta = apuestas.find(a => a.id === apuestaId);
+  const match = apuesta?.jugadas?.[matchIndex];
+  const selection = match?.selections?.[selIndex];
+  const autoFutbol = selection?.autoFutbol;
+  if (!apuesta || !match || !selection || !autoFutbol) return;
+  if (!["total_corners", "total_tarjetas"].includes(autoFutbol.mercado)) return;
+
+  const esCorners = autoFutbol.mercado === "total_corners";
+  const equipoStats = esCorners ? autoFutbol.cornersEquipo : autoFutbol.tarjetasEquipo;
+  const homeName = equipoStats?.home?.name || autoFutbol.equipos?.[0] || "Local";
+  const awayName = equipoStats?.away?.name || autoFutbol.equipos?.[1] || "Visitante";
+  const homeActual = esCorners ? equipoStats?.home?.corners : equipoStats?.home?.tarjetas;
+  const awayActual = esCorners ? equipoStats?.away?.corners : equipoStats?.away?.tarjetas;
+  const label = esCorners ? "corners" : "tarjetas";
+  const respuesta = window.prompt(
+    `Ajuste manual de ${label} en tiempo reglamentario.\nFormato: ${homeName}-${awayName} (ej: 4-3)`,
+    `${homeActual ?? 0}-${awayActual ?? 0}`
+  );
+  if (respuesta === null) return;
+
+  const valores = String(respuesta).match(/\d+(?:[.,]\d+)?/g)?.map(value => Number(value.replace(",", "."))) || [];
+  if (valores.length < 2 || valores.some(value => Number.isNaN(value) || value < 0)) {
+    mostrarModalValidacion(["Ingresa dos valores validos. Ejemplo: 4-3"]);
+    return;
+  }
+
+  const home = Math.round(valores[0]);
+  const away = Math.round(valores[1]);
+  const total = home + away;
+  const ajusteManual = {
+    mercado: autoFutbol.mercado,
+    home,
+    away,
+    homeName,
+    awayName,
+    total,
+    actualizadoEn: Date.now()
+  };
+  const estadisticaEquipo = esCorners
+    ? {
+      total,
+      home: { name: homeName, corners: home },
+      away: { name: awayName, corners: away }
+    }
+    : {
+      total,
+      home: { name: homeName, tarjetas: home },
+      away: { name: awayName, tarjetas: away }
+    };
+
+  selection.autoFutbol = {
+    ...autoFutbol,
+    ajusteManual,
+    ...(esCorners
+      ? { totalCorners: total, cornersEquipo: estadisticaEquipo }
+      : { totalTarjetas: total, tarjetasEquipo: estadisticaEquipo }),
+    estadisticasTiempo: getMarcadorTiempoReglamentarioMeta(),
+    sincronizadoEn: Date.now()
+  };
+
+  const linea = Number(autoFutbol.linea);
+  if (!Number.isNaN(linea)) {
+    if (total === linea) {
+      selection.estado = "nula";
+    } else {
+      const ganaOver = total > linea;
+      selection.estado = (autoFutbol.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida";
+    }
+  }
+
+  match.estado = determinarEstadoJugada(match);
+  apuesta.jugadas = normalizarJugadasConEstado(apuesta.jugadas);
+  const overallResultado = recalcularResultadoApuesta(apuesta);
+  apuesta.resultado = overallResultado;
+  if (apuesta.tipoApuesta === "patente") {
+    apuesta.cuota = calcularCuotaMaximaPatente(apuesta.jugadas);
+  } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
+    const cuota = recalcularCuotaCombinada(apuesta.jugadas);
+    if (cuota > 0) apuesta.cuota = cuota;
+  }
+  apuesta.autoSync = crearAutoSyncPayload(apuesta, overallResultado, {
+    proveedor: "ajuste_manual_futbol",
+    ultimaRevision: Date.now()
+  });
+
+  const scrollPosition = window.scrollY;
+  render();
+  window.scrollTo(0, scrollPosition);
+
+  try {
+    await updateDoc(doc(db, "apuestas", apuesta.id), {
+      jugadas: apuesta.jugadas,
+      resultado: apuesta.resultado,
+      cuota: apuesta.cuota,
+      autoSync: apuesta.autoSync
+    });
+  } catch (e) {
+    console.error("No se pudo guardar el ajuste manual:", e);
+    mostrarModalValidacion([`No se pudo guardar el ajuste manual: ${e.message}`]);
   }
 };
 
