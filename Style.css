@@ -176,6 +176,38 @@ button {
     color: #86efac;
 }
 
+.auto-stat-adjust-inline,
+.auto-stat-adjust-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+}
+
+.auto-stat-adjust-btn,
+.auto-stat-adjust-editor button {
+    border: 0;
+    background: rgba(148, 163, 184, 0.18);
+    color: #dbeafe;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auto-stat-adjust-editor input {
+    width: 34px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.75);
+    color: #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 3px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
 .auto-mlb-score {
     margin-top: 3px;
     font-size: 11px;

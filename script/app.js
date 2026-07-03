@@ -7324,7 +7324,23 @@ function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
   if (!Number.isInteger(options.matchIndex) || !Number.isInteger(options.selIndex)) return "";
   if (!["total_corners", "total_tarjetas"].includes(autoFutbol?.mercado)) return "";
 
-  return ` <button type="button" class="auto-stat-adjust-btn" title="Ajustar dato manual" onclick="window.ajustarEstadisticaFutbol('${escapeHtml(options.apuestaId)}', ${options.matchIndex}, ${options.selIndex})" style="border:0; background:rgba(148,163,184,0.18); color:#dbeafe; border-radius:4px; padding:1px 5px; font-size:10px; font-weight:700; cursor:pointer; vertical-align:middle;">Ajustar</button>`;
+  const key = `${options.apuestaId}-${options.matchIndex}-${options.selIndex}`;
+  const esCorners = autoFutbol.mercado === "total_corners";
+  const equipoStats = esCorners ? autoFutbol.cornersEquipo : autoFutbol.tarjetasEquipo;
+  const homeActual = esCorners ? equipoStats?.home?.corners : equipoStats?.home?.tarjetas;
+  const awayActual = esCorners ? equipoStats?.away?.corners : equipoStats?.away?.tarjetas;
+
+  return `
+    <span data-stat-view="${key}" class="auto-stat-adjust-inline">
+      <button type="button" class="auto-stat-adjust-btn" title="Ajustar dato manual" onclick="window.mostrarAjusteEstadisticaFutbol('${escapeHtml(options.apuestaId)}', ${options.matchIndex}, ${options.selIndex})">Ajustar</button>
+    </span>
+    <span data-stat-editor="${key}" class="auto-stat-adjust-editor" hidden>
+      <input type="number" min="0" step="1" value="${escapeHtml(homeActual ?? 0)}" data-stat-home="${key}" aria-label="Local">
+      <span>-</span>
+      <input type="number" min="0" step="1" value="${escapeHtml(awayActual ?? 0)}" data-stat-away="${key}" aria-label="Visitante">
+      <button type="button" title="Guardar ajuste" onclick="window.ajustarEstadisticaFutbol('${escapeHtml(options.apuestaId)}', ${options.matchIndex}, ${options.selIndex})">OK</button>
+      <button type="button" title="Cancelar" onclick="window.ocultarAjusteEstadisticaFutbol('${escapeHtml(options.apuestaId)}', ${options.matchIndex}, ${options.selIndex})">x</button>
+    </span>`;
 }
 
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
@@ -9677,6 +9693,36 @@ window.calcularCuotaEditSimpleOption = function (id) {
   }
 };
 
+function getKeyAjusteEstadisticaFutbol(apuestaId, matchIndex, selIndex) {
+  return `${apuestaId}-${matchIndex}-${selIndex}`;
+}
+
+function escaparSelectorCss(value = "") {
+  if (window.CSS?.escape) return CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+window.mostrarAjusteEstadisticaFutbol = function (apuestaId, matchIndex, selIndex) {
+  const key = getKeyAjusteEstadisticaFutbol(apuestaId, matchIndex, selIndex);
+  const selectorKey = escaparSelectorCss(key);
+  const view = document.querySelector(`[data-stat-view="${selectorKey}"]`);
+  const editor = document.querySelector(`[data-stat-editor="${selectorKey}"]`);
+  if (view) view.hidden = true;
+  if (editor) {
+    editor.hidden = false;
+    editor.querySelector("input")?.focus();
+  }
+};
+
+window.ocultarAjusteEstadisticaFutbol = function (apuestaId, matchIndex, selIndex) {
+  const key = getKeyAjusteEstadisticaFutbol(apuestaId, matchIndex, selIndex);
+  const selectorKey = escaparSelectorCss(key);
+  const view = document.querySelector(`[data-stat-view="${selectorKey}"]`);
+  const editor = document.querySelector(`[data-stat-editor="${selectorKey}"]`);
+  if (view) view.hidden = false;
+  if (editor) editor.hidden = true;
+};
+
 window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selIndex) {
   const apuesta = apuestas.find(a => a.id === apuestaId);
   const match = apuesta?.jugadas?.[matchIndex];
@@ -9689,28 +9735,23 @@ window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selInde
   const equipoStats = esCorners ? autoFutbol.cornersEquipo : autoFutbol.tarjetasEquipo;
   const homeName = equipoStats?.home?.name || autoFutbol.equipos?.[0] || "Local";
   const awayName = equipoStats?.away?.name || autoFutbol.equipos?.[1] || "Visitante";
-  const homeActual = esCorners ? equipoStats?.home?.corners : equipoStats?.home?.tarjetas;
-  const awayActual = esCorners ? equipoStats?.away?.corners : equipoStats?.away?.tarjetas;
-  const label = esCorners ? "corners" : "tarjetas";
-  const respuesta = window.prompt(
-    `Ajuste manual de ${label} en tiempo reglamentario.\nFormato: ${homeName}-${awayName} (ej: 4-3)`,
-    `${homeActual ?? 0}-${awayActual ?? 0}`
-  );
-  if (respuesta === null) return;
 
-  const valores = String(respuesta).match(/\d+(?:[.,]\d+)?/g)?.map(value => Number(value.replace(",", "."))) || [];
-  if (valores.length < 2 || valores.some(value => Number.isNaN(value) || value < 0)) {
+  const key = getKeyAjusteEstadisticaFutbol(apuestaId, matchIndex, selIndex);
+  const selectorKey = escaparSelectorCss(key);
+  const home = Number(document.querySelector(`[data-stat-home="${selectorKey}"]`)?.value);
+  const away = Number(document.querySelector(`[data-stat-away="${selectorKey}"]`)?.value);
+  if (Number.isNaN(home) || Number.isNaN(away) || home < 0 || away < 0) {
     mostrarModalValidacion(["Ingresa dos valores validos. Ejemplo: 4-3"]);
     return;
   }
 
-  const home = Math.round(valores[0]);
-  const away = Math.round(valores[1]);
-  const total = home + away;
+  const homeFinal = Math.round(home);
+  const awayFinal = Math.round(away);
+  const total = homeFinal + awayFinal;
   const ajusteManual = {
     mercado: autoFutbol.mercado,
-    home,
-    away,
+    home: homeFinal,
+    away: awayFinal,
     homeName,
     awayName,
     total,
@@ -9719,13 +9760,13 @@ window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selInde
   const estadisticaEquipo = esCorners
     ? {
       total,
-      home: { name: homeName, corners: home },
-      away: { name: awayName, corners: away }
+      home: { name: homeName, corners: homeFinal },
+      away: { name: awayName, corners: awayFinal }
     }
     : {
       total,
-      home: { name: homeName, tarjetas: home },
-      away: { name: awayName, tarjetas: away }
+      home: { name: homeName, tarjetas: homeFinal },
+      away: { name: awayName, tarjetas: awayFinal }
     };
 
   selection.autoFutbol = {
