@@ -8924,7 +8924,12 @@ function obtenerFechaActualLocal() {
 /* =========================
    INIT
  ========================= */
-window.addEventListener("DOMContentLoaded", () => {
+let appInicializada = false;
+
+function iniciarApp() {
+  if (appInicializada) return;
+  appInicializada = true;
+
   const inputFecha = document.getElementById("fecha");
   if (inputFecha) {
     inputFecha.value = obtenerFechaActualLocal();
@@ -9174,7 +9179,13 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-});
+}
+
+if (document.readyState === "loading") {
+  window.addEventListener("DOMContentLoaded", iniciarApp, { once: true });
+} else {
+  iniciarApp();
+}
 
 window.crearFilaSeleccionEditHTML = function (id, selIndex, marketVal = "", jugVal = "", showDelete = true) {
   const jEsc = jugVal.replace(/"/g, '&quot;');
