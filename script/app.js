@@ -836,6 +836,7 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
 const DEPLOY_VERSION_CHECK_MS = 30 * 1000;
@@ -853,6 +854,9 @@ let deployVersionActual = window.__APUESTAS_DEPLOY_SIGNATURE__ ||
   getStorageItemSeguro(localStorage, DEPLOY_SIGNATURE_KEY) ||
   "";
 let deployVersionReloading = false;
+let deployVersionChecking = false;
+let deployVersionTimerId = null;
+let ultimaReactivacionPagina = Date.now();
 
 function getStorageItemSeguro(storage, key) {
   try {
@@ -864,6 +868,14 @@ function getStorageItemSeguro(storage, key) {
 
 function paginaEstaVisible() {
   return document.visibilityState !== "hidden";
+}
+
+function registrarReactivacionPagina() {
+  ultimaReactivacionPagina = Date.now();
+}
+
+function paginaRecienReactivada(graceMs = AUTO_SYNC_RESUME_GRACE_MS) {
+  return Date.now() - ultimaReactivacionPagina < graceMs;
 }
 
 function usuarioEstaEditandoFormulario() {
@@ -986,32 +998,57 @@ async function obtenerFirmaDeployActual() {
 }
 
 async function revisarVersionDeploy() {
-  if (deployVersionReloading) return;
+  if (deployVersionReloading || deployVersionChecking || !paginaEstaVisible()) return;
 
-  const firma = await obtenerFirmaDeployActual();
-  if (!firma) return;
+  deployVersionChecking = true;
+  try {
+    const firma = await obtenerFirmaDeployActual();
+    if (!firma) return;
 
-  if (!deployVersionActual) {
-    deployVersionActual = firma;
-    return;
-  }
+    if (!deployVersionActual) {
+      deployVersionActual = firma;
+      return;
+    }
 
-  if (firma !== deployVersionActual) {
-    if (usuarioEstaEditandoFormulario()) return;
-    deployVersionReloading = true;
-    ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(firma), 30000);
+    if (firma !== deployVersionActual) {
+      if (usuarioEstaEditandoFormulario()) return;
+      deployVersionReloading = true;
+      ejecutarCuandoEsteLibre(() => recargarPorNuevoDeploy(firma), 30000);
+    }
+  } finally {
+    deployVersionChecking = false;
   }
 }
 
+function programarRevisionVersionDeploy(delay = 0) {
+  if (!paginaEstaVisible() || deployVersionReloading) return;
+  if (deployVersionTimerId !== null) return;
+
+  const timerId = setTimeout(() => {
+    deployVersionTimerId = null;
+    revisarVersionDeploy();
+  }, delay);
+  deployVersionTimerId = timerId;
+}
+
 function iniciarMonitorVersionDeploy() {
-  revisarVersionDeploy();
+  programarRevisionVersionDeploy(0);
   setInterval(() => {
-    if (paginaEstaVisible()) revisarVersionDeploy();
+    if (paginaEstaVisible()) programarRevisionVersionDeploy(0);
   }, DEPLOY_VERSION_CHECK_MS);
   document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible()) revisarVersionDeploy();
+    if (paginaEstaVisible()) {
+      registrarReactivacionPagina();
+      programarRevisionVersionDeploy(5000);
+    } else if (deployVersionTimerId !== null) {
+      clearTimeout(deployVersionTimerId);
+      deployVersionTimerId = null;
+    }
   });
-  window.addEventListener("focus", revisarVersionDeploy);
+  window.addEventListener("focus", () => {
+    registrarReactivacionPagina();
+    programarRevisionVersionDeploy(5000);
+  });
 }
 
 function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
@@ -1028,6 +1065,10 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
     autoSyncTimers.delete(deporte);
   }
 
+  const delayFinal = force || !paginaRecienReactivada()
+    ? delay
+    : Math.max(delay, AUTO_SYNC_RESUME_GRACE_MS + (deporte === "mlb" ? 4500 : 1500));
+
   const timerId = setTimeout(() => {
     autoSyncTimers.delete(deporte);
     if (!paginaEstaVisible()) return;
@@ -1040,9 +1081,14 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
         ejecutarAutoSyncFutbol(force);
       }
     });
-  }, delay);
+  }, delayFinal);
 
   autoSyncTimers.set(deporte, timerId);
+}
+
+function cancelarSyncSilenciosaPendiente() {
+  autoSyncTimers.forEach(timerId => clearTimeout(timerId));
+  autoSyncTimers.clear();
 }
 
 function esErrorIndiceFirestore(error = {}) {
@@ -4549,10 +4595,14 @@ async function sincronizarResultadosMlb(silencioso = false) {
     const juegosPorFecha = new Map();
     const juegosEspnPorFecha = new Map();
     for (const fecha of fechas) {
+      if (silencioso && !paginaEstaVisible()) return;
+      await cederControlNavegador();
       const fechasBusqueda = getFechasCercanas(fecha);
       const juegos = [];
       const juegosEspn = [];
       for (const fechaBusqueda of fechasBusqueda) {
+        if (silencioso && !paginaEstaVisible()) return;
+        await cederControlNavegador();
         juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
         try {
           juegosEspn.push(...await cargarJuegosEspnMlbPorFecha(fechaBusqueda));
@@ -4569,6 +4619,8 @@ async function sincronizarResultadosMlb(silencioso = false) {
     let revisadas = 0;
 
     for (const apuesta of candidatas) {
+      if (silencioso && !paginaEstaVisible()) return;
+      await cederControlNavegador();
       revisadas++;
       const fecha = apuesta.fecha || apuesta.dia;
       const juegosApuesta = juegosPorFecha.get(fecha) || [];
@@ -7080,6 +7132,10 @@ let _ultimoAutoSyncFutbol = 0;
 
 async function ejecutarAutoSyncFutbol(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!force && paginaRecienReactivada()) {
+    programarSyncSilenciosa("futbol", AUTO_SYNC_RESUME_GRACE_MS);
+    return;
+  }
   if (!force && usuarioEstaEditandoFormulario()) return;
   if (_autoSyncFutbolEnCurso) return;
   if (!force && Date.now() - _ultimoAutoSyncFutbol < AUTO_SYNC_INTERVAL_MS) return;
@@ -7097,11 +7153,19 @@ async function ejecutarAutoSyncFutbol(force = false) {
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncFutbolIntervalId = setInterval(() => ejecutarAutoSyncFutbol(false), AUTO_SYNC_INTERVAL_MS);
+  _autoSyncFutbolIntervalId = setInterval(() => programarSyncSilenciosa("futbol", 0), AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible()) programarSyncSilenciosa("futbol", 1000);
+    if (paginaEstaVisible()) {
+      registrarReactivacionPagina();
+      programarSyncSilenciosa("futbol", 1000);
+    } else {
+      cancelarSyncSilenciosaPendiente();
+    }
   });
-  window.addEventListener("focus", () => programarSyncSilenciosa("futbol", 1000));
+  window.addEventListener("focus", () => {
+    registrarReactivacionPagina();
+    programarSyncSilenciosa("futbol", 1000);
+  });
 }
 
 
@@ -7112,6 +7176,10 @@ let _ultimoAutoSyncMlb = 0;
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!force && paginaRecienReactivada()) {
+    programarSyncSilenciosa("mlb", AUTO_SYNC_RESUME_GRACE_MS);
+    return;
+  }
   if (!force && usuarioEstaEditandoFormulario()) return;
   if (_autoSyncMlbEnCurso) return;
   if (!force && Date.now() - _ultimoAutoSyncMlb < AUTO_SYNC_INTERVAL_MS) return;
@@ -7129,11 +7197,19 @@ async function ejecutarAutoSyncMlb(force = false) {
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncMlbIntervalId = setInterval(() => ejecutarAutoSyncMlb(false), AUTO_SYNC_INTERVAL_MS);
+  _autoSyncMlbIntervalId = setInterval(() => programarSyncSilenciosa("mlb", 0), AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible()) programarSyncSilenciosa("mlb", 3000);
+    if (paginaEstaVisible()) {
+      registrarReactivacionPagina();
+      programarSyncSilenciosa("mlb", 3000);
+    } else {
+      cancelarSyncSilenciosaPendiente();
+    }
   });
-  window.addEventListener("focus", () => programarSyncSilenciosa("mlb", 3000));
+  window.addEventListener("focus", () => {
+    registrarReactivacionPagina();
+    programarSyncSilenciosa("mlb", 3000);
+  });
 }
 
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
@@ -7904,8 +7980,15 @@ function renderSnapshotProgramado() {
   renderSnapshotPendiente = true;
 
   requestAnimationFrame(() => {
-    renderSnapshotPendiente = false;
-    render();
+    const delay = paginaRecienReactivada(4000) ? 300 : 0;
+    setTimeout(() => {
+      renderSnapshotPendiente = false;
+      if (!paginaEstaVisible()) {
+        renderSnapshotProgramado();
+        return;
+      }
+      render();
+    }, delay);
   });
 }
 
