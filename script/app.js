@@ -1311,14 +1311,26 @@ function apuestaMlbNecesitaSyncRapida(apuesta = {}) {
   return !apuestaTieneMarcadorMlb(apuesta);
 }
 
+function apuestaFutbolNecesitaSyncEstadisticasRapida(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (fecha !== obtenerFechaActualLocal()) return false;
+  if (!apuestaPareceFutbol(apuesta)) return false;
+  if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
+  if (apuestaSyncCerrada(apuesta)) return false;
+  if (!apuestaResultadoPendiente(apuesta)) return false;
+  if (apuestaYaFinalizadaYResuelta(apuesta, "autoFutbol")) return false;
+  return apuestaTieneMercadoEstadisticasFutbol(apuesta);
+}
+
 function programarSyncInicialVisible() {
   const apuestasVisibles = getApuestasFiltradas();
   const hayFutbol = apuestasVisibles.some(apuesta => apuestaPareceFutbol(apuesta));
+  const hayFutbolStatsUrgente = apuestasVisibles.some(apuestaFutbolNecesitaSyncEstadisticasRapida);
   const hayMlb = apuestasVisibles.some(apuesta => apuestaPareceMlb(apuesta));
   const hayMlbUrgente = apuestasVisibles.some(apuestaMlbNecesitaSyncRapida);
 
   if (hayFutbol) {
-    programarSyncSilenciosa("futbol", 12000);
+    programarSyncSilenciosa("futbol", hayFutbolStatsUrgente ? 1200 : 12000, hayFutbolStatsUrgente);
   }
 
   if (hayMlb) {
@@ -4945,7 +4957,7 @@ const API_SPORTS_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 const API_SPORTS_FOOTBALL_DAILY_LIMIT = 95;
 const API_SPORTS_FOOTBALL_CACHE_MS = 20 * 60 * 1000;
 const API_SPORTS_FOOTBALL_LIVE_CACHE_MS = 0;
-const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 0;
+const API_SPORTS_FOOTBALL_STATISTICS_CACHE_MS = 15 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
@@ -4953,6 +4965,7 @@ const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
+const FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS = 60 * 1000;
 const FOOTBALL_MARKET_TIME_SCOPE = "90_minutos_mas_adicional";
 const apiSportsFootballCache = new Map();
 
@@ -7307,13 +7320,18 @@ let _ultimoAutoSyncFutbol = 0;
 
 async function ejecutarAutoSyncFutbol(force = false) {
   if (!paginaEstaVisible()) return;
+  const syncStatsRapida = getApuestasSyncScope(true).some(apuestaFutbolNecesitaSyncEstadisticasRapida);
   if (!force && paginaRecienReactivada()) {
-    programarSyncSilenciosa("futbol", AUTO_SYNC_RESUME_GRACE_MS);
+    programarSyncSilenciosa("futbol", syncStatsRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncStatsRapida);
     return;
   }
-  if (!force && usuarioEstaEditandoFormulario()) return;
+  if (!force && usuarioEstaEditandoFormulario()) {
+    programarSyncSilenciosa("futbol", syncStatsRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
+    return;
+  }
   if (_autoSyncFutbolEnCurso) return;
-  if (!force && Date.now() - _ultimoAutoSyncFutbol < AUTO_SYNC_INTERVAL_MS) return;
+  const intervaloMinimo = syncStatsRapida ? FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS : AUTO_SYNC_INTERVAL_MS;
+  if (!force && Date.now() - _ultimoAutoSyncFutbol < intervaloMinimo) return;
 
   _autoSyncFutbolEnCurso = true;
   _ultimoAutoSyncFutbol = Date.now();
@@ -7323,6 +7341,9 @@ async function ejecutarAutoSyncFutbol(force = false) {
     console.warn("Auto-sync futbol - error general:", e.message);
   } finally {
     _autoSyncFutbolEnCurso = false;
+    if (syncStatsRapida && paginaEstaVisible()) {
+      programarSyncSilenciosa("futbol", FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS);
+    }
   }
 }
 
