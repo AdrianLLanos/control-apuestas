@@ -5821,6 +5821,7 @@ function juegoFutbolReglamentarioProbablementeTerminado(game) {
   if (juegoFutbolFinalizado(game)) return true;
   if (juegoFutbolNoIniciado(game)) return false;
   if (!getMarcadorFutbol(game)) return false;
+  if (juegoFutbolTieneAlargueOPenales(game)) return true;
 
   const minuto = getMinutoJuegoFutbol(game);
   if (minuto >= 90 && !juegoFutbolEnCurso(game)) return true;
