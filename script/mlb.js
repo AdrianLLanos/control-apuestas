@@ -1,4 +1,10 @@
-import { COUNTRY_FLAG_ENTRIES } from "./countries.js?v=1.1";
+const deployModuleToken = new URL(import.meta.url).searchParams.get("deploy") ||
+  new URL(import.meta.url).searchParams.get("v") ||
+  Date.now().toString(36);
+const withDeployToken = (path) =>
+  `${path}${path.includes("?") ? "&" : "?"}deploy=${encodeURIComponent(deployModuleToken)}`;
+
+const { COUNTRY_FLAG_ENTRIES } = await import(withDeployToken("./countries.js?v=1.1"));
 
 export const MLB_TEAMS = [
   { name: "Arizona Diamondbacks", logo: "arizona-diamondbacks.svg", aliases: ["Arizona Diamondbacks", "Arizona", "Diamondbacks", "D-backs", "Dbacks", "ARI"] },

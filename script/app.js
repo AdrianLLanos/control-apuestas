@@ -839,7 +839,7 @@ const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
-const DEPLOY_VERSION_CHECK_MS = 30 * 1000;
+const DEPLOY_VERSION_CHECK_MS = 15 * 1000;
 const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
 const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
 const autoSyncTimers = new Map();
@@ -962,7 +962,8 @@ async function obtenerVersionDeployActual() {
     return [
       data?.version,
       data?.deployId,
-      data?.deployedAt
+      data?.deployedAt,
+      data?.assetToken
     ].filter(Boolean).map(item => String(item).trim()).join("|");
   } catch (error) {
     console.warn("No se pudo revisar la version desplegada:", error.message);
