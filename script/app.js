@@ -5256,6 +5256,7 @@ function apuestaNecesitaEspnFutbol(apuesta = {}, juegosApiSports = [], fechaBet 
       });
 
       if (autoFutbol) {
+        if (esMercadoEstadisticasFutbol(autoFutbol)) return true;
         const apiGame = buscarJuegoFutbol(juegosApiSports, autoFutbol.equipos, fechaBet);
         if (!apiGame) return true;
         if (juegoFutbolEnCurso(apiGame)) return true;
@@ -5480,6 +5481,7 @@ async function cargarResumenEspnFutbol(event) {
 
   const summary = {
     ...(await response.json()),
+    scoreboardEvent: event,
     proveedor: "espn_football_summary"
   };
   apiSportsFootballCache.set(cacheKey, {
@@ -5535,13 +5537,6 @@ async function cargarResumenFutbol(apiGame, espnGame = null, options = {}) {
   if (apiGame) {
     try {
       apiSummary = await cargarResumenApiSportsFutbol(apiGame);
-      if (autoFutbol && esMercadoEstadisticasFutbol(autoFutbol)) {
-        const apiTotal = getTotalEstadisticaFutbol(apiSummary, autoFutbol, marcador);
-        const guardadoTotal = getTotalEstadisticaGuardadaFutbol(autoFutbol);
-        if (apiTotal !== null && (guardadoTotal === null || apiTotal > guardadoTotal)) {
-          return apiSummary;
-        }
-      }
     } catch (e) {
       console.warn("No se pudo cargar estadisticas API-Sports futbol:", e);
     }
@@ -6283,6 +6278,18 @@ function extraerValorTarjetasFutbol(stat = {}) {
   return Number.isNaN(value) ? null : value;
 }
 
+function getEquiposEstadisticasEspn(summary = {}) {
+  const boxscoreTeams = Array.isArray(summary?.boxscore?.teams) ? summary.boxscore.teams : [];
+  const scoreboardCompetitors = Array.isArray(summary?.scoreboardEvent?.competitions?.[0]?.competitors)
+    ? summary.scoreboardEvent.competitions[0].competitors.map(item => ({
+      team: item.team || {},
+      statistics: item.statistics || item.stats || []
+    }))
+    : [];
+
+  return [...boxscoreTeams, ...scoreboardCompetitors];
+}
+
 function getCornersEquipoFutbol(summary, marcador = null) {
   const apiSportsStatistics = Array.isArray(summary?.apiSportsStatistics)
     ? summary.apiSportsStatistics.map(teamInfo => {
@@ -6301,7 +6308,7 @@ function getCornersEquipoFutbol(summary, marcador = null) {
       };
     }).filter(Boolean)
     : [];
-  const teams = apiSportsStatistics.length ? apiSportsStatistics : (summary?.boxscore?.teams || []);
+  const teams = apiSportsStatistics.length ? apiSportsStatistics : getEquiposEstadisticasEspn(summary);
   if (!Array.isArray(teams) || teams.length === 0) return null;
 
   const cornersEquipos = teams.map(teamInfo => {
@@ -6425,7 +6432,7 @@ function getTarjetasEquipoFutbol(summary, marcador = null) {
       };
     }).filter(Boolean)
     : [];
-  const teams = apiSportsStatistics.length ? apiSportsStatistics : (summary?.boxscore?.teams || []);
+  const teams = apiSportsStatistics.length ? apiSportsStatistics : getEquiposEstadisticasEspn(summary);
   if (!Array.isArray(teams) || teams.length === 0) return null;
 
   const tarjetasEquipos = teams.map(teamInfo => {
@@ -6752,13 +6759,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         juegoFutbolTieneAlargueOPenales(apiGame) ||
         juegoFutbolTieneAlargueOPenales(espnGame);
       const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
-      const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado && !juegoConAlargue;
+      const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado;
       const summaryProveedor = puedeCargarStatsProveedor
         ? await cargarResumenFutbol(apiGame, espnGame, { autoFutbol })
         : null;
-      const summary = juegoConAlargue && statsReglamentariasGuardadas
+      const summaryGuardado = juegoConAlargue && statsReglamentariasGuardadas
         ? crearResumenEstadisticasGuardadasFutbol(autoFutbol)
-        : summaryProveedor;
+        : null;
+      const summary = summaryProveedor || summaryGuardado;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
@@ -7023,8 +7031,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
     if (apuestaSyncCerrada(a)) return false;
-    if (!apuestaResultadoPendiente(a)) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    if (silencioso && !apuestaResultadoPendiente(a)) return false;
+    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     const fechaApuesta = a.fecha || a.dia;
