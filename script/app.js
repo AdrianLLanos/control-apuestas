@@ -29,7 +29,7 @@ const {
   onSnapshot,
   getDocs,
   getDoc,
-  limit as firestoreLimit,
+  limit: firestoreLimit,
   orderBy,
   query,
   setDoc,
@@ -847,6 +847,7 @@ let hayMasApuestas = true;
 let cargandoApuestas = false;
 let unsubscribeApuestas = null;
 let apuestasExtraPaginadas = [];
+let usarConsultaApuestasFiltradaSinOrden = false;
 let deployVersionActual = window.__APUESTAS_DEPLOY_SIGNATURE__ ||
   getStorageItemSeguro(sessionStorage, DEPLOY_SIGNATURE_KEY) ||
   getStorageItemSeguro(localStorage, DEPLOY_SIGNATURE_KEY) ||
@@ -1044,14 +1045,25 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   autoSyncTimers.set(deporte, timerId);
 }
 
-function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId) {
-  const constraints = [];
+function esErrorIndiceFirestore(error = {}) {
+  const code = String(error.code || "").toLowerCase();
+  const message = String(error.message || "").toLowerCase();
+  return code.includes("failed-precondition") ||
+    message.includes("requires an index") ||
+    message.includes("index");
+}
 
-  if (casaId && casaId !== CASA_TODAS_ID) {
+function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOrden = usarConsultaApuestasFiltradaSinOrden) {
+  const constraints = [];
+  const filtraCasa = casaId && casaId !== CASA_TODAS_ID;
+
+  if (filtraCasa) {
     constraints.push(where("casaId", "==", casaId));
   }
 
-  constraints.push(orderBy("creadoEn", "desc"));
+  if (!sinOrden || !filtraCasa) {
+    constraints.push(orderBy("creadoEn", "desc"));
+  }
 
   if (cursor) {
     constraints.push(startAfter(cursor));
@@ -1182,6 +1194,18 @@ function cargarApuestasIniciales() {
     renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
   }, (error) => {
     console.error("Error escuchando primera tanda de apuestas:", error);
+    if (
+      filtroCasaId !== CASA_TODAS_ID &&
+      !usarConsultaApuestasFiltradaSinOrden &&
+      esErrorIndiceFirestore(error)
+    ) {
+      usarConsultaApuestasFiltradaSinOrden = true;
+      cargarApuestasIniciales();
+      return;
+    }
+    apuestasSnapshotRecibido = true;
+    inicializado = true;
+    renderApuestasCargadas();
     mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
   });
 }
@@ -1211,6 +1235,16 @@ async function cargarMasApuestas() {
     renderApuestasCargadas({ pagina: 1 });
   } catch (error) {
     console.error("Error cargando apuestas con cursor:", error);
+    if (
+      filtroCasaId !== CASA_TODAS_ID &&
+      !usarConsultaApuestasFiltradaSinOrden &&
+      esErrorIndiceFirestore(error)
+    ) {
+      usarConsultaApuestasFiltradaSinOrden = true;
+      cargandoApuestas = false;
+      await cargarMasApuestas();
+      return;
+    }
     mostrarModalValidacion(["No se pudo cargar el historial de apuestas: " + error.message]);
   } finally {
     cargandoApuestas = false;
