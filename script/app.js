@@ -7030,7 +7030,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaSyncCerrada(a)) return false;
+    if (silencioso && apuestaSyncCerrada(a)) return false;
     if (silencioso && !apuestaResultadoPendiente(a)) return false;
     if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
@@ -7045,7 +7045,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasHorario = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaSyncCerrada(a)) return false;
+    if (silencioso && apuestaSyncCerrada(a)) return false;
     if (!apuestaResultadoPendiente(a)) return false;
     if (apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
     if (!puedeDescubrirInicioFutbol(a, silencioso)) return false;
