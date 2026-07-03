@@ -184,6 +184,11 @@ button {
     margin-left: 4px;
 }
 
+.auto-stat-adjust-inline[hidden],
+.auto-stat-adjust-editor[hidden] {
+    display: none !important;
+}
+
 .auto-stat-adjust-btn,
 .auto-stat-adjust-editor button {
     border: 0;
