@@ -4126,8 +4126,21 @@ function juegoMlbFinalizado(game) {
   return state === "final" || /\b(final|game over)\b/i.test(detail);
 }
 
+function juegoMlbTieneEvidenciaInicio(game) {
+  const state = String(game?.status?.abstractGameState || "").toLowerCase();
+  const detail = String(game?.status?.detailedState || "").toLowerCase();
+  if (/\b(in progress|live|final)\b/.test(state)) return true;
+  if (/\b(in progress|live|final|game over|top|bottom|inning|extra)\b/.test(detail)) return true;
+
+  const marcador = getMarcadorMlb(game);
+  if (!marcador) return false;
+  const linescore = game?.linescore || {};
+  if (linescore.currentInning || linescore.currentInningOrdinal || linescore.inningState || linescore.inningHalf) return true;
+  return marcador.total > 0 || (marcador.totalHits ?? 0) > 0;
+}
+
 function juegoMlbNoIniciado(game) {
-  if (getMarcadorMlb(game)) return false;
+  if (juegoMlbTieneEvidenciaInicio(game)) return false;
   const state = String(game?.status?.abstractGameState || "").toLowerCase();
   const detail = String(game?.status?.detailedState || "").toLowerCase();
   return /\b(preview|pre-game|pre game|scheduled|warmup)\b/.test(state) ||
@@ -4714,7 +4727,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const marcador = autoMlb.marcador;
   const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
   const estadoPrevio = debeMostrarHorarioJuego(fechaJuego, autoMlb.estadoJuego);
-  const ocultarResultadoPorHorario = estadoPrevio && !marcador;
+  const ocultarResultadoPorHorario = estadoPrevio;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
@@ -4768,16 +4781,13 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
 }
 
 function autoTieneResultadoVisible(auto = {}) {
+  if (debeMostrarHorarioJuego(auto?.fechaJuego || "", auto?.estadoJuego || "")) return false;
   return Boolean(auto?.marcador) ||
-    (
-      !debeMostrarHorarioJuego(auto?.fechaJuego || "", auto?.estadoJuego || "") && (
-        auto?.totalCarreras !== undefined ||
-        auto?.totalHits !== undefined ||
-        auto?.totalGoles !== undefined ||
-        auto?.totalCorners !== undefined ||
-        auto?.totalTarjetas !== undefined
-      )
-    );
+    auto?.totalCarreras !== undefined ||
+    auto?.totalHits !== undefined ||
+    auto?.totalGoles !== undefined ||
+    auto?.totalCorners !== undefined ||
+    auto?.totalTarjetas !== undefined;
 }
 
 function jugadaTieneResultadoAutoVisible(jugada = {}) {
