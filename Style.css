@@ -244,6 +244,15 @@ button {
     letter-spacing: 0;
 }
 
+.football-time-rule--inline {
+    margin-top: 2px;
+    padding-top: 0;
+    border-top: 0;
+    color: #9fb5d1;
+    font-size: 10px;
+    text-transform: none;
+}
+
 .bet-status-message {
     display: flex;
     flex-direction: column;

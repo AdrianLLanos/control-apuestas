@@ -4799,6 +4799,7 @@ function autoFutbolTieneMetaVisible(autoFutbol = {}) {
     autoFutbol?.fechaJuego ||
     autoFutbol?.estadoJuego ||
     autoFutbol?.estadoEspecial ||
+    autoFutbol?.totalGoles !== undefined ||
     autoFutbol?.totalCorners !== undefined ||
     autoFutbol?.totalTarjetas !== undefined
   );
@@ -4883,6 +4884,7 @@ function completarAutoFutbolRenderDesdeJugada(selection = {}, jugada = {}) {
       marcador: autoActual?.marcador || base.marcador,
       marcadorTiempo: autoActual?.marcadorTiempo || base.marcadorTiempo,
       fechaJuego: autoActual?.fechaJuego || base.fechaJuego,
+      totalGoles: autoActual?.totalGoles ?? base.totalGoles,
       totalCorners: autoActual?.totalCorners ?? base.totalCorners,
       cornersEquipo: autoActual?.cornersEquipo || base.cornersEquipo,
       totalTarjetas: autoActual?.totalTarjetas ?? base.totalTarjetas,
@@ -5105,11 +5107,29 @@ function setFootballSyncStatus(message = "", type = "") {
   el.className = `mlb-sync-status${type ? ` ${type}` : ""}`;
 }
 
+function esAutoFutbolObjeto(autoFutbol = null) {
+  if (!autoFutbol || typeof autoFutbol !== "object") return false;
+  if (autoFutbol.deporte === "futbol") return true;
+  return Boolean(
+    autoFutbol.mercado ||
+    autoFutbol.marcador ||
+    autoFutbol.estadoJuego ||
+    autoFutbol.estadoEspecial ||
+    autoFutbol.fechaJuego ||
+    autoFutbol.totalGoles !== undefined ||
+    autoFutbol.totalCorners !== undefined ||
+    autoFutbol.totalTarjetas !== undefined ||
+    autoFutbol.cornersEquipo ||
+    autoFutbol.tarjetasEquipo ||
+    (Array.isArray(autoFutbol.equipos) && autoFutbol.equipos.length >= 2)
+  );
+}
+
 function apuestaTieneAutoFutbol(apuesta) {
   if (apuesta?.deporte === "futbol") return true;
   return (apuesta?.jugadas || []).some(j =>
-    j?.autoFutbol?.deporte === "futbol" ||
-    (j?.selections || []).some(sel => sel?.autoFutbol?.deporte === "futbol")
+    esAutoFutbolObjeto(j?.autoFutbol) ||
+    (j?.selections || []).some(sel => esAutoFutbolObjeto(sel?.autoFutbol))
   );
 }
 
@@ -7453,6 +7473,21 @@ function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
     </span>`;
 }
 
+function getReglaTiempoFutbolInlineHtml(autoFutbol = {}) {
+  if (!autoFutbol) return "";
+  return `<div class="football-time-rule football-time-rule--inline">En Tiempo Reglamentario</div>`;
+}
+
+function getAutoFutbolResultadoHtml(contenido = "", autoFutbol = {}, extraHtml = "") {
+  if (!contenido) return "";
+  return `<div class="auto-mlb-score auto-football-score">${contenido}${extraHtml}</div>${getReglaTiempoFutbolInlineHtml(autoFutbol)}`;
+}
+
+function esNumeroAutoValido(value) {
+  if (value === null || value === undefined || value === "") return false;
+  return Number.isFinite(Number(value));
+}
+
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
@@ -7468,7 +7503,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       marcador = reordenarMarcadorTextoFutbol(marcador, futbolAuto.equipos);
     }
     if (marcador && estadoEspecialHtml) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
+      return `${getAutoFutbolResultadoHtml(escapeHtml(marcador), futbolAuto)}${estadoEspecialHtml}`;
     }
 
     const cornersEquipo = futbolAuto.cornersEquipo || getCornersEquipoFallbackFutbol(futbolAuto);
@@ -7486,15 +7521,19 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (horaHtml && estadoPrevio) return horaHtml;
 
     if (cornersEquipo?.home && cornersEquipo?.away) {
-      const totalHtml = totalCorners !== undefined && totalCorners !== null
+      const totalHtml = esNumeroAutoValido(totalCorners)
         ? ` &middot; Total: ${escapeHtml(totalCorners)}`
         : "";
       const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}${getAjusteManualFutbolHtml(futbolAuto, options)}</div>${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}${liga}`, futbolAuto, getAjusteManualFutbolHtml(futbolAuto, options))}${estadoFinalizadoHtml}`;
+    }
+
+    if (esNumeroAutoValido(totalCorners)) {
+      return `${getAutoFutbolResultadoHtml(`Total corners: ${escapeHtml(totalCorners)}${liga}`, futbolAuto, getAjusteManualFutbolHtml(futbolAuto, options))}${estadoFinalizadoHtml}`;
     }
 
     return marcador
-      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}`
+      ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcador)}${liga}`, futbolAuto)}${estadoFinalizadoHtml}`
       : (horaHtml || "");
   }
 
@@ -7504,7 +7543,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
       marcador = reordenarMarcadorTextoFutbol(marcador, futbolAuto.equipos);
     }
     if (marcador && estadoEspecialHtml) {
-      return `<div class="auto-mlb-score">${escapeHtml(marcador)}</div>${estadoEspecialHtml}`;
+      return `${getAutoFutbolResultadoHtml(escapeHtml(marcador), futbolAuto)}${estadoEspecialHtml}`;
     }
 
     const tarjetasEquipo = futbolAuto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(futbolAuto);
@@ -7522,15 +7561,19 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     if (horaHtml && estadoPrevio) return horaHtml;
 
     if (tarjetasEquipo?.home && tarjetasEquipo?.away) {
-      const totalHtml = totalTarjetas !== undefined && totalTarjetas !== null
+      const totalHtml = esNumeroAutoValido(totalTarjetas)
         ? ` &middot; Total: ${escapeHtml(totalTarjetas)}`
         : "";
       const detalle = obtenerTarjetasDetalleEnOrden(tarjetasEquipo, futbolAuto.equipos);
-      return `<div class="auto-mlb-score">${detalle}${totalHtml}${liga}${getAjusteManualFutbolHtml(futbolAuto, options)}</div>${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}${liga}`, futbolAuto, getAjusteManualFutbolHtml(futbolAuto, options))}${estadoFinalizadoHtml}`;
+    }
+
+    if (esNumeroAutoValido(totalTarjetas)) {
+      return `${getAutoFutbolResultadoHtml(`Total tarjetas: ${escapeHtml(totalTarjetas)}${liga}`, futbolAuto, getAjusteManualFutbolHtml(futbolAuto, options))}${estadoFinalizadoHtml}`;
     }
 
     return marcador
-      ? `<div class="auto-mlb-score">${escapeHtml(marcador)}${liga}</div>${estadoFinalizadoHtml}`
+      ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcador)}${liga}`, futbolAuto)}${estadoFinalizadoHtml}`
       : (horaHtml || "");
   }
 
@@ -7539,7 +7582,7 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     marcadorActual = reordenarMarcadorTextoFutbol(marcadorActual, futbolAuto.equipos);
   }
   if (estadoEspecialHtml) {
-    const marcadorHtml = marcadorActual ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}</div>` : "";
+    const marcadorHtml = marcadorActual ? getAutoFutbolResultadoHtml(escapeHtml(marcadorActual), futbolAuto) : "";
     return `${marcadorHtml}${estadoEspecialHtml}`;
   }
   let horaHtml = "";
@@ -7559,11 +7602,17 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const totalGoles = Number(futbolAuto.totalGoles);
   const totalGolesHtml = futbolAuto.mercado === "total_goles" &&
     futbolAuto.seleccionEquipo &&
-    !Number.isNaN(totalGoles)
+    Number.isFinite(totalGoles)
     ? ` &middot; Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
     : "";
+  if (!marcadorActual && futbolAuto.mercado === "total_goles" && Number.isFinite(totalGoles)) {
+    const etiquetaTotal = futbolAuto.seleccionEquipo
+      ? `Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
+      : `Total goles: ${escapeHtml(totalGoles)}`;
+    return getAutoFutbolResultadoHtml(etiquetaTotal, futbolAuto);
+  }
   return marcadorActual
-    ? `<div class="auto-mlb-score">${escapeHtml(marcadorActual)}${totalGolesHtml}</div>${estadoFinalizadoHtml}`
+    ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcadorActual)}${totalGolesHtml}`, futbolAuto)}${estadoFinalizadoHtml}`
     : horaHtml;
 }
 
@@ -8027,6 +8076,7 @@ function getResultadoColor(resultado = "pendiente") {
 }
 
 function getEstadoSeleccionIconHtml(estado = "pendiente") {
+  if ((estado || "pendiente") === "pendiente") return "";
   const config = {
     ganada: { bg: "#22c55e", color: "white", title: "Ganada", symbol: "&#10003;" },
     perdida: { bg: "#ef4444", color: "white", title: "Perdida", symbol: "&#10005;" },
@@ -8097,7 +8147,9 @@ function actualizarSeleccionEstadoDom(apuesta, matchIndex, selIndex) {
     wrapper.style.opacity = estado === "nula" && !tieneEstadoEspecial ? "0.6" : "";
   }
   if (icon) {
-    icon.innerHTML = getEstadoSeleccionIconHtml(estado);
+    const iconHtml = getEstadoSeleccionIconHtml(estado);
+    icon.innerHTML = iconHtml;
+    icon.style.display = iconHtml ? "inline-flex" : "none";
     icon.animate?.([
       { transform: "scale(0.92)" },
       { transform: "scale(1)" }
@@ -8577,7 +8629,9 @@ function _render() {
             selections.forEach((sel, selIndex) => {
               const jEstado = getEstadoSeleccionRender(sel, j, evText);
               const iconHtml = getEstadoSeleccionIconHtml(jEstado);
-              const estadoIcon = `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+              const estadoIcon = iconHtml
+                ? `<span data-state-icon="${a.id}-${matchIndex}-${selIndex}" onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex}, this)" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`
+                : "";
 
               const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
               let styleMod = "";
@@ -8689,7 +8743,7 @@ function _render() {
             const selectionsHtml = selections.map((sel, selIndex) => {
               const jEstado = getEstadoSeleccionRender(sel, j, evText);
               const iconHtml = getEstadoSeleccionIconHtml(jEstado);
-              const estadoIcon = (isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+              const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
               const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
               let styleMod = "";
