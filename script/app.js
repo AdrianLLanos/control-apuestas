@@ -1311,6 +1311,17 @@ function apuestaMlbNecesitaSyncRapida(apuesta = {}) {
   return !apuestaTieneMarcadorMlb(apuesta);
 }
 
+function apuestaMlbNecesitaSyncLiveRapida(apuesta = {}) {
+  const fecha = apuesta.fecha || apuesta.dia;
+  if (fecha !== obtenerFechaActualLocal()) return false;
+  if (!apuestaPareceMlb(apuesta)) return false;
+  if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
+  if (apuestaSyncCerrada(apuesta)) return false;
+  if (!apuestaResultadoPendiente(apuesta)) return false;
+  if (apuestaYaFinalizadaYResuelta(apuesta, "autoMlb")) return false;
+  return apuestaTieneMarcadorMlb(apuesta) || apuestaMlbYaDebeSincronizar(apuesta);
+}
+
 function apuestaFutbolNecesitaSyncEstadisticasRapida(apuesta = {}) {
   const fecha = apuesta.fecha || apuesta.dia;
   if (fecha !== obtenerFechaActualLocal()) return false;
@@ -1327,7 +1338,8 @@ function programarSyncInicialVisible() {
   const hayFutbol = apuestasVisibles.some(apuesta => apuestaPareceFutbol(apuesta));
   const hayFutbolStatsUrgente = apuestasVisibles.some(apuestaFutbolNecesitaSyncEstadisticasRapida);
   const hayMlb = apuestasVisibles.some(apuesta => apuestaPareceMlb(apuesta));
-  const hayMlbUrgente = apuestasVisibles.some(apuestaMlbNecesitaSyncRapida);
+  const hayMlbUrgente = apuestasVisibles.some(apuestaMlbNecesitaSyncRapida) ||
+    apuestasVisibles.some(apuestaMlbNecesitaSyncLiveRapida);
 
   if (hayFutbol) {
     programarSyncSilenciosa("futbol", hayFutbolStatsUrgente ? 1200 : 12000, hayFutbolStatsUrgente);
@@ -4962,6 +4974,7 @@ const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
+const MLB_LIVE_SYNC_INTERVAL_MS = 60 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
@@ -7372,16 +7385,18 @@ let _ultimoAutoSyncMlb = 0;
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
+  const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
   if (!force && paginaRecienReactivada()) {
-    programarSyncSilenciosa("mlb", AUTO_SYNC_RESUME_GRACE_MS);
+    programarSyncSilenciosa("mlb", syncLiveRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncLiveRapida);
     return;
   }
   if (!force && usuarioEstaEditandoFormulario()) {
-    programarSyncSilenciosa("mlb", 15000);
+    programarSyncSilenciosa("mlb", syncLiveRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
     return;
   }
   if (_autoSyncMlbEnCurso) return;
-  if (!force && Date.now() - _ultimoAutoSyncMlb < AUTO_SYNC_INTERVAL_MS) return;
+  const intervaloMinimo = syncLiveRapida ? MLB_LIVE_SYNC_INTERVAL_MS : AUTO_SYNC_INTERVAL_MS;
+  if (!force && Date.now() - _ultimoAutoSyncMlb < intervaloMinimo) return;
 
   _autoSyncMlbEnCurso = true;
   _ultimoAutoSyncMlb = Date.now();
@@ -7391,6 +7406,9 @@ async function ejecutarAutoSyncMlb(force = false) {
     console.warn("Auto-sync MLB - error general:", e.message);
   } finally {
     _autoSyncMlbEnCurso = false;
+    if (syncLiveRapida && paginaEstaVisible()) {
+      programarSyncSilenciosa("mlb", MLB_LIVE_SYNC_INTERVAL_MS);
+    }
   }
 }
 
