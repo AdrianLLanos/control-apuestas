@@ -5867,29 +5867,6 @@ function buscarJuegoEspnFutbol(juegos = [], equipos = [], fechaBet = "") {
   return buscarJuegoFutbol(juegos, equipos, fechaBet);
 }
 
-function limpiarDatosJuegoAutoFutbol(autoFutbol = {}) {
-  const {
-    id,
-    liga,
-    estadoJuego,
-    estadoEspecial,
-    marcador,
-    totalGoles,
-    totalCorners,
-    cornersEquipo,
-    totalTarjetas,
-    tarjetasEquipo,
-    fechaJuego,
-    pausaMedioTiempoHasta,
-    pausaEstadoEspecialHasta,
-    sincronizadoEn,
-    marcadorTiempo,
-    ...base
-  } = autoFutbol || {};
-
-  return base;
-}
-
 function autoFutbolTieneDatosJuego(autoFutbol = {}) {
   return Boolean(
     autoFutbol?.id ||
@@ -6828,10 +6805,10 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           });
           continue;
         }
-        if (autoFutbolTieneDatosJuego(autoFutbol)) huboCambioMetadata = true;
+        // Una busqueda sin coincidencia puede ser transitoria; conservar marcador y stats ya visibles.
         selections.push({
           ...selConDetalle,
-          autoFutbol: limpiarDatosJuegoAutoFutbol(autoFutbol)
+          autoFutbol
         });
         continue;
       }
@@ -6895,7 +6872,11 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       const summary = summaryGuardado || summaryProveedor;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
-        const estadoJuego = getEstadoJuegoFutbol(game);
+        const estadoJuegoDetectado = getEstadoJuegoFutbol(game);
+        const preservarDatosPrevios = juegoNoIniciado && autoFutbolTieneDatosJuego(autoFutbol);
+        const estadoJuego = preservarDatosPrevios
+          ? (autoFutbol.estadoJuego || estadoJuegoDetectado)
+          : estadoJuegoDetectado;
         const pausaMedioTiempoHasta = getPausaMedioTiempoHastaFutbol(
           estadoJuego,
           autoFutbol.pausaMedioTiempoHasta
@@ -6931,15 +6912,17 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         const totalTarjetas = autoFutbol.mercado === "total_tarjetas"
           ? tarjetasEquipo?.total ?? (puedeUsarStatsGuardadas ? autoFutbol.totalTarjetas : undefined)
           : autoFutbol.totalTarjetas;
-        const siguienteMarcador = juegoNoIniciado ? null : marcadorTexto;
-        const siguienteTotalGoles = juegoNoIniciado ? undefined : (totalGolesDetectado ?? autoFutbol.totalGoles);
-        const siguienteTotalCorners = juegoNoIniciado ? undefined : totalCorners;
-        const siguienteCornersEquipo = cornersEquipo || null;
-        const siguienteTotalTarjetas = juegoNoIniciado ? undefined : totalTarjetas;
-        const siguienteTarjetasEquipo = tarjetasEquipo || null;
-        const siguienteEstadisticasTiempo = (siguienteTotalCorners !== undefined || siguienteTotalTarjetas !== undefined)
-          ? getMarcadorTiempoReglamentarioMeta()
-          : undefined;
+        const siguienteMarcador = preservarDatosPrevios ? autoFutbol.marcador : (juegoNoIniciado ? null : marcadorTexto);
+        const siguienteTotalGoles = preservarDatosPrevios ? autoFutbol.totalGoles : (juegoNoIniciado ? undefined : (totalGolesDetectado ?? autoFutbol.totalGoles));
+        const siguienteTotalCorners = preservarDatosPrevios ? autoFutbol.totalCorners : (juegoNoIniciado ? undefined : totalCorners);
+        const siguienteCornersEquipo = preservarDatosPrevios ? (autoFutbol.cornersEquipo || null) : (cornersEquipo || null);
+        const siguienteTotalTarjetas = preservarDatosPrevios ? autoFutbol.totalTarjetas : (juegoNoIniciado ? undefined : totalTarjetas);
+        const siguienteTarjetasEquipo = preservarDatosPrevios ? (autoFutbol.tarjetasEquipo || null) : (tarjetasEquipo || null);
+        const siguienteEstadisticasTiempo = preservarDatosPrevios
+          ? autoFutbol.estadisticasTiempo
+          : ((siguienteTotalCorners !== undefined || siguienteTotalTarjetas !== undefined)
+            ? getMarcadorTiempoReglamentarioMeta()
+            : undefined);
         const targetFechaJuego = getFechaJuegoFutbol(game);
         if (
           autoFutbol.id !== getIdJuegoFutbol(game) ||
