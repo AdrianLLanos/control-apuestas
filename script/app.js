@@ -6330,15 +6330,22 @@ function crearResumenEstadisticasGuardadasFutbol(autoFutbol = {}) {
   return teams.length ? { boxscore: { teams }, proveedor: "auto_futbol_guardado_reglamentario" } : null;
 }
 
+function normalizarNumeroEstadisticaFutbol(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const numero = Number(String(value).replace("%", "").trim());
+    if (!Number.isNaN(numero)) return numero;
+  }
+  return null;
+}
+
 function extraerValorCornersFutbol(stat = {}) {
   const etiqueta = normalizarTextoMercado(
     stat.name || stat.type || stat.displayName || stat.label || stat.key || ""
   );
   if (!/\b(corner|corners|cornerkick|cornerkicks|corner kick|corner kicks|woncorners|won corners|esquina|esquinas)\b/.test(etiqueta)) return null;
 
-  const rawValue = stat.value ?? stat.displayValue;
-  const value = Number(String(rawValue).replace("%", "").trim());
-  return Number.isNaN(value) ? null : value;
+  return normalizarNumeroEstadisticaFutbol(stat.value, stat.displayValue);
 }
 
 function extraerValorTarjetasFutbol(stat = {}) {
@@ -6349,9 +6356,7 @@ function extraerValorTarjetasFutbol(stat = {}) {
     return null;
   }
 
-  const rawValue = stat.value ?? stat.displayValue;
-  const value = Number(String(rawValue).replace("%", "").trim());
-  return Number.isNaN(value) ? null : value;
+  return normalizarNumeroEstadisticaFutbol(stat.value, stat.displayValue);
 }
 
 function getEquiposEstadisticasEspn(summary = {}) {
@@ -6391,8 +6396,8 @@ function getCornersEquipoFutbol(summary, marcador = null) {
     const stat = (teamInfo.statistics || []).find(item =>
       item.name === "wonCorners" || extraerValorCornersFutbol(item) !== null
     );
-    const value = Number(stat?.value ?? stat?.displayValue);
-    if (!stat || Number.isNaN(value)) return null;
+    const value = stat ? normalizarNumeroEstadisticaFutbol(stat.value, stat.displayValue) : null;
+    if (!stat || value === null) return null;
 
     return {
       name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
@@ -6521,12 +6526,12 @@ function getTarjetasEquipoFutbol(summary, marcador = null) {
     const stats = teamInfo.statistics || [];
     const statTotal = stats.find(item => item.name === "totalCards");
     const tarjetas = statTotal
-      ? Number(statTotal.value ?? statTotal.displayValue)
+      ? normalizarNumeroEstadisticaFutbol(statTotal.value, statTotal.displayValue)
       : stats.map(extraerValorTarjetasFutbol)
         .filter(value => value !== null)
         .reduce((sum, value) => sum + value, 0);
     const tieneTarjetas = Boolean(statTotal) || stats.some(item => extraerValorTarjetasFutbol(item) !== null);
-    if (!tieneTarjetas || Number.isNaN(tarjetas)) return null;
+    if (!tieneTarjetas || tarjetas === null || Number.isNaN(tarjetas)) return null;
 
     return {
       name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
