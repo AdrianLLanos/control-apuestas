@@ -5558,6 +5558,14 @@ function getTotalEstadisticaGuardadaFutbol(autoFutbol = {}) {
   return null;
 }
 
+function autoFutbolTieneStatsReglamentariasGuardadas(autoFutbol = {}) {
+  if (!esMercadoEstadisticasFutbol(autoFutbol)) return false;
+  if (autoFutbol.estadisticasTiempo !== getMarcadorTiempoReglamentarioMeta()) return false;
+  if (getEstadisticaManualFutbol(autoFutbol)) return true;
+  if (crearResumenEstadisticasGuardadasFutbol(autoFutbol)) return true;
+  return getTotalEstadisticaGuardadaFutbol(autoFutbol) !== null;
+}
+
 function elegirResumenEstadisticasFutbol(apiSummary = null, espnSummary = null, autoFutbol = {}, marcador = null) {
   const apiTotal = getTotalEstadisticaFutbol(apiSummary, autoFutbol, marcador);
   const espnTotal = getTotalEstadisticaFutbol(espnSummary, autoFutbol, marcador);
@@ -5577,6 +5585,9 @@ async function cargarResumenFutbol(apiGame, espnGame = null, options = {}) {
   const juegoConAlargue = juegoFutbolTieneAlargueOPenales(apiGame) || juegoFutbolTieneAlargueOPenales(espnGame);
   const autoFutbol = options.autoFutbol || null;
   const marcador = options.marcador || getMarcadorFutbol(apiGame || espnGame);
+  if (juegoConAlargue && autoFutbolTieneStatsReglamentariasGuardadas(autoFutbol)) {
+    return crearResumenEstadisticasGuardadasFutbol(autoFutbol);
+  }
 
   if (apiGame) {
     try {
@@ -6866,14 +6877,17 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         juegoFutbolTieneAlargueOPenales(apiGame) ||
         juegoFutbolTieneAlargueOPenales(espnGame);
       const statsReglamentariasGuardadas = autoFutbol.estadisticasTiempo === getMarcadorTiempoReglamentarioMeta();
-      const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) && !juegoNoIniciado;
+      const usarStatsReglamentariasGuardadas = juegoConAlargue && autoFutbolTieneStatsReglamentariasGuardadas(autoFutbol);
+      const summaryGuardado = usarStatsReglamentariasGuardadas
+        ? crearResumenEstadisticasGuardadasFutbol(autoFutbol)
+        : null;
+      const puedeCargarStatsProveedor = esMercadoEstadisticasFutbol(autoFutbol) &&
+        !juegoNoIniciado &&
+        !usarStatsReglamentariasGuardadas;
       const summaryProveedor = puedeCargarStatsProveedor
         ? await cargarResumenFutbol(apiGame, espnGame, { autoFutbol })
         : null;
-      const summaryGuardado = juegoConAlargue && statsReglamentariasGuardadas
-        ? crearResumenEstadisticasGuardadasFutbol(autoFutbol)
-        : null;
-      const summary = summaryProveedor || summaryGuardado;
+      const summary = summaryGuardado || summaryProveedor;
       const evaluacion = evaluarAutoFutbol(autoFutbol, game, summary);
       if (!evaluacion) {
         const estadoJuego = getEstadoJuegoFutbol(game);
