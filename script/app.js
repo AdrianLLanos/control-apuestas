@@ -66,7 +66,6 @@ const {
 const {
   combinarAutoMlbConDetectado,
   debeForzarIconoGol,
-  debeMostrarReglaTiempoFutbol,
   esContextoMlb,
   quitarAutoFutbolSiEsMlb
 } = marketConflicts;
@@ -7653,82 +7652,13 @@ function getMarcadorResumenFutbolHtml(autos = []) {
   return marcador ? `<div class="auto-mlb-score auto-football-score">${escapeHtml(marcador)}</div>` : "";
 }
 
-function getValorResumenEstadisticaFutbol(item = {}) {
-  const auto = item.autoFutbol || {};
-
-  if (auto.mercado === "total_goles") {
-    const totalGoles = Number(auto.totalGoles);
-    return Number.isFinite(totalGoles)
-      ? {
-        key: "goles",
-        label: auto.seleccionEquipo ? `Goles de ${auto.seleccionEquipo}` : "Goles",
-        value: totalGoles,
-        order: 1,
-        ajusteHtml: ""
-      }
-      : null;
-  }
-
-  if (auto.mercado === "total_corners") {
-    const cornersEquipo = auto.cornersEquipo || getCornersEquipoFallbackFutbol(auto);
-    const totalCorners = getTotalCornersDesdeEquiposFutbol(cornersEquipo) ?? auto.totalCorners;
-    const ajusteHtml = item.selIndex >= 0
-      ? getAjusteManualFutbolHtml(auto, {
-        apuestaId: item.apuestaId,
-        matchIndex: item.matchIndex,
-        selIndex: item.selIndex
-      })
-      : "";
-    return esNumeroAutoValido(totalCorners)
-      ? { key: "corners", label: "Corners", value: Number(totalCorners), order: 2, ajusteHtml }
-      : null;
-  }
-
-  if (auto.mercado === "total_tarjetas") {
-    const tarjetasEquipo = auto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(auto);
-    const totalTarjetas = getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo) ?? auto.totalTarjetas;
-    const ajusteHtml = item.selIndex >= 0
-      ? getAjusteManualFutbolHtml(auto, {
-        apuestaId: item.apuestaId,
-        matchIndex: item.matchIndex,
-        selIndex: item.selIndex
-      })
-      : "";
-    return esNumeroAutoValido(totalTarjetas)
-      ? { key: "tarjetas", label: "Tarjetas", value: Number(totalTarjetas), order: 3, ajusteHtml }
-      : null;
-  }
-
-  return null;
-}
-
-function getEstadisticasResumenFutbolHtml(autos = []) {
-  const stats = new Map();
-
-  autos
-    .map(getValorResumenEstadisticaFutbol)
-    .filter(Boolean)
-    .forEach(stat => {
-      const actual = stats.get(stat.key);
-      if (!actual || stat.value > actual.value || (!actual.ajusteHtml && stat.ajusteHtml)) {
-        stats.set(stat.key, stat);
-      }
-    });
-
-  return [...stats.values()]
-    .sort((a, b) => a.order - b.order)
-    .map(stat => `<div class="auto-mlb-score auto-football-score">${escapeHtml(stat.label)}: ${escapeHtml(stat.value)}${stat.ajusteHtml}</div>`)
-    .join("");
-}
-
 function getResumenAutoFutbolApuestaHtml(apuesta = {}) {
   const autos = getAutosFutbolResumenApuesta(apuesta)
     .map(item => ({ ...item, apuestaId: apuesta.id }));
   if (autos.length === 0) return "";
 
   const lineas = [
-    getMarcadorResumenFutbolHtml(autos),
-    getEstadisticasResumenFutbolHtml(autos)
+    getMarcadorResumenFutbolHtml(autos)
   ].filter(Boolean);
 
   if (lineas.length === 0) return "";
@@ -8183,7 +8113,10 @@ function esCrearApuestaTipo(tipo) {
 }
 
 function getReglaTiempoFutbolHtml(apuesta = {}) {
-  if (!debeMostrarReglaTiempoFutbol(apuesta, { apuestaPareceMlb, apuestaTieneAutoFutbol })) return "";
+  const tieneFutbol = apuestaTieneAutoFutbol(apuesta) ||
+    apuesta?.deporte === "futbol" ||
+    (!apuestaPareceMlb(apuesta) && apuestaPareceFutbol(apuesta));
+  if (!tieneFutbol) return "";
   return `<div class="football-time-rule">En Tiempo Reglamentario</div>`;
 }
 
