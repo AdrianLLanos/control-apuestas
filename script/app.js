@@ -4856,20 +4856,38 @@ function equiposFutbolCoinciden(equipoA = "", equipoB = "") {
     scoreEquipoFutbol(equipoB, { name: equipoA }) >= 0.45;
 }
 
+function autosFutbolCompatibles(autoActual = null, candidato = null) {
+  if (!autoActual?.equipos || !candidato?.equipos) return true;
+  return autoActual.equipos.every(eq =>
+    candidato.equipos.some(candidatoEquipo => equiposFutbolCoinciden(eq, candidatoEquipo))
+  );
+}
+
+function scoreMetaAutoFutbol(autoFutbol = {}) {
+  let score = 0;
+  if (autoFutbol?.marcador) score += 100;
+  if (autoFutbol?.totalGoles !== undefined) score += 30;
+  if (autoFutbol?.totalCorners !== undefined || autoFutbol?.cornersEquipo) score += 30;
+  if (autoFutbol?.totalTarjetas !== undefined || autoFutbol?.tarjetasEquipo) score += 30;
+  if (autoFutbol?.estadoEspecial) score += 20;
+  if (autoFutbol?.estadoJuego) score += 10;
+  if (autoFutbol?.fechaJuego) score += 5;
+  return score;
+}
+
 function completarAutoFutbolRenderDesdeJugada(selection = {}, jugada = {}) {
   const autoActual = selection?.autoFutbol || null;
-  if (autoFutbolTieneMetaVisible(autoActual)) return selection;
 
   const candidatos = [
     ...(Array.isArray(jugada?.selections) ? jugada.selections.map(sel => sel?.autoFutbol).filter(Boolean) : []),
     jugada?.autoFutbol
-  ].filter(autoFutbolTieneMetaVisible);
+  ]
+    .filter(autoFutbolTieneMetaVisible)
+    .filter(auto => autosFutbolCompatibles(autoActual, auto))
+    .sort((a, b) => scoreMetaAutoFutbol(b) - scoreMetaAutoFutbol(a));
 
   if (candidatos.length === 0) return selection;
-  const base = candidatos.find(auto => {
-    if (!autoActual?.equipos || !auto?.equipos) return true;
-    return autoActual.equipos.every(eq => auto.equipos.some(candidato => equiposFutbolCoinciden(eq, candidato)));
-  }) || candidatos[0];
+  const base = candidatos[0];
 
   return {
     ...selection,
