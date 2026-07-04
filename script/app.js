@@ -7473,14 +7473,9 @@ function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
     </span>`;
 }
 
-function getReglaTiempoFutbolInlineHtml(autoFutbol = {}) {
-  if (!autoFutbol) return "";
-  return `<div class="football-time-rule football-time-rule--inline">En Tiempo Reglamentario</div>`;
-}
-
 function getAutoFutbolResultadoHtml(contenido = "", autoFutbol = {}, extraHtml = "") {
   if (!contenido) return "";
-  return `<div class="auto-mlb-score auto-football-score">${contenido}${extraHtml}</div>${getReglaTiempoFutbolInlineHtml(autoFutbol)}`;
+  return `<div class="auto-mlb-score auto-football-score">${contenido}${extraHtml}</div>`;
 }
 
 function esNumeroAutoValido(value) {
@@ -7490,6 +7485,7 @@ function esNumeroAutoValido(value) {
 
 function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   const futbolAuto = selection?.autoFutbol || {};
+  if (options.suppressFootballResult === true && autoTieneResultadoVisible(futbolAuto)) return "";
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(futbolAuto);
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
@@ -7614,6 +7610,117 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
   return marcadorActual
     ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcadorActual)}${totalGolesHtml}`, futbolAuto)}${estadoFinalizadoHtml}`
     : horaHtml;
+}
+
+function getAutosFutbolResumenApuesta(apuesta = {}) {
+  const autos = [];
+
+  (apuesta.jugadas || []).forEach((jugada, matchIndex) => {
+    if (esAutoFutbolObjeto(jugada?.autoFutbol)) {
+      autos.push({ autoFutbol: jugada.autoFutbol, jugada, matchIndex, selIndex: -1 });
+    }
+
+    getSelectionsFromJugada(jugada).forEach((selection, selIndex) => {
+      const selectionCompleta = completarAutoFutbolRenderDesdeJugada(selection, jugada);
+      if (esAutoFutbolObjeto(selectionCompleta?.autoFutbol)) {
+        autos.push({ autoFutbol: selectionCompleta.autoFutbol, jugada, matchIndex, selIndex });
+      }
+    });
+  });
+
+  const vistos = new Set();
+  return autos.filter(item => {
+    const auto = item.autoFutbol || {};
+    const key = [
+      auto.mercado || "",
+      auto.marcador || "",
+      auto.totalGoles ?? "",
+      auto.totalCorners ?? "",
+      auto.totalTarjetas ?? "",
+      JSON.stringify(auto.cornersEquipo || null),
+      JSON.stringify(auto.tarjetasEquipo || null)
+    ].join("|");
+    if (vistos.has(key)) return false;
+    vistos.add(key);
+    return true;
+  });
+}
+
+function getMarcadorResumenFutbolHtml(autos = []) {
+  const marcadorAuto = autos.find(item => item.autoFutbol?.marcador)?.autoFutbol;
+  if (!marcadorAuto?.marcador) return "";
+  const marcador = reordenarMarcadorTextoFutbol(marcadorAuto.marcador, marcadorAuto.equipos);
+  return marcador ? `<div class="auto-mlb-score auto-football-score">${escapeHtml(marcador)}</div>` : "";
+}
+
+function getLineaEstadisticaResumenFutbol(item = {}) {
+  const auto = item.autoFutbol || {};
+  const liga = auto.liga ? ` &middot; ${escapeHtml(auto.liga)}` : "";
+
+  if (auto.mercado === "total_goles") {
+    const totalGoles = Number(auto.totalGoles);
+    if (!Number.isFinite(totalGoles)) return "";
+    const etiqueta = auto.seleccionEquipo
+      ? `Goles de ${escapeHtml(auto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
+      : `Total goles: ${escapeHtml(totalGoles)}`;
+    return `<div class="auto-mlb-score auto-football-score">${etiqueta}${liga}</div>`;
+  }
+
+  if (auto.mercado === "total_corners") {
+    const cornersEquipo = auto.cornersEquipo || getCornersEquipoFallbackFutbol(auto);
+    const totalCorners = getTotalCornersDesdeEquiposFutbol(cornersEquipo) ?? auto.totalCorners;
+    const ajusteHtml = item.selIndex >= 0
+      ? getAjusteManualFutbolHtml(auto, {
+        apuestaId: item.apuestaId,
+        matchIndex: item.matchIndex,
+        selIndex: item.selIndex
+      })
+      : "";
+    if (cornersEquipo?.home && cornersEquipo?.away) {
+      const totalHtml = esNumeroAutoValido(totalCorners) ? ` &middot; Total: ${escapeHtml(totalCorners)}` : "";
+      const detalle = obtenerCornersDetalleEnOrden(cornersEquipo, auto.equipos);
+      return `<div class="auto-mlb-score auto-football-score">${detalle}${totalHtml}${liga}${ajusteHtml}</div>`;
+    }
+    if (esNumeroAutoValido(totalCorners)) {
+      return `<div class="auto-mlb-score auto-football-score">Total corners: ${escapeHtml(totalCorners)}${liga}${ajusteHtml}</div>`;
+    }
+  }
+
+  if (auto.mercado === "total_tarjetas") {
+    const tarjetasEquipo = auto.tarjetasEquipo || getTarjetasEquipoFallbackFutbol(auto);
+    const totalTarjetas = getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo) ?? auto.totalTarjetas;
+    const ajusteHtml = item.selIndex >= 0
+      ? getAjusteManualFutbolHtml(auto, {
+        apuestaId: item.apuestaId,
+        matchIndex: item.matchIndex,
+        selIndex: item.selIndex
+      })
+      : "";
+    if (tarjetasEquipo?.home && tarjetasEquipo?.away) {
+      const totalHtml = esNumeroAutoValido(totalTarjetas) ? ` &middot; Total: ${escapeHtml(totalTarjetas)}` : "";
+      const detalle = obtenerTarjetasDetalleEnOrden(tarjetasEquipo, auto.equipos);
+      return `<div class="auto-mlb-score auto-football-score">${detalle}${totalHtml}${liga}${ajusteHtml}</div>`;
+    }
+    if (esNumeroAutoValido(totalTarjetas)) {
+      return `<div class="auto-mlb-score auto-football-score">Total tarjetas: ${escapeHtml(totalTarjetas)}${liga}${ajusteHtml}</div>`;
+    }
+  }
+
+  return "";
+}
+
+function getResumenAutoFutbolApuestaHtml(apuesta = {}) {
+  const autos = getAutosFutbolResumenApuesta(apuesta)
+    .map(item => ({ ...item, apuestaId: apuesta.id }));
+  if (autos.length === 0) return "";
+
+  const lineas = [
+    getMarcadorResumenFutbolHtml(autos),
+    ...autos.map(getLineaEstadisticaResumenFutbol)
+  ].filter(Boolean);
+
+  if (lineas.length === 0) return "";
+  return `<div class="auto-football-summary">${lineas.join("")}</div>`;
 }
 
 /* =========================
@@ -8596,6 +8703,7 @@ function _render() {
       let fechaFormateada = (day && month && year) ? `${day}/${month}/${year}` : (fechaBase || "—");
 
       const reglaTiempoFutbolHtml = getReglaTiempoFutbolHtml(a);
+      const resumenAutoFutbolHtml = getResumenAutoFutbolApuestaHtml(a);
       let celdaEvento = "";
       if (a.jugadas && a.jugadas.length > 0) {
         const fallbackFechaJuegoApuesta = getFechaJuegoFallbackApuesta(a);
@@ -8661,6 +8769,7 @@ function _render() {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 suppressSchedule: suppressScheduleForMatch,
+                suppressFootballResult: true,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -8705,6 +8814,7 @@ function _render() {
           celdaEvento = `<div style="text-align: left; min-width: 150px;">
             ${tituloCrearHtml}
             <div style="padding-left:4px;">${itemsHtml}</div>
+            ${resumenAutoFutbolHtml}
             ${reglaTiempoFutbolHtml}
           </div>`;
 
@@ -8767,6 +8877,7 @@ function _render() {
                 showAutoMeta: selIndex === selections.length - 1,
                 showFinalStatus: selIndex === selections.length - 1,
                 suppressSchedule: suppressScheduleForMatch,
+                suppressFootballResult: true,
                 evento: evText,
                 fallbackFechaJuego: fallbackFechaJuegoApuesta
               });
@@ -8837,13 +8948,14 @@ function _render() {
             ${tituloHtml}
             ${resumenPatente}
             <div style="padding-left:4px;">${itemsHtml}</div>
+            ${resumenAutoFutbolHtml}
             ${reglaTiempoFutbolHtml}
           </div>`;
         }
 
       } else {
         const formattedEvento = formatTextWithCorners(limpiarEventoDuplicado(a.evento));
-        celdaEvento = `<div style="text-align: left; min-width: 150px;"><strong>${formattedEvento}</strong>${reglaTiempoFutbolHtml}</div>`;
+        celdaEvento = `<div style="text-align: left; min-width: 150px;"><strong>${formattedEvento}</strong>${resumenAutoFutbolHtml}${reglaTiempoFutbolHtml}</div>`;
       }
 
 
