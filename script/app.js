@@ -837,7 +837,7 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-const MLB_AUTO_SYNC_INTERVAL_MS = 60 * 1000;
+const MLB_AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
@@ -4951,7 +4951,7 @@ const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
-const MLB_LIVE_SYNC_INTERVAL_MS = 15 * 1000;
+const MLB_LIVE_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
@@ -7446,14 +7446,14 @@ function startAutoSyncMlb() {
   document.addEventListener("visibilitychange", () => {
     if (paginaEstaVisible()) {
       registrarReactivacionPagina();
-      programarSyncSilenciosa("mlb", 3000);
+      programarSyncSilenciosa("mlb", 1000, true);
     } else {
       cancelarSyncSilenciosaPendiente();
     }
   });
   window.addEventListener("focus", () => {
     registrarReactivacionPagina();
-    programarSyncSilenciosa("mlb", 3000);
+    programarSyncSilenciosa("mlb", 1000, true);
   });
 }
 
