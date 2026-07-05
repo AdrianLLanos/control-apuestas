@@ -1348,19 +1348,24 @@ function apuestaFutbolNecesitaSyncEstadisticasRapida(apuesta = {}) {
 }
 
 function programarSyncInicialVisible() {
+  // Solo sincronizar automáticamente si el usuario ya activó la sincronización manualmente
   const apuestasVisibles = getApuestasFiltradas();
-  const hayFutbol = apuestasVisibles.some(apuesta => apuestaPareceFutbol(apuesta));
-  const hayFutbolStatsUrgente = apuestasVisibles.some(apuestaFutbolNecesitaSyncEstadisticasRapida);
-  const hayMlb = apuestasVisibles.some(apuesta => apuestaPareceMlb(apuesta));
-  const hayMlbUrgente = apuestasVisibles.some(apuestaMlbNecesitaSyncRapida) ||
-    apuestasVisibles.some(apuestaMlbNecesitaSyncLiveRapida);
 
-  if (hayFutbol) {
-    programarSyncSilenciosa("futbol", hayFutbolStatsUrgente ? 1200 : 12000, hayFutbolStatsUrgente);
+  if (_syncFutbolActivado) {
+    const hayFutbolStatsUrgente = apuestasVisibles.some(apuestaFutbolNecesitaSyncEstadisticasRapida);
+    const hayFutbol = apuestasVisibles.some(apuesta => apuestaPareceFutbol(apuesta));
+    if (hayFutbol) {
+      programarSyncSilenciosa("futbol", hayFutbolStatsUrgente ? 1200 : 12000, hayFutbolStatsUrgente);
+    }
   }
 
-  if (hayMlb) {
-    programarSyncSilenciosa("mlb", hayMlbUrgente ? 1200 : 16000, hayMlbUrgente);
+  if (_syncMlbActivado) {
+    const hayMlbUrgente = apuestasVisibles.some(apuestaMlbNecesitaSyncRapida) ||
+      apuestasVisibles.some(apuestaMlbNecesitaSyncLiveRapida);
+    const hayMlb = apuestasVisibles.some(apuesta => apuestaPareceMlb(apuesta));
+    if (hayMlb) {
+      programarSyncSilenciosa("mlb", hayMlbUrgente ? 1200 : 16000, hayMlbUrgente);
+    }
   }
 }
 
@@ -7370,9 +7375,11 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 let _autoSyncFutbolIntervalId = null;
 let _autoSyncFutbolEnCurso = false;
 let _ultimoAutoSyncFutbol = 0;
+let _syncFutbolActivado = false; // Solo inicia cuando el usuario presiona el botón manualmente
 
 async function ejecutarAutoSyncFutbol(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!_syncFutbolActivado) return; // No sincronizar si el usuario no lo activó
   const syncStatsRapida = getApuestasSyncScope(true).some(apuestaFutbolNecesitaSyncEstadisticasRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("futbol", syncStatsRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncStatsRapida);
@@ -7402,18 +7409,23 @@ async function ejecutarAutoSyncFutbol(force = false) {
 
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncFutbolIntervalId = setInterval(() => programarSyncSilenciosa("futbol", 0), AUTO_SYNC_INTERVAL_MS);
+  _syncFutbolActivado = true;
+  _autoSyncFutbolIntervalId = setInterval(() => {
+    if (_syncFutbolActivado) programarSyncSilenciosa("futbol", 0);
+  }, AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible()) {
+    if (paginaEstaVisible() && _syncFutbolActivado) {
       registrarReactivacionPagina();
       programarSyncSilenciosa("futbol", 1000);
-    } else {
+    } else if (!paginaEstaVisible()) {
       cancelarSyncSilenciosaPendiente();
     }
   });
   window.addEventListener("focus", () => {
-    registrarReactivacionPagina();
-    programarSyncSilenciosa("futbol", 1000);
+    if (_syncFutbolActivado) {
+      registrarReactivacionPagina();
+      programarSyncSilenciosa("futbol", 1000);
+    }
   });
 }
 
@@ -7422,9 +7434,11 @@ function startAutoSyncFutbol() {
 let _autoSyncMlbIntervalId = null;
 let _autoSyncMlbEnCurso = false;
 let _ultimoAutoSyncMlb = 0;
+let _syncMlbActivado = false; // Solo inicia cuando el usuario presiona el botón manualmente
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
+  if (!_syncMlbActivado) return; // No sincronizar si el usuario no lo activó
   const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("mlb", syncLiveRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncLiveRapida);
@@ -7454,18 +7468,23 @@ async function ejecutarAutoSyncMlb(force = false) {
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncMlbIntervalId = setInterval(() => programarSyncSilenciosa("mlb", 0), MLB_AUTO_SYNC_INTERVAL_MS);
+  _syncMlbActivado = true;
+  _autoSyncMlbIntervalId = setInterval(() => {
+    if (_syncMlbActivado) programarSyncSilenciosa("mlb", 0);
+  }, MLB_AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible()) {
+    if (paginaEstaVisible() && _syncMlbActivado) {
       registrarReactivacionPagina();
       programarSyncSilenciosa("mlb", 1000, true);
-    } else {
+    } else if (!paginaEstaVisible()) {
       cancelarSyncSilenciosaPendiente();
     }
   });
   window.addEventListener("focus", () => {
-    registrarReactivacionPagina();
-    programarSyncSilenciosa("mlb", 1000, true);
+    if (_syncMlbActivado) {
+      registrarReactivacionPagina();
+      programarSyncSilenciosa("mlb", 1000, true);
+    }
   });
 }
 
@@ -9209,6 +9228,38 @@ function _render() {
         <div class="stat-bar">
           <div class="stat-fill nula"
                style="width:${stats.pNulas}%"></div>
+
+  html += `
+    <div class="page stats-box">
+      <h2>📊 Estadísticas</h2>
+
+      <div class="stat">
+        <div class="stat-label">
+          Ganadas ${stats.pGanadas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill ganada"
+               style="width:${stats.pGanadas}%"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">
+          Perdidas ${stats.pPerdidas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill perdida"
+               style="width:${stats.pPerdidas}%"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">
+          Nulas ${stats.pNulas.toFixed(1)}%
+        </div>
+        <div class="stat-bar">
+          <div class="stat-fill nula"
+               style="width:${stats.pNulas}%"></div>
         </div>
       </div>
 
@@ -9263,14 +9314,18 @@ function iniciarApp() {
   document.getElementById("btnEliminarTodo").onclick = eliminarTodo;
   const btnSincronizarMlb = document.getElementById("btnSincronizarMlb");
   if (btnSincronizarMlb) {
-    btnSincronizarMlb.onclick = () => sincronizarResultadosMlb();
+    btnSincronizarMlb.onclick = () => {
+      startAutoSyncMlb();
+      sincronizarResultadosMlb();
+    };
   }
   const btnSincronizarFutbol = document.getElementById("btnSincronizarFutbol");
   if (btnSincronizarFutbol) {
-    btnSincronizarFutbol.onclick = () => sincronizarResultadosFutbol();
+    btnSincronizarFutbol.onclick = () => {
+      startAutoSyncFutbol();
+      sincronizarResultadosFutbol();
+    };
   }
-  startAutoSyncFutbol();
-  startAutoSyncMlb();
   document.addEventListener("input", (e) => {
     if (!e.target?.matches?.(".jugada-ev-input, .evento-principal-input")) return;
     const deporteSelect = document.getElementById("deporte");
