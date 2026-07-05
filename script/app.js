@@ -1124,6 +1124,8 @@ function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOr
 function autocorregirApuestasCargadas(lista = []) {
   lista.forEach(a => {
     if (!a.casaId) {
+      // Marcar como silencioso ANTES de escribir para evitar re-render extra
+      marcarRenderSilenciosoApuesta(a.id);
       updateDoc(doc(db, "apuestas", a.id), {
         casaId: CASA_DEFAULT_ID,
         casaNombre: getCasaNombre(CASA_DEFAULT_ID)
@@ -1132,6 +1134,8 @@ function autocorregirApuestasCargadas(lista = []) {
 
     if (a.fecha && a.dia && a.fecha !== a.dia) {
       const fechaNormalizada = a.fecha;
+      // Marcar como silencioso ANTES de escribir para evitar re-render extra
+      marcarRenderSilenciosoApuesta(a.id);
       updateDoc(doc(db, "apuestas", a.id), { fecha: fechaNormalizada, dia: fechaNormalizada })
         .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
     }
@@ -1153,6 +1157,8 @@ function autocorregirApuestasCargadas(lista = []) {
       }
 
       if (Object.keys(updateData).length > 0) {
+        // Marcar como silencioso ANTES de escribir para evitar re-render extra
+        marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), updateData)
           .catch(err => console.error("Error al auto-corregir patente:", err));
       }
@@ -1172,6 +1178,8 @@ function autocorregirApuestasCargadas(lista = []) {
         }
       }
       if (Object.keys(updateData).length > 0) {
+        // Marcar como silencioso ANTES de escribir para evitar re-render extra
+        marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), updateData)
           .catch(err => console.error("Error al auto-corregir resultado:", err));
       }
@@ -1182,6 +1190,8 @@ function autocorregirApuestasCargadas(lista = []) {
       const rounded = Math.round(val);
       const distance = Math.abs(val - rounded);
       if (distance > 0 && distance <= 0.035) {
+        // Marcar como silencioso ANTES de escribir para evitar re-render extra
+        marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), { importe: rounded })
           .catch(err => console.error("Error al auto-corregir importe:", err));
       }
@@ -8141,6 +8151,39 @@ function render() {
     _render();
   } catch (error) {
     console.error("Error in render:", error);
+
+function actualizarResumenDiaDom(dia) {
+  if (!dia) return;
+
+  let inv = 0;
+  let ret = 0;
+  getApuestasFiltradas().forEach(apuesta => {
+    if (apuesta.dia !== dia || apuesta.resultado === "pendiente") return;
+    inv += apuesta.importe || 0;
+    ret += calcularRetornoApuesta(apuesta);
+  });
+
+  const balance = ret - inv;
+  const invEl = document.querySelector(`[data-dia-inv="${dia}"]`);
+  const retEl = document.querySelector(`[data-dia-ret="${dia}"]`);
+  const balanceEl = document.querySelector(`[data-dia-balance="${dia}"]`);
+
+  if (invEl) invEl.textContent = `$${inv.toFixed(2)}`;
+  if (retEl) retEl.textContent = `$${ret.toFixed(2)}`;
+  if (balanceEl) {
+    balanceEl.textContent = `$${balance.toFixed(2)}`;
+    balanceEl.className = balance >= 0 ? "ganada" : "perdida";
+  }
+}
+
+/* =========================
+   RENDER
+ ========================= */
+function render() {
+  try {
+    _render();
+  } catch (error) {
+    console.error("Error in render:", error);
     const contenido = document.getElementById("contenido");
     if (contenido) {
       contenido.innerHTML = `
@@ -8155,6 +8198,7 @@ function render() {
 }
 
 let renderSnapshotPendiente = false;
+let _renderSnapshotNoVisibleIntentos = 0;
 function renderSnapshotProgramado() {
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
@@ -8164,8 +8208,16 @@ function renderSnapshotProgramado() {
     setTimeout(() => {
       renderSnapshotPendiente = false;
       if (!paginaEstaVisible()) {
-        renderSnapshotProgramado();
-        return;
+        _renderSnapshotNoVisibleIntentos++;
+        // Protección contra recursión infinita: máximo 3 reintentos.
+        // Después de 3 intentos fallidos renderizamos igual para no perder datos.
+        if (_renderSnapshotNoVisibleIntentos < 3) {
+          setTimeout(() => renderSnapshotProgramado(), 500);
+          return;
+        }
+        _renderSnapshotNoVisibleIntentos = 0;
+      } else {
+        _renderSnapshotNoVisibleIntentos = 0;
       }
       render();
     }, delay);
