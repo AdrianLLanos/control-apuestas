@@ -837,6 +837,7 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const MLB_AUTO_SYNC_INTERVAL_MS = 60 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
@@ -4610,7 +4611,16 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
   return Object.keys(updatePayload).length > 0 ? updatePayload : null;
 }
 
+let _syncMlbEnCurso = false;
+
 async function sincronizarResultadosMlb(silencioso = false) {
+  if (_syncMlbEnCurso) {
+    if (!silencioso) {
+      setMlbSyncStatus("Ya hay una sincronizacion MLB en curso.", "");
+    }
+    return;
+  }
+
   const hoy = obtenerFechaActualLocal();
   const apuestasSync = getApuestasSyncScope(silencioso);
   const candidatasResultados = apuestasSync.filter(a => {
@@ -4643,6 +4653,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
     return;
   }
 
+  _syncMlbEnCurso = true;
   const btn = document.getElementById("btnSincronizarMlb");
   if (!silencioso) {
     if (btn) btn.disabled = true;
@@ -4715,6 +4726,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
       setMlbSyncStatus(`No se pudo sincronizar MLB: ${e.message}`, "error");
     }
   } finally {
+    _syncMlbEnCurso = false;
     if (!silencioso && btn) btn.disabled = false;
     if (!silencioso) render();
   }
@@ -7223,18 +7235,50 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       }
     }
 
-    const fechasEspn = new Set();
-    candidatas.forEach(apuesta => {
+    const idsHorariosActualizados = new Set();
+    const getApuestaActualizada = apuesta => apuestas.find(item => item.id === apuesta.id) || apuesta;
+    const aplicarUpdateFutbol = async (apuesta, updateData) => {
+      if (!updateData) return false;
+      marcarRenderSilenciosoApuesta(apuesta.id);
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      renderSnapshotProgramado();
+      if (idsHorario.has(apuesta.id)) idsHorariosActualizados.add(apuesta.id);
+      return true;
+    };
+
+    let actualizadasApi = 0;
+    let revisadasApi = 0;
+    for (const apuesta of candidatas) {
+      revisadasApi++;
+      if (!silencioso) {
+        setFootballSyncStatus(`Sincronizando futbol... API-Football apuestas ${revisadasApi}/${candidatas.length}`, "");
+      }
+      await cederControlNavegador();
       const fecha = getFechaApiSportsFutbolApuesta(apuesta);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApiSportsApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
-      if (apuestaNecesitaEspnFutbol(apuesta, juegosApiSportsApuesta, fecha)) {
+      const updateDataApi = await aplicarResultadoFutbolApuesta(apuesta, juegosApiSportsApuesta, []);
+      if (await aplicarUpdateFutbol(apuesta, updateDataApi)) {
+        actualizadasApi++;
+      }
+    }
+
+    const fechasEspn = new Set();
+    candidatas.forEach(apuesta => {
+      const apuestaActualizada = getApuestaActualizada(apuesta);
+      const fecha = getFechaApiSportsFutbolApuesta(apuestaActualizada);
+      const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
+      const juegosApiSportsApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
+      const debeCompararEspn = juegosApiSportsApuesta.length > 0 ||
+        apuestaNecesitaEspnFutbol(apuestaActualizada, juegosApiSportsApuesta, fecha);
+      if (debeCompararEspn) {
         fechasBusqueda.forEach(fechaBusqueda => fechasEspn.add(fechaBusqueda));
       }
     });
 
     const juegosEspnPorFecha = new Map();
-    for (const fecha of fechas) {
+    for (const fecha of fechasEspn) {
       juegosEspnPorFecha.set(fecha, []);
     }
     let juegosEspnCargados = 0;
@@ -7257,31 +7301,30 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       }
     }
 
-    let actualizadas = 0;
-    let horariosActualizados = 0;
-    let revisadas = 0;
-
+    let actualizadasEspn = 0;
+    let revisadasEspn = 0;
     for (const apuesta of candidatas) {
-      revisadas++;
+      const apuestaActualizada = getApuestaActualizada(apuesta);
+      const fecha = getFechaApiSportsFutbolApuesta(apuestaActualizada);
+      const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
+      const juegosEspnApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosEspnPorFecha.get(fechaBusqueda) || []);
+      if (juegosEspnApuesta.length === 0) continue;
+
+      revisadasEspn++;
       if (!silencioso) {
-        setFootballSyncStatus(`Sincronizando futbol... apuestas ${revisadas}/${candidatas.length}`, "");
+        setFootballSyncStatus(`Sincronizando futbol... ESPN apuestas ${revisadasEspn}/${candidatas.length}`, "");
       }
       await cederControlNavegador();
-      const fecha = getFechaApiSportsFutbolApuesta(apuesta);
-      const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
-      const juegosEspnApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosEspnPorFecha.get(fechaBusqueda) || []);
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
-      if (!updateData) continue;
-
-      marcarRenderSilenciosoApuesta(apuesta.id);
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
-      aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      renderSnapshotProgramado();
-      actualizadas++;
-      if (idsHorario.has(apuesta.id)) horariosActualizados++;
+      const updateDataEspn = await aplicarResultadoFutbolApuesta(apuestaActualizada, juegosApuesta, juegosEspnApuesta);
+      if (await aplicarUpdateFutbol(apuestaActualizada, updateDataEspn)) {
+        actualizadasEspn++;
+      }
     }
 
+    const actualizadas = actualizadasApi + actualizadasEspn;
+    const revisadas = revisadasApi + revisadasEspn;
+    const horariosActualizados = idsHorariosActualizados.size;
     if (silencioso && actualizadas > 0) {
       renderSnapshotProgramado();
     }
@@ -7380,7 +7423,7 @@ async function ejecutarAutoSyncMlb(force = false) {
     return;
   }
   if (_autoSyncMlbEnCurso) return;
-  const intervaloMinimo = syncLiveRapida ? MLB_LIVE_SYNC_INTERVAL_MS : AUTO_SYNC_INTERVAL_MS;
+  const intervaloMinimo = syncLiveRapida ? MLB_LIVE_SYNC_INTERVAL_MS : MLB_AUTO_SYNC_INTERVAL_MS;
   if (!force && Date.now() - _ultimoAutoSyncMlb < intervaloMinimo) return;
 
   _autoSyncMlbEnCurso = true;
@@ -7399,7 +7442,7 @@ async function ejecutarAutoSyncMlb(force = false) {
 
 function startAutoSyncMlb() {
   if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncMlbIntervalId = setInterval(() => programarSyncSilenciosa("mlb", 0), AUTO_SYNC_INTERVAL_MS);
+  _autoSyncMlbIntervalId = setInterval(() => programarSyncSilenciosa("mlb", 0), MLB_AUTO_SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
     if (paginaEstaVisible()) {
       registrarReactivacionPagina();
