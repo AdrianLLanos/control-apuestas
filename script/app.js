@@ -8151,39 +8151,6 @@ function render() {
     _render();
   } catch (error) {
     console.error("Error in render:", error);
-
-function actualizarResumenDiaDom(dia) {
-  if (!dia) return;
-
-  let inv = 0;
-  let ret = 0;
-  getApuestasFiltradas().forEach(apuesta => {
-    if (apuesta.dia !== dia || apuesta.resultado === "pendiente") return;
-    inv += apuesta.importe || 0;
-    ret += calcularRetornoApuesta(apuesta);
-  });
-
-  const balance = ret - inv;
-  const invEl = document.querySelector(`[data-dia-inv="${dia}"]`);
-  const retEl = document.querySelector(`[data-dia-ret="${dia}"]`);
-  const balanceEl = document.querySelector(`[data-dia-balance="${dia}"]`);
-
-  if (invEl) invEl.textContent = `$${inv.toFixed(2)}`;
-  if (retEl) retEl.textContent = `$${ret.toFixed(2)}`;
-  if (balanceEl) {
-    balanceEl.textContent = `$${balance.toFixed(2)}`;
-    balanceEl.className = balance >= 0 ? "ganada" : "perdida";
-  }
-}
-
-/* =========================
-   RENDER
- ========================= */
-function render() {
-  try {
-    _render();
-  } catch (error) {
-    console.error("Error in render:", error);
     const contenido = document.getElementById("contenido");
     if (contenido) {
       contenido.innerHTML = `
