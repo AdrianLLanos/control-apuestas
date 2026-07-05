@@ -4704,7 +4704,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
 
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      if (silencioso) renderSilenciosoApuestas.add(apuesta.id);
+      if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
       renderSnapshotProgramado();
       actualizadas++;
       if (!debeSincronizarResultado) horariosActualizados++;
@@ -4951,7 +4951,7 @@ const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
-const MLB_LIVE_SYNC_INTERVAL_MS = 60 * 1000;
+const MLB_LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
