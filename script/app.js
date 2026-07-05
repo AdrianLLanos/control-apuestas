@@ -551,13 +551,20 @@ window.cambiarCasaFormulario = function (id) {
 };
 
 window.cambiarFiltroCasa = function (id) {
-  filtroCasaId = id || CASA_TODAS_ID;
+  const nuevoFiltro = id || CASA_TODAS_ID;
+  const filtroAnterior = filtroCasaId;
+  filtroCasaId = nuevoFiltro;
   if (filtroCasaId !== CASA_TODAS_ID) casaFormularioId = filtroCasaId;
   paginaActual = 1;
   isEditingFinal = false;
   Object.keys(apuestasVisiblesPorDia).forEach(dia => delete apuestasVisiblesPorDia[dia]);
   renderCasasControls();
-  cargarApuestasIniciales();
+  // Solo recargar Firestore si el filtro realmente cambió
+  if (nuevoFiltro !== filtroAnterior) {
+    cargarApuestasIniciales();
+  } else {
+    render();
+  }
 };
 
 /* =========================
@@ -1124,7 +1131,6 @@ function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOr
 function autocorregirApuestasCargadas(lista = []) {
   lista.forEach(a => {
     if (!a.casaId) {
-      // Marcar como silencioso ANTES de escribir para evitar re-render extra
       marcarRenderSilenciosoApuesta(a.id);
       updateDoc(doc(db, "apuestas", a.id), {
         casaId: CASA_DEFAULT_ID,
@@ -1134,7 +1140,6 @@ function autocorregirApuestasCargadas(lista = []) {
 
     if (a.fecha && a.dia && a.fecha !== a.dia) {
       const fechaNormalizada = a.fecha;
-      // Marcar como silencioso ANTES de escribir para evitar re-render extra
       marcarRenderSilenciosoApuesta(a.id);
       updateDoc(doc(db, "apuestas", a.id), { fecha: fechaNormalizada, dia: fechaNormalizada })
         .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
@@ -1157,7 +1162,6 @@ function autocorregirApuestasCargadas(lista = []) {
       }
 
       if (Object.keys(updateData).length > 0) {
-        // Marcar como silencioso ANTES de escribir para evitar re-render extra
         marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), updateData)
           .catch(err => console.error("Error al auto-corregir patente:", err));
@@ -1178,7 +1182,6 @@ function autocorregirApuestasCargadas(lista = []) {
         }
       }
       if (Object.keys(updateData).length > 0) {
-        // Marcar como silencioso ANTES de escribir para evitar re-render extra
         marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), updateData)
           .catch(err => console.error("Error al auto-corregir resultado:", err));
@@ -1190,7 +1193,6 @@ function autocorregirApuestasCargadas(lista = []) {
       const rounded = Math.round(val);
       const distance = Math.abs(val - rounded);
       if (distance > 0 && distance <= 0.035) {
-        // Marcar como silencioso ANTES de escribir para evitar re-render extra
         marcarRenderSilenciosoApuesta(a.id);
         updateDoc(doc(db, "apuestas", a.id), { importe: rounded })
           .catch(err => console.error("Error al auto-corregir importe:", err));
@@ -8165,7 +8167,6 @@ function render() {
 }
 
 let renderSnapshotPendiente = false;
-let _renderSnapshotNoVisibleIntentos = 0;
 function renderSnapshotProgramado() {
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
@@ -8175,16 +8176,8 @@ function renderSnapshotProgramado() {
     setTimeout(() => {
       renderSnapshotPendiente = false;
       if (!paginaEstaVisible()) {
-        _renderSnapshotNoVisibleIntentos++;
-        // Protección contra recursión infinita: máximo 3 reintentos.
-        // Después de 3 intentos fallidos renderizamos igual para no perder datos.
-        if (_renderSnapshotNoVisibleIntentos < 3) {
-          setTimeout(() => renderSnapshotProgramado(), 500);
-          return;
-        }
-        _renderSnapshotNoVisibleIntentos = 0;
-      } else {
-        _renderSnapshotNoVisibleIntentos = 0;
+        renderSnapshotProgramado();
+        return;
       }
       render();
     }, delay);
