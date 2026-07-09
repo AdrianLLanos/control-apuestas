@@ -1692,6 +1692,14 @@ function formatearTituloTotalGolesFutbol(equipo = "") {
   return equipo ? `Goles de ${equipo}` : "Total de goles";
 }
 
+function formatearTituloTotalCornersFutbol(equipo = "") {
+  return equipo ? `Corners de ${equipo}` : "Total tiros de esquina";
+}
+
+function formatearTituloTotalTarjetasFutbol(equipo = "") {
+  return equipo ? `Tarjetas de ${equipo}` : "Total tarjetas";
+}
+
 const TITULO_TOTAL_HITS_MLB = "Hits M\u00e1s de/Menos de (incl. extra innings)";
 
 function formatearTituloTotalHitsMlb() {
@@ -1848,14 +1856,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 
   if (autoFutbol?.mercado === "total_corners") {
     return {
-      titulo: "Total tiros de esquina",
+      titulo: formatearTituloTotalCornersFutbol(autoFutbol.seleccionEquipo),
       jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
     };
   }
 
   if (autoFutbol?.mercado === "total_tarjetas") {
     return {
-      titulo: "Total tarjetas",
+      titulo: formatearTituloTotalTarjetasFutbol(autoFutbol.seleccionEquipo),
       jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
     };
   }
@@ -2400,6 +2408,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
         deporte: "futbol",
         mercado: "total_corners",
         equipos,
+        ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
         tipoTotal,
         linea
       };
@@ -2414,6 +2423,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
         deporte: "futbol",
         mercado: "total_tarjetas",
         equipos,
+        ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
         tipoTotal,
         linea
       };
@@ -6534,6 +6544,29 @@ function getTotalGolesObjetivoFutbol(autoFutbol = {}, marcador = null) {
   return equipo ? equipo.seleccionado : null;
 }
 
+function getValorEstadisticaEquipoFutbol(equipoStats = {}, equipo = "", campo = "") {
+  if (!equipo) return equipoStats?.total ?? null;
+  const candidatos = [equipoStats?.home, equipoStats?.away].filter(Boolean);
+  const encontrado = candidatos
+    .map(item => ({
+      item,
+      score: scoreEquipoFutbol(equipo, { name: item.name || "" })
+    }))
+    .filter(({ score }) => score >= 0.45)
+    .sort((a, b) => b.score - a.score)[0]?.item;
+  if (!encontrado) return null;
+  const value = Number(encontrado[campo]);
+  return Number.isNaN(value) ? null : value;
+}
+
+function getTotalCornersObjetivoFutbol(autoFutbol = {}, cornersEquipo = {}) {
+  return getValorEstadisticaEquipoFutbol(cornersEquipo, autoFutbol.seleccionEquipo, "corners");
+}
+
+function getTotalTarjetasObjetivoFutbol(autoFutbol = {}, tarjetasEquipo = {}) {
+  return getValorEstadisticaEquipoFutbol(tarjetasEquipo, autoFutbol.seleccionEquipo, "tarjetas");
+}
+
 function crearJuegoFutbolDesdeAutoFutbol(autoFutbol = {}) {
   if (!autoFutbol?.marcador || !esEstadoJuegoFinalizado(autoFutbol.estadoJuego)) return null;
   if (
@@ -6786,7 +6819,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
 
   if (autoFutbol.mercado === "total_corners") {
     const cornersEquipo = getEstadisticaManualFutbol(autoFutbol) || getCornersEquipoFutbol(summary, marcador);
-    const totalCorners = cornersEquipo?.total ?? null;
+    const totalCorners = getTotalCornersObjetivoFutbol(autoFutbol, cornersEquipo);
     const linea = Number(autoFutbol.linea);
     if (totalCorners === null || Number.isNaN(linea)) return null;
     if (!finalizado) {
@@ -6806,7 +6839,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
 
   if (autoFutbol.mercado === "total_tarjetas") {
     const tarjetasEquipo = getEstadisticaManualFutbol(autoFutbol) || getTarjetasEquipoFutbol(summary, marcador);
-    const totalTarjetas = tarjetasEquipo?.total ?? null;
+    const totalTarjetas = getTotalTarjetasObjetivoFutbol(autoFutbol, tarjetasEquipo);
     const linea = Number(autoFutbol.linea);
     if (totalTarjetas === null || Number.isNaN(linea)) return null;
     if (!finalizado) {
@@ -7602,10 +7635,12 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     getEstadoFinalizadoHtml,
     getCornersEquipoFallbackFutbol,
     getTotalCornersDesdeEquiposFutbol,
+    getTotalCornersObjetivoFutbol,
     obtenerCornersDetalleEnOrden,
     getAjusteManualFutbolHtml,
     getTarjetasEquipoFallbackFutbol,
     getTotalTarjetasDesdeEquiposFutbol,
+    getTotalTarjetasObjetivoFutbol,
     obtenerTarjetasDetalleEnOrden,
     debeMostrarHorarioJuego,
     formatFechaJuego,
@@ -8648,8 +8683,8 @@ function _render() {
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
               const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
               const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
-              const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
-              const forceCardIcon = tituloNormalizado === "total tarjetas";
+              const forceCornerIcon = /\b(corner|esquina)\b/.test(tituloNormalizado);
+              const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
               const formattedTitulo = formatTextWithMlbTeams(detalleSeleccion.titulo);
               const formattedJugada = tituloNormalizado === "handicap"
                 ? formatHandicapJugada(detalleSeleccion.jugada)
@@ -8754,8 +8789,8 @@ function _render() {
               const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
               const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
               const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
-              const forceCornerIcon = tituloNormalizado === "total tiros de esquina";
-              const forceCardIcon = tituloNormalizado === "total tarjetas";
+              const forceCornerIcon = /\b(corner|esquina)\b/.test(tituloNormalizado);
+              const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
               const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
               const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const selectionLineClass = isPatente ? 'patente-selection-line' : '';
