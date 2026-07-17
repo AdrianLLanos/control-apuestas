@@ -56,6 +56,7 @@ const {
   MLB_TEAMS,
   autocorregirTextoConLogos,
   crearMlbTeamsDatalist,
+  crearMlbPlaysDatalist,
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
 } = mlbModule;
@@ -2577,7 +2578,6 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
         jugada: sel.jugadaOriginal || sel.jugada || ""
       });
       const autoFutbol = combinarAutoFutbolConDetectado(sel.autoFutbol || null, autoDetectado);
-
       return autoFutbol ? aplicarDetalleAutoFutbolSeleccion(sel, autoFutbol, ev) : sel;
     });
 
@@ -2655,6 +2655,7 @@ window.agregarSeleccionCrear = function () {
     <button type="button" class="btn-eliminar-selection" onclick="window.eliminarFilaSeleccionCrear(this)" style="display:inline-block; padding:2px 7px; font-size:11px; font-weight:bold; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer; flex-shrink:0;">✕</button>
   `;
   container.appendChild(div);
+  habilitarAutocompleteMlb(div);
   div.querySelector(".jugada-jug-input").focus();
 };
 
@@ -2705,7 +2706,7 @@ function crearSlotCombinada(num) {
   slot.innerHTML = `
     <div class="jugada-slot-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
       <span class="jugada-slot-num" style="font-size:10px; font-weight:700; color:#fbbf24; text-transform:uppercase; letter-spacing:0.5px;">Partido #${num}</span>
-      <button type="button" class="btn-eliminar-slot" onclick="window.eliminarSlot(this)" style="display:${num > 1 ? 'inline-block' : 'none'}; padding:2px 7px; font-size:11px; font-weight:700; background:rgba(239, 68, 68, 0.15); color:#f87171; border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; cursor:pointer;">✕</button>
+      <button type="button" class="btn-eliminar-slot" onclick="window.eliminarSlot(this)" style="display:\${num > 1 ? 'inline-block' : 'none'}; padding:2px 7px; font-size:11px; font-weight:700; background:rgba(239, 68, 68, 0.15); color:#f87171; border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; cursor:pointer;">✕</button>
     </div>
     <input type="text" class="jugada-ev-input" placeholder="Partido #${num} (Ej: Dodgers vs Mets)" autocomplete="off" style="font-size:12px; font-weight:600; color:#f1f5f9 !important; background:#1e293b !important; border:1px solid #334155 !important; border-radius:6px !important; padding:6px 10px !important;">
     <input type="text" class="jugada-jug-input" placeholder="Jugada (Ej: Dodgers gana)" autocomplete="off" style="font-size:12px; color:#94a3b8 !important; background:#1e293b !important; border:1px dashed #475569 !important; border-radius:6px !important; padding:6px 10px !important;">
@@ -2726,7 +2727,7 @@ function crearSlotSimple(num) {
   slot.innerHTML = `
     <div class="jugada-slot-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
       <span class="jugada-slot-num" style="font-size:10px; font-weight:700; color:#00c6ff; text-transform:uppercase; letter-spacing:0.5px;">Partido #${num}</span>
-      <button type="button" class="btn-eliminar-slot-simple" onclick="window.eliminarSlotSimple(this)" style="display:${num > 1 ? 'inline-block' : 'none'}; padding:2px 7px; font-size:11px; font-weight:700; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer;">✕</button>
+      <button type="button" class="btn-eliminar-slot-simple" onclick="window.eliminarSlotSimple(this)" style="display:\${num > 1 ? 'inline-block' : 'none'}; padding:2px 7px; font-size:11px; font-weight:700; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer;">✕</button>
     </div>
     <input type="text" class="jugada-ev-input" placeholder="Partido #${num} (Ej: México vs Sudáfrica)" autocomplete="off" style="font-size:12px; font-weight:600; color:#f1f5f9 !important; background:#1e293b !important; border:1px solid #334155 !important; border-radius:6px !important; padding:6px 10px !important;">
     <input type="text" class="jugada-jug-input" placeholder="Jugada (Ej: México gana)" autocomplete="off" style="font-size:12px; color:#94a3b8 !important; background:#1e293b !important; border:1px dashed #475569 !important; border-radius:6px !important; padding:6px 10px !important;">
@@ -9251,6 +9252,7 @@ function iniciarApp() {
     inputFecha.value = obtenerFechaActualLocal();
   }
   crearMlbTeamsDatalist();
+  crearMlbPlaysDatalist();
   limpiarCacheLocalObsoleto();
   iniciarMonitorVersionDeploy();
   escucharCasas();
