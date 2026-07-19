@@ -40,7 +40,8 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
     equipos: equiposDetectados || equiposOriginales || autoOriginal.equipos || autoDetectado.equipos,
     seleccionEquipo: autoDetectado.seleccionEquipo || autoOriginal.seleccionEquipo,
     tipoTotal: autoDetectado.tipoTotal || autoOriginal.tipoTotal,
-    linea: autoDetectado.linea ?? autoOriginal.linea
+    linea: autoDetectado.linea ?? autoOriginal.linea,
+    pagoAnticipado: autoOriginal.pagoAnticipado ?? autoDetectado.pagoAnticipado
   };
 }
 

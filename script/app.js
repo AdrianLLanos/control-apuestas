@@ -4739,14 +4739,84 @@ function juegoMlbEnCurso(game) {
   return /\b(top|bottom|inning|extra|half|inning\s*\d+)\b/.test(detail);
 }
 
-function evaluarAutoMlb(autoMlb, game) {
+function equipoTuvoVentajaDe5Carreras(autoMlb, game) {
+  if (!autoMlb || !game || !autoMlb.seleccionEquipo) return false;
+  const marcador = getMarcadorMlb(game);
+  if (!marcador) return false;
+
+  const equipoObjetivo = normalizarClaveMlb(autoMlb.seleccionEquipo);
+  const homeObj = normalizarClaveMlb(marcador.homeTeam);
+  const awayObj = normalizarClaveMlb(marcador.awayTeam);
+
+  const esHome = equiposMlbCoinciden(equipoObjetivo, homeObj);
+  const esAway = equiposMlbCoinciden(equipoObjetivo, awayObj);
+
+  if (!esHome && !esAway) return false;
+
+  // 1. Verificar si en el marcador actual tiene ventaja >= 5 carreras
+  const diffActual = esHome ? (marcador.home - marcador.away) : (marcador.away - marcador.home);
+  if (diffActual >= 5) return true;
+
+  // 2. Verificar la evolución por entradas (linescore)
+  const innings = game?.linescore?.innings;
+  if (Array.isArray(innings) && innings.length > 0) {
+    let cumulativeHome = 0;
+    let cumulativeAway = 0;
+
+    for (const inning of innings) {
+      if (inning?.away?.runs !== undefined && inning?.away?.runs !== null) {
+        cumulativeAway += Number(inning.away.runs) || 0;
+        const diffAway = cumulativeAway - cumulativeHome;
+        if (esAway && diffAway >= 5) return true;
+      }
+
+      if (inning?.home?.runs !== undefined && inning?.home?.runs !== null) {
+        cumulativeHome += Number(inning.home.runs) || 0;
+        const diffHome = cumulativeHome - cumulativeAway;
+        if (esHome && diffHome >= 5) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function esApuestaDeMiCasino(apuesta = {}) {
+  const casaId = getCasaIdApuesta(apuesta);
+  const nombreCasa = getCasaNombre(casaId);
+  const normNombre = normalizarNombreCasa(nombreCasa);
+  const normApuesta = normalizarNombreCasa(apuesta?.casaNombre || apuesta?.casa || "");
+  const normSimple = str => String(str).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  return (
+    normNombre.includes("mi casino") ||
+    normNombre.includes("micasino") ||
+    normSimple(normNombre).includes("micasino") ||
+    normApuesta.includes("mi casino") ||
+    normApuesta.includes("micasino") ||
+    normSimple(normApuesta).includes("micasino")
+  );
+}
+
+function evaluarAutoMlb(autoMlb, game, options = {}) {
   if (!autoMlb) return null;
   if (juegoMlbNoIniciado(game)) return null;
   const marcador = getMarcadorMlb(game);
   if (!marcador) return null;
   const finalizado = juegoMlbFinalizado(game);
+  const esMiCasino = Boolean(options.esMiCasino);
 
   if (autoMlb.mercado === "ganador_partido") {
+    // Regla de Pago Anticipado (5 carreras de ventaja): aplica EXCLUSIVAMENTE a la casa "Mi Casino"
+    const tuvoPagoAnticipado = esMiCasino && (autoMlb.pagoAnticipado || equipoTuvoVentajaDe5Carreras(autoMlb, game));
+    if (tuvoPagoAnticipado) {
+      return {
+        estado: "ganada",
+        marcador,
+        pagoAnticipado: true
+      };
+    }
+
     if (!finalizado) return null;
     const homeWon = marcador.home > marcador.away;
     const awayWon = marcador.away > marcador.home;
@@ -4755,7 +4825,8 @@ function evaluarAutoMlb(autoMlb, game) {
     const ganador = homeWon ? marcador.homeTeam : marcador.awayTeam;
     return {
       estado: normalizarClaveMlb(ganador) === normalizarClaveMlb(autoMlb.seleccionEquipo) ? "ganada" : "perdida",
-      marcador
+      marcador,
+      pagoAnticipado: false
     };
   }
 
@@ -4897,7 +4968,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       }
       if (!game) return { ...selMlb, autoMlb };
 
-      const evaluacion = evaluarAutoMlb(autoMlb, game);
+      const esMiCasino = esApuestaDeMiCasino(apuesta);
+      const evaluacion = evaluarAutoMlb(autoMlb, game, { esMiCasino });
       if (!evaluacion) {
         const juegoNoIniciado = juegoMlbNoIniciado(game);
         const marcador = juegoNoIniciado ? null : getMarcadorMlb(game);
@@ -4942,6 +5014,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
       const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
       const esMercadoHits = autoMlb.mercado === "total_hits";
+      const pagoAnticipado = Boolean(evaluacion.pagoAnticipado || autoMlb.pagoAnticipado);
       const siguiente = {
         ...selMlb,
         estado: evaluacion.estado,
@@ -4954,13 +5027,21 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
           totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
           totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
+          pagoAnticipado,
           fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
         }
       };
 
       if ((sel.estado || "pendiente") !== evaluacion.estado) huboCambio = true;
-      if (autoMlb.sincronizadoEn === undefined || autoMlb.fechaJuego !== game.gameDate || (esMercadoHits && autoMlb.marcadorHits !== marcadorHitsTexto)) huboCambioMetadata = true;
+      if (
+        autoMlb.sincronizadoEn === undefined ||
+        autoMlb.fechaJuego !== game.gameDate ||
+        (esMercadoHits && autoMlb.marcadorHits !== marcadorHitsTexto) ||
+        autoMlb.pagoAnticipado !== pagoAnticipado
+      ) {
+        huboCambioMetadata = true;
+      }
       return siguiente;
     });
 
@@ -5363,11 +5444,15 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     }
   }
 
-  if (estadoEspecialHtml) return `${marcadorHtml || horaHtml}${estadoEspecialHtml}`;
+  const pagoAnticipadoBadge = autoMlb.pagoAnticipado
+    ? `<div class="pago-anticipado-badge">⚡ Ganado por Pago Anticipado</div>`
+    : "";
+
+  if (estadoEspecialHtml) return `${marcadorHtml || horaHtml}${estadoEspecialHtml}${pagoAnticipadoBadge}`;
   if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
-    return getEstadoJuegoLegacyHtml(autoMlb.estadoJuego);
+    return `${getEstadoJuegoLegacyHtml(autoMlb.estadoJuego)}${pagoAnticipadoBadge}`;
   }
-  return marcadorHtml ? `${marcadorHtml}${estadoFinalizadoHtml}` : horaHtml;
+  return marcadorHtml ? `${marcadorHtml}${pagoAnticipadoBadge}${estadoFinalizadoHtml}` : `${horaHtml}${pagoAnticipadoBadge}`;
 }
 
 function autoMlbTieneMetaVisible(autoMlb = {}) {
