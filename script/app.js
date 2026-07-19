@@ -1262,6 +1262,19 @@ function autocorregirApuestasCargadas(lista = []) {
       }
     }
   });
+
+  const hayMlbReembolsoPospuesto = lista.some(a =>
+    apuestaPareceMlb(a) && (
+      a.resultado === "nula" ||
+      (a.jugadas || []).some(j =>
+        esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
+        (j?.selections || []).some(sel => sel?.estado === "nula" || esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego))
+      )
+    )
+  );
+  if (hayMlbReembolsoPospuesto) {
+    programarSyncSilenciosa("mlb", 300, true);
+  }
 }
 
 function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
@@ -5026,8 +5039,11 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         const esMercadoHits = autoMlb.mercado === "total_hits";
 
         const estadoAnterior = sel.estado || "pendiente";
-        const restaurarPendiente = estadoAnterior === "nula" && autoMlb.estadoEspecial?.tipo === "pospuesto";
-        const nuevoEstadoSel = restaurarPendiente ? "pendiente" : estadoAnterior;
+        const fueMarcadoReembolsoPrevio = estadoAnterior === "nula" ||
+          esEstadoJuegoReembolso(autoMlb.estadoJuego) ||
+          Boolean(autoMlb.estadoEspecial?.reembolso) ||
+          autoMlb.estadoEspecial?.tipo === "pospuesto";
+        const nuevoEstadoSel = fueMarcadoReembolsoPrevio ? "pendiente" : estadoAnterior;
 
         if (estadoAnterior !== nuevoEstadoSel) {
           huboCambio = true;
@@ -5325,8 +5341,13 @@ async function sincronizarResultadosMlb(silencioso = false) {
 
     const esResultadoPendiente = apuestaResultadoPendiente(a);
     const fuePospuesto = (a.jugadas || []).some(j =>
-      (j?.selections || []).some(sel => sel?.autoMlb?.estadoEspecial?.tipo === "pospuesto")
-    );
+      esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
+      (j?.selections || []).some(sel =>
+        sel?.estado === "nula" ||
+        sel?.autoMlb?.estadoEspecial?.tipo === "pospuesto" ||
+        esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego)
+      )
+    ) || (a.resultado === "nula" && (apuestaTieneMarcadorMlb(a) || apuestaPareceMlb(a)));
 
     if (apuestaSyncCerrada(a) && !fuePospuesto) return false;
     if (!esResultadoPendiente && !fuePospuesto) return false;
@@ -5510,7 +5531,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   if (estadoEspecialHtml) return `${marcadorHtml || horaHtml}${estadoEspecialHtml}${pagoAnticipadoBadge}`;
-  if (!marcador && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
+  if (!marcador && selection?.estado === "nula" && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return `${getEstadoJuegoLegacyHtml(autoMlb.estadoJuego)}${pagoAnticipadoBadge}`;
   }
   return marcadorHtml ? `${marcadorHtml}${pagoAnticipadoBadge}${estadoFinalizadoHtml}` : `${horaHtml}${pagoAnticipadoBadge}`;
@@ -8168,7 +8189,7 @@ let _syncMlbActivado = false; // Solo inicia cuando el usuario presiona el botó
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
-  if (!_syncMlbActivado) return; // No sincronizar si el usuario no lo activó
+  if (!_syncMlbActivado && !force) return; // Permitir sincronizacion forzada si force es true
   const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("mlb", syncLiveRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncLiveRapida);
