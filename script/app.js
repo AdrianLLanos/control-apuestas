@@ -951,6 +951,7 @@ function paginaRecienReactivada(graceMs = AUTO_SYNC_RESUME_GRACE_MS) {
 }
 
 function usuarioEstaEditandoFormulario() {
+  if (typeof editandoId !== "undefined" && editandoId !== null) return true;
   const el = document.activeElement;
   if (!el || el === document.body) return false;
   if (el.isContentEditable) return true;
@@ -1399,6 +1400,7 @@ function cargarApuestasIniciales() {
     inicializado = true;
     autocorregirApuestasCargadas(iniciales);
     if (soloCambiosSilenciosos) return;
+    if (usuarioEstaEditandoFormulario()) return;
     renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
   }, (error) => {
     console.error("Error escuchando primera tanda de apuestas:", error);
@@ -8240,14 +8242,15 @@ let _syncFutbolActivado = false; // Solo inicia cuando el usuario presiona el bo
 
 async function ejecutarAutoSyncFutbol(force = false) {
   if (!paginaEstaVisible()) return;
+  if (usuarioEstaEditandoFormulario()) {
+    const syncStatsRapida = getApuestasSyncScope(true).some(apuestaFutbolNecesitaSyncEstadisticasRapida);
+    programarSyncSilenciosa("futbol", syncStatsRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
+    return;
+  }
   if (!_syncFutbolActivado) return; // No sincronizar si el usuario no lo activó
   const syncStatsRapida = getApuestasSyncScope(true).some(apuestaFutbolNecesitaSyncEstadisticasRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("futbol", syncStatsRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncStatsRapida);
-    return;
-  }
-  if (!force && usuarioEstaEditandoFormulario()) {
-    programarSyncSilenciosa("futbol", syncStatsRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
     return;
   }
   if (_autoSyncFutbolEnCurso) return;
@@ -8299,14 +8302,15 @@ let _syncMlbActivado = false; // Solo inicia cuando el usuario presiona el botó
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
+  if (usuarioEstaEditandoFormulario()) {
+    const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
+    programarSyncSilenciosa("mlb", syncLiveRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
+    return;
+  }
   if (!_syncMlbActivado && !force) return; // Permitir sincronizacion forzada si force es true
   const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("mlb", syncLiveRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncLiveRapida);
-    return;
-  }
-  if (!force && usuarioEstaEditandoFormulario()) {
-    programarSyncSilenciosa("mlb", syncLiveRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
     return;
   }
   if (_autoSyncMlbEnCurso) return;
@@ -9070,6 +9074,7 @@ function render() {
 
 let renderSnapshotPendiente = false;
 function renderSnapshotProgramado() {
+  if (usuarioEstaEditandoFormulario()) return;
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
 
