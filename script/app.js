@@ -911,7 +911,7 @@ const MLB_AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
-const DEPLOY_VERSION_CHECK_MS = 5 * 1000;
+const DEPLOY_VERSION_CHECK_MS = 3 * 60 * 1000;
 const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
 const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
 const autoSyncTimers = new Map();
@@ -1064,11 +1064,7 @@ async function obtenerFirmaIndexDeployActual() {
 }
 
 async function obtenerFirmaDeployActual() {
-  const [version, index] = await Promise.all([
-    obtenerVersionDeployActual(),
-    obtenerFirmaIndexDeployActual()
-  ]);
-  return [version, index].filter(Boolean).join("::");
+  return await obtenerVersionDeployActual();
 }
 
 async function revisarVersionDeploy() {
@@ -1305,7 +1301,8 @@ function autocorregirApuestasCargadas(lista = []) {
           const selections = (j.selections || []).map(sel => {
             const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, gamePk: horaDesfasada ? null : sel.autoMlb.gamePk, espnId: horaDesfasada ? null : sel.autoMlb.espnId, estadoEspecial: null, estadoJuego: "Programado" } : null;
             const nuevoEstado = sel.estado === "nula" ? "pendiente" : (sel.estado || "pendiente");
-            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial !== null || horaDesfasada) {
+            const necesitaLimpiarHora = horaDesfasada && ((sel.autoMlb?.gamePk != null) || (sel.autoMlb?.espnId != null) || (j.autoMlb?.gamePk != null) || (j.autoMlb?.espnId != null));
+            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial != null || necesitaLimpiarHora) {
               huboCambioAutocorrecion = true;
             }
             return {
@@ -1337,19 +1334,6 @@ function autocorregirApuestasCargadas(lista = []) {
       }
     }
   });
-
-  const hayMlbReembolsoPospuesto = lista.some(a =>
-    apuestaPareceMlb(a) && (
-      a.resultado === "nula" ||
-      (a.jugadas || []).some(j =>
-        esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
-        (j?.selections || []).some(sel => sel?.estado === "nula" || esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego))
-      )
-    )
-  );
-  if (hayMlbReembolsoPospuesto && _syncMlbActivado) {
-    programarSyncSilenciosa("mlb", 300, true);
-  }
 }
 
 function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
@@ -8273,34 +8257,38 @@ async function ejecutarAutoSyncFutbol(force = false) {
   }
 }
 
+let _autoSyncFutbolListenersRegistrados = false;
 function startAutoSyncFutbol() {
   if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
   _syncFutbolActivado = true;
   _autoSyncFutbolIntervalId = setInterval(() => {
     if (_syncFutbolActivado) programarSyncSilenciosa("futbol", 0);
   }, AUTO_SYNC_INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible() && _syncFutbolActivado) {
-      registrarReactivacionPagina();
-      programarSyncSilenciosa("futbol", 1000);
-    } else if (!paginaEstaVisible()) {
-      cancelarSyncSilenciosaPendiente();
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (_syncFutbolActivado) {
-      registrarReactivacionPagina();
-      programarSyncSilenciosa("futbol", 1000);
-    }
-  });
+
+  if (!_autoSyncFutbolListenersRegistrados) {
+    _autoSyncFutbolListenersRegistrados = true;
+    document.addEventListener("visibilitychange", () => {
+      if (paginaEstaVisible() && _syncFutbolActivado) {
+        registrarReactivacionPagina();
+        programarSyncSilenciosa("futbol", 1000);
+      } else if (!paginaEstaVisible()) {
+        cancelarSyncSilenciosaPendiente();
+      }
+    });
+    window.addEventListener("focus", () => {
+      if (_syncFutbolActivado) {
+        registrarReactivacionPagina();
+        programarSyncSilenciosa("futbol", 1000);
+      }
+    });
+  }
 }
-
-
 
 let _autoSyncMlbIntervalId = null;
 let _autoSyncMlbEnCurso = false;
 let _ultimoAutoSyncMlb = 0;
 let _syncMlbActivado = false; // Solo inicia cuando el usuario presiona el botón manualmente
+let _autoSyncMlbListenersRegistrados = false;
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
@@ -8339,20 +8327,24 @@ function startAutoSyncMlb() {
   _autoSyncMlbIntervalId = setInterval(() => {
     if (_syncMlbActivado) programarSyncSilenciosa("mlb", 0);
   }, MLB_AUTO_SYNC_INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible() && _syncMlbActivado) {
-      registrarReactivacionPagina();
-      programarSyncSilenciosa("mlb", 1000, true);
-    } else if (!paginaEstaVisible()) {
-      cancelarSyncSilenciosaPendiente();
-    }
-  });
-  window.addEventListener("focus", () => {
-    if (_syncMlbActivado) {
-      registrarReactivacionPagina();
-      programarSyncSilenciosa("mlb", 1000, true);
-    }
-  });
+
+  if (!_autoSyncMlbListenersRegistrados) {
+    _autoSyncMlbListenersRegistrados = true;
+    document.addEventListener("visibilitychange", () => {
+      if (paginaEstaVisible() && _syncMlbActivado) {
+        registrarReactivacionPagina();
+        programarSyncSilenciosa("mlb", 1000, true);
+      } else if (!paginaEstaVisible()) {
+        cancelarSyncSilenciosaPendiente();
+      }
+    });
+    window.addEventListener("focus", () => {
+      if (_syncMlbActivado) {
+        registrarReactivacionPagina();
+        programarSyncSilenciosa("mlb", 1000, true);
+      }
+    });
+  }
 }
 
 function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
@@ -9086,7 +9078,6 @@ function renderSnapshotProgramado() {
     setTimeout(() => {
       renderSnapshotPendiente = false;
       if (!paginaEstaVisible()) {
-        renderSnapshotProgramado();
         return;
       }
       render();
