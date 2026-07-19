@@ -8329,6 +8329,7 @@ function startAutoSyncMlb() {
   _autoSyncMlbIntervalId = setInterval(() => {
     if (_syncMlbActivado) programarSyncSilenciosa("mlb", 0);
   }, MLB_AUTO_SYNC_INTERVAL_MS);
+  programarSyncSilenciosa("mlb", 0, true);
 
   if (!_autoSyncMlbListenersRegistrados) {
     _autoSyncMlbListenersRegistrados = true;
