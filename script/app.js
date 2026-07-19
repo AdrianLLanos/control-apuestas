@@ -5629,7 +5629,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (!suppressSchedule && showAutoMeta && fechaJuego && estadoPrevio) {
+  if (_syncMlbActivado && !suppressSchedule && showAutoMeta && fechaJuego && estadoPrevio) {
     const formattedTime = formatFechaJuego(fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -8396,7 +8396,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     obtenerTarjetasDetalleEnOrden,
     debeMostrarHorarioJuego,
     formatFechaJuego,
-    getEstadoJuegoLegacyHtml
+    getEstadoJuegoLegacyHtml,
+    isSyncFutbolActivado: () => _syncFutbolActivado
   });
 }
 

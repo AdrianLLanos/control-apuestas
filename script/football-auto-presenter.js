@@ -103,7 +103,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
     if (estadoPrevio) marcador = "";
 
     let horaHtml = "";
-    if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+    if (deps.isSyncFutbolActivado?.() !== false && !suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = deps.formatFechaJuego?.(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -152,7 +152,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
     if (estadoPrevio) marcador = "";
 
     let horaHtml = "";
-    if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+    if (deps.isSyncFutbolActivado?.() !== false && !suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
       const formattedTime = deps.formatFechaJuego?.(futbolAuto.fechaJuego);
       if (formattedTime) {
         horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
@@ -195,7 +195,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
   let horaHtml = "";
   const estadoPrevio = deps.debeMostrarHorarioJuego?.(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
   if (estadoPrevio) marcadorActual = "";
-  if (!suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
+  if (deps.isSyncFutbolActivado?.() !== false && !suppressSchedule && showAutoMeta && futbolAuto.fechaJuego && estadoPrevio) {
     const formattedTime = deps.formatFechaJuego?.(futbolAuto.fechaJuego);
     if (formattedTime) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
