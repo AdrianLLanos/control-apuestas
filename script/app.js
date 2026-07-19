@@ -1263,6 +1263,62 @@ function autocorregirApuestasCargadas(lista = []) {
     }
   });
 
+  const hoy = obtenerFechaActualLocal();
+  lista.forEach(a => {
+    if (apuestaPareceMlb(a)) {
+      const fecha = a.fecha || a.dia;
+      const esHoyOCercano = fecha === hoy || sonFechasCercanas(fecha, hoy);
+      const teniaReembolsoPospuesto = (a.resultado === "nula") || (a.jugadas || []).some(j =>
+        esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
+        Boolean(j?.autoMlb?.estadoEspecial) ||
+        (j?.selections || []).some(sel =>
+          sel?.estado === "nula" ||
+          Boolean(sel?.autoMlb?.estadoEspecial) ||
+          esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego)
+        )
+      );
+
+      if (esHoyOCercano && teniaReembolsoPospuesto) {
+        let huboCambioAutocorrecion = false;
+        a.jugadas = (a.jugadas || []).map(j => {
+          if (typeof j !== "object" || !j) return j;
+          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, estadoEspecial: null, estadoJuego: "Programado" } : null;
+          const selections = (j.selections || []).map(sel => {
+            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, estadoEspecial: null, estadoJuego: "Programado" } : null;
+            const nuevoEstado = sel.estado === "nula" ? "pendiente" : (sel.estado || "pendiente");
+            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial !== null) {
+              huboCambioAutocorrecion = true;
+            }
+            return {
+              ...sel,
+              estado: nuevoEstado,
+              ...(autoMlbSel ? { autoMlb: autoMlbSel } : {})
+            };
+          });
+          if (j.estado === "nula") huboCambioAutocorrecion = true;
+          return {
+            ...j,
+            estado: "pendiente",
+            selections,
+            ...(autoMlbJ ? { autoMlb: autoMlbJ } : {})
+          };
+        });
+
+        const nuevoResultado = recalcularResultadoApuesta(a);
+        if (a.resultado !== nuevoResultado || huboCambioAutocorrecion) {
+          a.resultado = nuevoResultado;
+          a.autoSync = crearAutoSyncPayload(a, nuevoResultado);
+          marcarRenderSilenciosoApuesta(a.id);
+          updateDoc(doc(db, "apuestas", a.id), {
+            jugadas: a.jugadas,
+            resultado: nuevoResultado,
+            autoSync: a.autoSync
+          }).catch(err => console.error("Error al corregir apuesta pospuesta MLB:", err));
+        }
+      }
+    }
+  });
+
   const hayMlbReembolsoPospuesto = lista.some(a =>
     apuestaPareceMlb(a) && (
       a.resultado === "nula" ||
@@ -5121,8 +5177,12 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       selections
     };
 
+    const tieneEstadoEspecialSelecciones = selections.some(s => Boolean(s.autoMlb?.estadoEspecial));
     if (jugada.autoMlb) {
-      jugadaActualizada.autoMlb = jugada.autoMlb;
+      jugadaActualizada.autoMlb = {
+        ...jugada.autoMlb,
+        estadoEspecial: tieneEstadoEspecialSelecciones ? jugada.autoMlb.estadoEspecial : null
+      };
     } else if (equiposMlb.length >= 2) {
       jugadaActualizada.autoMlb = { deporte: "mlb", equipos: equiposMlb.slice(0, 2) };
     }
@@ -5577,6 +5637,10 @@ function completarAutoMlbRenderDesdeJugada(selection = {}, jugada = {}) {
     return autoActual.equipos.every(eq => auto.equipos.some(candidato => equiposMlbCoinciden(eq, candidato)));
   }) || candidatos[0];
 
+  const estadoEspecialSeguro = (autoActual && autoActual.estadoEspecial === null)
+    ? null
+    : (autoActual?.estadoEspecial || (base?.estadoEspecial && selection?.estado === "nula" ? base.estadoEspecial : null));
+
   return {
     ...selection,
     autoMlb: {
@@ -5584,7 +5648,7 @@ function completarAutoMlbRenderDesdeJugada(selection = {}, jugada = {}) {
       gamePk: autoActual?.gamePk ?? base.gamePk,
       espnId: autoActual?.espnId ?? base.espnId,
       estadoJuego: autoActual?.estadoJuego || base.estadoJuego,
-      estadoEspecial: autoActual?.estadoEspecial || base.estadoEspecial,
+      estadoEspecial: estadoEspecialSeguro,
       marcador: autoActual?.marcador || base.marcador,
       fechaJuego: autoActual?.fechaJuego || base.fechaJuego
     }
