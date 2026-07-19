@@ -1132,6 +1132,8 @@ function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
 
 function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   if (!paginaEstaVisible()) return;
+  if (deporte === "mlb" && !_syncMlbActivado) return;
+  if (deporte === "futbol" && !_syncFutbolActivado) return;
   if (autoSyncTimers.has(deporte)) {
     if (!force) return;
     clearTimeout(autoSyncTimers.get(deporte));
@@ -1345,7 +1347,7 @@ function autocorregirApuestasCargadas(lista = []) {
       )
     )
   );
-  if (hayMlbReembolsoPospuesto) {
+  if (hayMlbReembolsoPospuesto && _syncMlbActivado) {
     programarSyncSilenciosa("mlb", 300, true);
   }
 }
@@ -3660,9 +3662,9 @@ async function agregarApuesta() {
 
   // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
   if (dia === obtenerFechaActualLocal()) {
-    if (deporte === "mlb") {
+    if (deporte === "mlb" && _syncMlbActivado) {
       programarSyncSilenciosa("mlb", 1200, true);
-    } else if (deporte === "futbol") {
+    } else if (deporte === "futbol" && _syncFutbolActivado) {
       programarSyncSilenciosa("futbol", 1200, true);
     }
   }
@@ -8307,7 +8309,7 @@ async function ejecutarAutoSyncMlb(force = false) {
     programarSyncSilenciosa("mlb", syncLiveRapida ? 15000 : AUTO_SYNC_RESUME_GRACE_MS);
     return;
   }
-  if (!_syncMlbActivado && !force) return; // Permitir sincronizacion forzada si force es true
+  if (!_syncMlbActivado) return; // No sincronizar si el usuario no activo la sincronizacion manualmente
   const syncLiveRapida = getApuestasSyncScope(true).some(apuestaMlbNecesitaSyncLiveRapida);
   if (!force && paginaRecienReactivada()) {
     programarSyncSilenciosa("mlb", syncLiveRapida ? 1200 : AUTO_SYNC_RESUME_GRACE_MS, syncLiveRapida);
@@ -8670,9 +8672,9 @@ async function guardarEdicion(id) {
 
     // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
     if (nuevoFecha === obtenerFechaActualLocal()) {
-      if (nuevoDeporte === "mlb") {
+      if (nuevoDeporte === "mlb" && _syncMlbActivado) {
         programarSyncSilenciosa("mlb", 1200, true);
-      } else if (nuevoDeporte === "futbol") {
+      } else if (nuevoDeporte === "futbol" && _syncFutbolActivado) {
         programarSyncSilenciosa("futbol", 1200, true);
       }
     }
