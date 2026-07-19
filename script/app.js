@@ -1278,15 +1278,31 @@ function autocorregirApuestasCargadas(lista = []) {
         )
       );
 
-      if (esHoyOCercano && teniaReembolsoPospuesto) {
+      const targetHora = a.hora || (a.jugadas || [])[0]?.autoMlb?.horaJuego;
+      const fechaJuegoActual = (a.jugadas || [])[0]?.autoMlb?.fechaJuego || (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.fechaJuego;
+
+      let horaDesfasada = false;
+      if (targetHora && fechaJuegoActual) {
+        const { hora: horaLocalActual } = obtenerFechaHoraLocalDesdeIso(fechaJuegoActual);
+        if (horaLocalActual) {
+          const [tH, tM] = targetHora.split(":").map(Number);
+          const [gH, gM] = horaLocalActual.split(":").map(Number);
+          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
+          if (diffMins > 90) {
+            horaDesfasada = true;
+          }
+        }
+      }
+
+      if (esHoyOCercano && (teniaReembolsoPospuesto || horaDesfasada)) {
         let huboCambioAutocorrecion = false;
         a.jugadas = (a.jugadas || []).map(j => {
           if (typeof j !== "object" || !j) return j;
-          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, estadoEspecial: null, estadoJuego: "Programado" } : null;
+          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, gamePk: horaDesfasada ? null : j.autoMlb.gamePk, espnId: horaDesfasada ? null : j.autoMlb.espnId, estadoEspecial: null, estadoJuego: "Programado" } : null;
           const selections = (j.selections || []).map(sel => {
-            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, estadoEspecial: null, estadoJuego: "Programado" } : null;
+            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, gamePk: horaDesfasada ? null : sel.autoMlb.gamePk, espnId: horaDesfasada ? null : sel.autoMlb.espnId, estadoEspecial: null, estadoJuego: "Programado" } : null;
             const nuevoEstado = sel.estado === "nula" ? "pendiente" : (sel.estado || "pendiente");
-            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial !== null) {
+            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial !== null || horaDesfasada) {
               huboCambioAutocorrecion = true;
             }
             return {
@@ -4510,7 +4526,22 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
       const fechaGameByPk = obtenerFechaLocalJuego(gameByPk);
       const estadoDetallado = gameByPk?.status?.detailedState || gameByPk?.status?.abstractGameState || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esEstadoJuegoReembolso(estadoDetallado);
-      if (!esPospuestoOtraFecha) {
+
+      let horaCoincide = true;
+      if (targetHora && candidatos.length > 1) {
+        const iso = gameByPk.gameDate || gameByPk.date;
+        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+        if (hora) {
+          const [tH, tM] = targetHora.split(":").map(Number);
+          const [gH, gM] = hora.split(":").map(Number);
+          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
+          if (diffMins > 90) {
+            horaCoincide = false;
+          }
+        }
+      }
+
+      if (!esPospuestoOtraFecha && horaCoincide) {
         return gameByPk;
       }
     }
@@ -4587,7 +4618,22 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
       const fechaGameById = obtenerFechaLocalEvent(gameById);
       const statusText = gameById?.status?.type?.name || gameById?.status?.type?.description || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esEstadoJuegoReembolso(statusText);
-      if (!esPospuestoOtraFecha) {
+
+      let horaCoincide = true;
+      if (targetHora && candidatos.length > 1) {
+        const iso = gameById.date || gameById.competitions?.[0]?.date;
+        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+        if (hora) {
+          const [tH, tM] = targetHora.split(":").map(Number);
+          const [gH, gM] = hora.split(":").map(Number);
+          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
+          if (diffMins > 90) {
+            horaCoincide = false;
+          }
+        }
+      }
+
+      if (!esPospuestoOtraFecha && horaCoincide) {
         return gameById;
       }
     }
