@@ -1297,9 +1297,11 @@ function autocorregirApuestasCargadas(lista = []) {
         let huboCambioAutocorrecion = false;
         a.jugadas = (a.jugadas || []).map(j => {
           if (typeof j !== "object" || !j) return j;
-          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, gamePk: horaDesfasada ? null : j.autoMlb.gamePk, espnId: horaDesfasada ? null : j.autoMlb.espnId, estadoEspecial: null, estadoJuego: "Programado" } : null;
+          const estadoJuegoReseteado = teniaReembolsoPospuesto ? "Programado" : (j.autoMlb?.estadoJuego || "Programado");
+          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, gamePk: horaDesfasada ? null : j.autoMlb.gamePk, espnId: horaDesfasada ? null : j.autoMlb.espnId, estadoEspecial: null, estadoJuego: estadoJuegoReseteado } : null;
           const selections = (j.selections || []).map(sel => {
-            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, gamePk: horaDesfasada ? null : sel.autoMlb.gamePk, espnId: horaDesfasada ? null : sel.autoMlb.espnId, estadoEspecial: null, estadoJuego: "Programado" } : null;
+            const estadoSelReseteado = teniaReembolsoPospuesto ? "Programado" : (sel.autoMlb?.estadoJuego || "Programado");
+            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, gamePk: horaDesfasada ? null : sel.autoMlb.gamePk, espnId: horaDesfasada ? null : sel.autoMlb.espnId, estadoEspecial: null, estadoJuego: estadoSelReseteado } : null;
             const nuevoEstado = sel.estado === "nula" ? "pendiente" : (sel.estado || "pendiente");
             const necesitaLimpiarHora = horaDesfasada && ((sel.autoMlb?.gamePk != null) || (sel.autoMlb?.espnId != null) || (j.autoMlb?.gamePk != null) || (j.autoMlb?.espnId != null));
             if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial != null || necesitaLimpiarHora) {
@@ -4056,8 +4058,8 @@ function fechaJuegoYaPaso(fechaJuegoStr = "") {
 
 function debeMostrarHorarioJuego(fechaJuego = "", estadoJuego = "") {
   if (!fechaJuego) return false;
-  if (esEstadoJuegoPrevio(estadoJuego)) return true;
-  return !fechaJuegoYaPaso(fechaJuego);
+  if (fechaJuegoYaPaso(fechaJuego)) return false;
+  return esEstadoJuegoPrevio(estadoJuego);
 }
 
 function getAutoMlbFechasJuego(apuesta = {}) {
