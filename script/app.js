@@ -3276,7 +3276,8 @@ async function agregarApuesta() {
       // ── Guardar cada partido simple como apuesta independiente ──
       const slots = document.querySelectorAll("#eventosSimpleContainer .simple-slot");
       const saves = [];
-      slots.forEach((slot, idx) => {
+      for (let idx = 0; idx < slots.length; idx++) {
+        const slot = slots[idx];
         const ev = autocorregirTextoApuesta(slot.querySelector(".jugada-ev-input").value.trim());
         const jug = autocorregirTextoApuesta(slot.querySelector(".jugada-jug-input").value.trim(), ev);
 
@@ -3290,13 +3291,33 @@ async function agregarApuesta() {
 
         const c = parseFloat(slot.querySelector(".jugada-cuota-input").value.trim());
         const jugadasBase = [{ ev, c, estado: resultado, selections: [{ titulo: "", jugada: jug, estado: resultado }] }];
-        const deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
+        let deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
         if (!deporte && deporteSlot) deporte = deporteSlot;
-        const jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
+        let jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
+
+        let slotHora = hora;
+        if (deporteSlot === "mlb") {
+          let juegoElegido = null;
+          if (slot.dataset.selectedGame) {
+            try { juegoElegido = JSON.parse(slot.dataset.selectedGame); } catch (e) {}
+          }
+          if (!juegoElegido) {
+            const infoDoble = await detectarDobleJornadaMlb(ev, fecha);
+            if (infoDoble?.esDobleJornada) {
+              juegoElegido = await solicitarSeleccionDobleJornada(infoDoble);
+              if (!juegoElegido) return; // Cancelado por el usuario
+            }
+          }
+          if (juegoElegido) {
+            if (juegoElegido.hora) slotHora = juegoElegido.hora;
+            jugadasSlot = aplicarDobleJornadaAJugadas(jugadasSlot, juegoElegido);
+          }
+        }
+
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte: deporteSlot,
-          fecha, dia, hora,
+          fecha, dia, hora: slotHora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "simple",
@@ -3308,12 +3329,13 @@ async function agregarApuesta() {
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
         })));
-      });
+      }
       await Promise.all(saves);
     } else if (tipoApuesta === "simple_option_bet") {
       const slots = document.querySelectorAll("#eventosSimpleOptionContainer .simple-option-slot");
       const saves = [];
-      slots.forEach((slot, idx) => {
+      for (let idx = 0; idx < slots.length; idx++) {
+        const slot = slots[idx];
         const ev = autocorregirTextoApuesta(slot.querySelector(".jugada-ev-input").value.trim());
         const jug = autocorregirTextoApuesta(slot.querySelector(".jugada-jug-input").value.trim(), ev);
         const optiOdds = parseFloat(slot.querySelector(".jugada-opti-odds-input").value.trim());
@@ -3333,14 +3355,33 @@ async function agregarApuesta() {
           estado: "pendiente",
           selections: [{ titulo: "", jugada: jug, estado: "pendiente" }]
         };
-        const deporteSlot = inferirDeporteDesdeJugadas(deporte, [jugada], ev);
+        let deporteSlot = inferirDeporteDesdeJugadas(deporte, [jugada], ev);
         if (!deporte && deporteSlot) deporte = deporteSlot;
-        const jugadasSlot = enriquecerJugadasAuto([jugada], deporteSlot);
+        let jugadasSlot = enriquecerJugadasAuto([jugada], deporteSlot);
+
+        let slotHora = hora;
+        if (deporteSlot === "mlb") {
+          let juegoElegido = null;
+          if (slot.dataset.selectedGame) {
+            try { juegoElegido = JSON.parse(slot.dataset.selectedGame); } catch (e) {}
+          }
+          if (!juegoElegido) {
+            const infoDoble = await detectarDobleJornadaMlb(ev, fecha);
+            if (infoDoble?.esDobleJornada) {
+              juegoElegido = await solicitarSeleccionDobleJornada(infoDoble);
+              if (!juegoElegido) return;
+            }
+          }
+          if (juegoElegido) {
+            if (juegoElegido.hora) slotHora = juegoElegido.hora;
+            jugadasSlot = aplicarDobleJornadaAJugadas(jugadasSlot, juegoElegido);
+          }
+        }
 
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte: deporteSlot,
-          fecha, dia, hora,
+          fecha, dia, hora: slotHora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "simple_option_bet",
@@ -3352,13 +3393,14 @@ async function agregarApuesta() {
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
         })));
-      });
+      }
       await Promise.all(saves);
     } else if (tipoApuesta === "crear_apuesta_simple") {
       // ── Guardar cada partido de crear apuesta simple como apuesta independiente ──
       const slots = document.querySelectorAll("#eventosCrearSimpleContainer .crear-simple-slot");
       const saves = [];
-      slots.forEach((slot, idx) => {
+      for (let idx = 0; idx < slots.length; idx++) {
+        const slot = slots[idx];
         const ev = autocorregirTextoApuesta(slot.querySelector(".jugada-ev-input").value.trim());
         const c = parseFloat(slot.querySelector(".jugada-cuota-input").value.trim());
 
@@ -3373,14 +3415,33 @@ async function agregarApuesta() {
           if (val) selections.push(crearSeleccionDetectada(val, "pendiente", "", ev));
         });
         const jugadasBase = [{ ev, c, estado: resultado, selections: selections.map(sel => ({ ...sel, estado: resultado })) }];
-        const deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
+        let deporteSlot = inferirDeporteDesdeJugadas(deporte, jugadasBase, ev);
         if (!deporte && deporteSlot) deporte = deporteSlot;
-        const jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
+        let jugadasSlot = enriquecerJugadasAuto(jugadasBase, deporteSlot);
+
+        let slotHora = hora;
+        if (deporteSlot === "mlb") {
+          let juegoElegido = null;
+          if (slot.dataset.selectedGame) {
+            try { juegoElegido = JSON.parse(slot.dataset.selectedGame); } catch (e) {}
+          }
+          if (!juegoElegido) {
+            const infoDoble = await detectarDobleJornadaMlb(ev, fecha);
+            if (infoDoble?.esDobleJornada) {
+              juegoElegido = await solicitarSeleccionDobleJornada(infoDoble);
+              if (!juegoElegido) return;
+            }
+          }
+          if (juegoElegido) {
+            if (juegoElegido.hora) slotHora = juegoElegido.hora;
+            jugadasSlot = aplicarDobleJornadaAJugadas(jugadasSlot, juegoElegido);
+          }
+        }
 
         saves.push(addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
           ...datosCasa,
           deporte: deporteSlot,
-          fecha, dia, hora,
+          fecha, dia, hora: slotHora,
           evento: ev,
           jugadas: jugadasSlot,
           tipoApuesta: "crear_apuesta_simple",
@@ -3392,16 +3453,41 @@ async function agregarApuesta() {
           ordenTabla: ordenBase + idx,
           ordenFormulario: idx
         })));
-      });
+      }
       await Promise.all(saves);
     } else {
+      let apuestaHora = hora;
+      if (deporte === "mlb" || jugadas.some(j => detectarEquiposMlb(j.ev || j.evento || "").length >= 2)) {
+        const slotsForm = document.querySelectorAll("#eventosContainer .jugada-slot, #eventosPatenteContainer .patente-slot, #eventosCrearContainer .crear-slot");
+        for (let i = 0; i < jugadas.length; i++) {
+          const ev = jugadas[i].ev || jugadas[i].evento || evento;
+          const slotItem = slotsForm[i] || document.getElementById("tarjetaApuesta");
+          let juegoElegido = null;
+          if (slotItem?.dataset?.selectedGame) {
+            try { juegoElegido = JSON.parse(slotItem.dataset.selectedGame); } catch (e) {}
+          }
+          if (!juegoElegido) {
+            const infoDoble = await detectarDobleJornadaMlb(ev, fecha);
+            if (infoDoble?.esDobleJornada) {
+              juegoElegido = await solicitarSeleccionDobleJornada(infoDoble);
+              if (!juegoElegido) return;
+            }
+          }
+          if (juegoElegido) {
+            if (!apuestaHora && juegoElegido.hora) apuestaHora = juegoElegido.hora;
+            const res = aplicarDobleJornadaAJugadas([jugadas[i]], juegoElegido);
+            jugadas[i] = res[0];
+          }
+        }
+      }
+
       await addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
         ...datosCasa,
         deporte,
         fecha, evento, jugadas, tipoApuesta, cuota, importe,
         resultado,
         autoSync: crearAutoSyncPayload({}, resultado),
-        dia, hora,
+        dia, hora: apuestaHora,
         creadoEn: ordenBase,
         ordenTabla: ordenBase,
         ordenFormulario: 0
@@ -4010,11 +4096,335 @@ async function cargarJuegosEspnMlbPorFecha(fecha) {
   return data.events || [];
 }
 
-function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
+async function detectarDobleJornadaMlb(eventoTexto = "", fecha = "") {
+  if (!eventoTexto || !fecha) return null;
+  const equipos = detectarEquiposMlb(eventoTexto);
+  if (!Array.isArray(equipos) || equipos.length < 2) return null;
+
+  try {
+    const juegosFecha = await cargarJuegosMlbPorFecha(fecha);
+    const buscados = equipos.map(normalizarClaveMlb);
+
+    const juegosCoincidentes = (juegosFecha || []).filter(game => {
+      const fechaJuego = obtenerFechaLocalJuego(game);
+      if (fechaJuego && fechaJuego !== fecha) return false;
+      const nombres = [
+        game?.teams?.home?.team?.name,
+        game?.teams?.away?.team?.name
+      ];
+      return buscados.every(equipo => nombres.some(nombre => equiposMlbCoinciden(equipo, nombre)));
+    });
+
+    const esDobleHeaderByFlag = juegosCoincidentes.some(g => 
+      g.doubleHeader === "Y" || g.doubleHeader === "FE" || g.doubleHeader === "SE" || g.doubleHeader === "D" || (g.gameNumber && g.gameNumber > 1)
+    );
+
+    if (juegosCoincidentes.length > 1 || esDobleHeaderByFlag) {
+      juegosCoincidentes.sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0));
+
+      const listaOpciones = juegosCoincidentes.map((game, idx) => {
+        const iso = game.gameDate || game.date || "";
+        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+        const homeTeam = game?.teams?.home?.team?.name || "Home";
+        const awayTeam = game?.teams?.away?.team?.name || "Away";
+        const estado = game?.status?.detailedState || game?.status?.abstractGameState || "Programado";
+        const gameNumber = game?.gameNumber || (idx + 1);
+
+        return {
+          gamePk: game.gamePk,
+          gameNumber,
+          hora,
+          fechaJuego: iso,
+          homeTeam,
+          awayTeam,
+          estado,
+          label: `Juego ${gameNumber}: ${awayTeam} vs ${homeTeam} — ${hora ? `${hora} hs` : "Horario a confirmar"} (${estado})`
+        };
+      });
+
+      return {
+        esDobleJornada: true,
+        equipos,
+        fecha,
+        eventoTexto,
+        juegos: listaOpciones
+      };
+    }
+  } catch (e) {
+    console.warn("No se pudo consultar MLB API para doble jornada:", e);
+  }
+
+  try {
+    const juegosEspn = await cargarJuegosEspnMlbPorFecha(fecha);
+    const buscados = equipos.map(normalizarClaveMlb);
+
+    const juegosEspnCoincidentes = (juegosEspn || []).filter(event => {
+      const fechaJuego = obtenerFechaLocalEvent(event);
+      if (fechaJuego && fechaJuego !== fecha) return false;
+      const nombres = (event?.competitions?.[0]?.competitors || [])
+        .map(item => item?.team?.displayName || item?.team?.name || item?.team?.shortDisplayName || item?.team?.abbreviation || "")
+        .map(normalizarClaveMlb);
+      return buscados.every(equipo => nombres.some(nombre => nombre === equipo || nombre.includes(equipo) || equipo.includes(nombre)));
+    });
+
+    if (juegosEspnCoincidentes.length > 1) {
+      juegosEspnCoincidentes.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+      const listaOpciones = juegosEspnCoincidentes.map((event, idx) => {
+        const iso = event.date || event.competitions?.[0]?.date || "";
+        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+        const comps = event?.competitions?.[0]?.competitors || [];
+        const homeComp = comps.find(c => c.homeAway === "home")?.team?.displayName || "Home";
+        const awayComp = comps.find(c => c.homeAway === "away")?.team?.displayName || "Away";
+        const estado = event?.status?.type?.detail || event?.status?.type?.description || "Programado";
+        const gameNumber = idx + 1;
+
+        return {
+          espnId: event.id,
+          gameNumber,
+          hora,
+          fechaJuego: iso,
+          homeTeam: homeComp,
+          awayTeam: awayComp,
+          estado,
+          label: `Juego ${gameNumber}: ${awayComp} vs ${homeComp} — ${hora ? `${hora} hs` : "Horario a confirmar"} (${estado})`
+        };
+      });
+
+      return {
+        esDobleJornada: true,
+        equipos,
+        fecha,
+        eventoTexto,
+        juegos: listaOpciones
+      };
+    }
+  } catch (e) {
+    console.warn("No se pudo consultar ESPN API para doble jornada:", e);
+  }
+
+  return null;
+}
+
+function solicitarSeleccionDobleJornada(infoDobleJornada) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("doubleheader-modal");
+    const desc = document.getElementById("dh-modal-desc");
+    const list = document.getElementById("dh-modal-options");
+    const btnCancel = document.getElementById("dh-modal-cancel");
+    const btnConfirm = document.getElementById("dh-modal-confirm");
+
+    if (!modal || !desc || !list || !btnCancel || !btnConfirm) {
+      resolve(infoDobleJornada?.juegos?.[0] || null);
+      return;
+    }
+
+    desc.innerHTML = `Se detectó que el encuentro <strong>${escapeHtml(infoDobleJornada.eventoTexto)}</strong> del día <strong>${escapeHtml(infoDobleJornada.fecha)}</strong> es un <strong>partido de doble jornada (2 juegos)</strong>. Selecciona el horario del partido que deseas registrar:`;
+
+    list.innerHTML = infoDobleJornada.juegos.map((juego, idx) => `
+      <label class="doubleheader-option-card ${idx === 0 ? 'selected' : ''}">
+        <input type="radio" name="dh_game_choice" value="${idx}" ${idx === 0 ? 'checked' : ''}>
+        <div class="doubleheader-option-info">
+          <span class="doubleheader-option-title">Juego ${juego.gameNumber}: ${escapeHtml(juego.awayTeam)} vs ${escapeHtml(juego.homeTeam)}</span>
+          <span class="doubleheader-option-time">🕒 Hora local: ${juego.hora ? `${juego.hora} hs` : "Por confirmar"}</span>
+          <span class="doubleheader-option-status">Estado: ${escapeHtml(juego.estado)}</span>
+        </div>
+      </label>
+    `).join("");
+
+    list.querySelectorAll(".doubleheader-option-card").forEach(card => {
+      card.addEventListener("click", () => {
+        list.querySelectorAll(".doubleheader-option-card").forEach(c => c.classList.remove("selected"));
+        card.classList.add("selected");
+        const radio = card.querySelector("input[type='radio']");
+        if (radio) radio.checked = true;
+      });
+    });
+
+    const cleanup = () => {
+      modal.classList.remove("show");
+      setTimeout(() => { modal.style.display = "none"; }, 300);
+      btnCancel.onclick = null;
+      btnConfirm.onclick = null;
+    };
+
+    btnCancel.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    btnConfirm.onclick = () => {
+      const selectedRadio = list.querySelector("input[name='dh_game_choice']:checked");
+      const idx = selectedRadio ? parseInt(selectedRadio.value, 10) : 0;
+      const juegoElegido = infoDobleJornada.juegos[idx] || infoDobleJornada.juegos[0];
+      cleanup();
+      resolve(juegoElegido);
+    };
+
+    modal.style.display = "flex";
+    setTimeout(() => { modal.classList.add("show"); }, 10);
+  });
+}
+
+function aplicarDobleJornadaAJugadas(jugadas = [], juegoElegido = null) {
+  if (!juegoElegido || !Array.isArray(jugadas)) return jugadas;
+  return jugadas.map(j => {
+    const autoMlbOriginal = j.autoMlb || {};
+    const autoMlbNext = {
+      ...autoMlbOriginal,
+      gamePk: juegoElegido.gamePk ?? autoMlbOriginal.gamePk,
+      espnId: juegoElegido.espnId ?? autoMlbOriginal.espnId,
+      fechaJuego: juegoElegido.fechaJuego || autoMlbOriginal.fechaJuego,
+      gameNumber: juegoElegido.gameNumber,
+      horaJuego: juegoElegido.hora
+    };
+    const selections = (j.selections || []).map(sel => {
+      const selAutoOriginal = sel.autoMlb || {};
+      return {
+        ...sel,
+        autoMlb: {
+          ...selAutoOriginal,
+          gamePk: juegoElegido.gamePk ?? selAutoOriginal.gamePk,
+          espnId: juegoElegido.espnId ?? selAutoOriginal.espnId,
+          fechaJuego: juegoElegido.fechaJuego || selAutoOriginal.fechaJuego,
+          gameNumber: juegoElegido.gameNumber,
+          horaJuego: juegoElegido.hora
+        }
+      };
+    });
+    return {
+      ...j,
+      autoMlb: autoMlbNext,
+      selections
+    };
+  });
+}
+
+async function verificarDobleJornadaEnSlot(input) {
+  if (!input) return;
+  const slot = input.closest(".jugada-slot, .simple-slot, .simple-option-slot, .crear-slot, .crear-simple-slot, .patente-slot, .apuesta-edit-card, [class*='edit-jugada-slot-'], .tarjeta-apuesta") || input.parentElement;
+  const ev = input.value.trim();
+  const editCard = input.closest(".apuesta-edit-card");
+  const betId = editCard ? editCard.id.replace("edit-tarjeta-", "") : null;
+  const fecha = editCard 
+    ? (document.getElementById(`edit-fecha-${betId}`)?.value || document.getElementById("fecha")?.value)
+    : document.getElementById("fecha")?.value;
+
+  if (!ev || !fecha) {
+    if (slot) {
+      const existingAlert = slot.querySelector(".doubleheader-inline-alert");
+      if (existingAlert) existingAlert.remove();
+      delete slot.dataset.selectedGame;
+    }
+    return;
+  }
+
+  const equipos = detectarEquiposMlb(ev);
+  if (equipos.length < 2) {
+    if (slot) {
+      const existingAlert = slot.querySelector(".doubleheader-inline-alert");
+      if (existingAlert) existingAlert.remove();
+      delete slot.dataset.selectedGame;
+    }
+    return;
+  }
+
+  const infoDoble = await detectarDobleJornadaMlb(ev, fecha);
+  if (!slot) return;
+
+  let existingAlert = slot.querySelector(".doubleheader-inline-alert");
+
+  if (!infoDoble?.esDobleJornada) {
+    if (existingAlert) existingAlert.remove();
+    delete slot.dataset.selectedGame;
+    return;
+  }
+
+  if (!existingAlert) {
+    existingAlert = document.createElement("div");
+    existingAlert.className = "doubleheader-inline-alert";
+    existingAlert.style.cssText = "margin-top:6px; margin-bottom:6px; padding:8px 10px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.4); border-radius:6px; display:flex; flex-direction:column; gap:4px;";
+    
+    if (input.nextSibling) {
+      input.parentNode.insertBefore(existingAlert, input.nextSibling);
+    } else {
+      input.parentNode.appendChild(existingAlert);
+    }
+  }
+
+  let currentGamePk = null;
+  let currentHora = null;
+  if (betId) {
+    const bet = (typeof apuestas !== "undefined" ? apuestas : []).find(a => a.id === betId);
+    currentHora = bet?.hora || document.getElementById(`edit-hora-${betId}`)?.value;
+    currentGamePk = bet?.jugadas?.[0]?.autoMlb?.gamePk || bet?.jugadas?.[0]?.selections?.[0]?.autoMlb?.gamePk;
+  }
+
+  let initialIdx = -1;
+  if (currentGamePk) {
+    const foundIdx = infoDoble.juegos.findIndex(g => Number(g.gamePk) === Number(currentGamePk));
+    if (foundIdx >= 0) initialIdx = foundIdx;
+  } else if (currentHora) {
+    const foundIdx = infoDoble.juegos.findIndex(g => g.hora === currentHora);
+    if (foundIdx >= 0) initialIdx = foundIdx;
+  }
+
+  const defaultOptionHtml = `<option value="" ${initialIdx < 0 ? 'selected' : ''}>-- Elige un horario del partido --</option>`;
+
+  existingAlert.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+      <span style="font-size:11px; font-weight:700; color:#38bdf8; display:inline-flex; align-items:center; gap:4px;">
+        ⚾ Doble Jornada Detectada (2 juegos)
+      </span>
+      <span style="font-size:10px; font-weight:600; color:#94a3b8;">Elige la hora del partido:</span>
+    </div>
+    <select class="jugada-dh-select" style="width:100%; background:#0f172a; color:#f8fafc; border:1px solid #3b82f6; border-radius:4px; padding:5px 8px; font-size:12px; font-weight:600; cursor:pointer;">
+      ${defaultOptionHtml}
+      ${infoDoble.juegos.map((g, i) => `
+        <option value="${i}" ${i === initialIdx ? 'selected' : ''}>Juego ${g.gameNumber}: ${escapeHtml(g.awayTeam)} vs ${escapeHtml(g.homeTeam)} — ${g.hora ? `${g.hora} hs` : "Horario a confirmar"} (${escapeHtml(g.estado)})</option>
+      `).join("")}
+    </select>
+  `;
+
+  const select = existingAlert.querySelector(".jugada-dh-select");
+  if (select) {
+    const guardarSeleccion = () => {
+      const val = select.value;
+      if (val === "" || val === undefined || val === null) {
+        delete slot.dataset.selectedGame;
+        if (editCard) delete editCard.dataset.selectedGame;
+      } else {
+        const idx = parseInt(val, 10);
+        const juego = infoDoble.juegos[idx];
+        if (juego) {
+          slot.dataset.selectedGame = JSON.stringify(juego);
+          if (editCard) editCard.dataset.selectedGame = JSON.stringify(juego);
+          if (betId && juego.hora) {
+            const horaInput = document.getElementById(`edit-hora-${betId}`);
+            if (horaInput) horaInput.value = juego.hora;
+          }
+        }
+      }
+    };
+    select.onchange = guardarSeleccion;
+    if (betId && initialIdx >= 0) {
+      guardarSeleccion();
+    } else if (!slot.dataset.selectedGame) {
+      delete slot.dataset.selectedGame;
+    }
+  }
+}
+
+function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk = null, targetHora = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
-  const exactMatch = juegos.find(game => {
+  if (targetGamePk) {
+    const gameByPk = juegos.find(g => Number(g.gamePk) === Number(targetGamePk));
+    if (gameByPk) return gameByPk;
+  }
+
+  const juegosCoincidentes = juegos.filter(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalJuego(game);
       if (fechaJuego && fechaJuego !== fechaBet) return false;
@@ -4025,7 +4435,35 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
     ];
     return buscados.every(equipo => nombres.some(nombre => equiposMlbCoinciden(equipo, nombre)));
   });
-  if (exactMatch) return exactMatch;
+
+  if (juegosCoincidentes.length === 1) {
+    return juegosCoincidentes[0];
+  }
+
+  if (juegosCoincidentes.length > 1) {
+    if (targetHora) {
+      let mejorJuego = juegosCoincidentes[0];
+      let minDiff = Infinity;
+      const [tH, tM] = targetHora.split(":").map(Number);
+      const targetMins = (tH || 0) * 60 + (tM || 0);
+
+      for (const game of juegosCoincidentes) {
+        const iso = game.gameDate || game.date;
+        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+        if (hora) {
+          const [gH, gM] = hora.split(":").map(Number);
+          const gameMins = gH * 60 + gM;
+          const diff = Math.abs(gameMins - targetMins);
+          if (diff < minDiff) {
+            minDiff = diff;
+            mejorJuego = game;
+          }
+        }
+      }
+      return mejorJuego;
+    }
+    return juegosCoincidentes[0];
+  }
 
   return juegos.find(game => {
     if (fechaBet) {
@@ -4040,11 +4478,16 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "") {
   }) || null;
 }
 
-function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
+function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspnId = null, targetHora = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
-  const exactMatch = juegos.find(event => {
+  if (targetEspnId) {
+    const gameById = juegos.find(e => String(e.id) === String(targetEspnId));
+    if (gameById) return gameById;
+  }
+
+  const juegosCoincidentes = juegos.filter(event => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(event);
       if (fechaJuego && fechaJuego !== fechaBet) return false;
@@ -4054,9 +4497,34 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "") {
       .map(normalizarClaveMlb);
     return buscados.every(equipo => nombres.some(nombre => nombre === equipo || nombre.includes(equipo) || equipo.includes(nombre)));
   });
-  if (exactMatch) return exactMatch;
 
-  return juegos.find(event => {
+  if (juegosCoincidentes.length === 1) {
+    return juegosCoincidentes[0];
+  }
+
+  if (juegosCoincidentes.length > 1 && targetHora) {
+    let mejorJuego = juegosCoincidentes[0];
+    let minDiff = Infinity;
+    const [tH, tM] = targetHora.split(":").map(Number);
+    const targetMins = (tH || 0) * 60 + (tM || 0);
+
+    for (const event of juegosCoincidentes) {
+      const iso = event.date || event.competitions?.[0]?.date;
+      const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+      if (hora) {
+        const [gH, gM] = hora.split(":").map(Number);
+        const gameMins = gH * 60 + gM;
+        const diff = Math.abs(gameMins - targetMins);
+        if (diff < minDiff) {
+          minDiff = diff;
+          mejorJuego = event;
+        }
+      }
+    }
+    return mejorJuego;
+  }
+
+  return juegosCoincidentes[0] || juegos.find(event => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(event);
       if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
@@ -4395,8 +4863,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       ) {
         huboCambioMetadata = true;
       }
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet);
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
       const estadoEspecial = combinarEstadoEspecial(
         getEstadoEspecialMlb(game),
         getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard")
@@ -4510,7 +4978,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => ["total_carreras", "total_hits"].includes(sel.autoMlb?.mercado))?.autoMlb;
-      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet) : null;
+      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet, totalAuto.gamePk, totalAuto.horaJuego || totalAuto.hora || apuesta.hora) : null;
       const marcador = game ? getMarcadorMlb(game) : null;
       const finalizado = game ? juegoMlbFinalizado(game) : false;
       const totalObjetivo = getTotalObjetivoAutoMlb(totalAuto, marcador);
@@ -4626,8 +5094,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       }
       const { autoFutbol, ...selMlb } = sel;
 
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet);
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
       const isoJuego = game?.gameDate || espnGame?.date || autoMlb.fechaJuego || "";
       const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
       if (!primeraHora && hora) primeraHora = hora;
@@ -4675,8 +5143,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
     };
     const autoJugada = jugada.autoMlb || (equiposMlb.length >= 2 ? { deporte: "mlb", equipos: equiposMlb.slice(0, 2) } : null);
     if (autoJugada) {
-      const game = buscarJuegoMlb(juegosFecha, autoJugada.equipos, fechaBet);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoJugada.equipos, fechaBet);
+      const game = buscarJuegoMlb(juegosFecha, autoJugada.equipos, fechaBet, autoJugada.gamePk, autoJugada.horaJuego || autoJugada.hora || apuesta.hora);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoJugada.equipos, fechaBet, autoJugada.espnId, autoJugada.horaJuego || autoJugada.hora || apuesta.hora);
       const isoJuego = game?.gameDate || espnGame?.date || autoJugada.fechaJuego || "";
       const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
       if (!primeraHora && hora) primeraHora = hora;
@@ -7673,6 +8141,14 @@ function habilitarEdicion(id) {
   editandoId = id;
   render();
   window.scrollTo(0, scroll);
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`edit-tarjeta-${id}`);
+    if (card) {
+      card.querySelectorAll(".edit-jugada-ev-input, [id^='edit-evento-']").forEach(input => {
+        verificarDobleJornadaEnSlot(input);
+      });
+    }
+  });
 }
 
 function cancelarEdicion() {
@@ -7781,9 +8257,21 @@ async function guardarEdicion(id) {
       }
 
       const isMulti = nuevoTipo === "combinada" || nuevoTipo === "patente" || nuevoTipo === "crear_apuesta" || nuevoTipo === "crear_apuesta_simple";
-      const jugada = isSimpleOption
+      let jugada = isSimpleOption
         ? { ev, c: optiOdds || 0, optiOdds: optiOdds || 0, maxOdds: maxOdds || 0, resultadoTotal, selections }
         : { ev, c: isMulti ? (c || 0) : 0, selections };
+
+      const editCard = document.getElementById(`edit-tarjeta-${id}`);
+      const gameDataStr = slot.dataset.selectedGame || editCard?.dataset?.selectedGame;
+      if (gameDataStr) {
+        try {
+          const juegoElegido = JSON.parse(gameDataStr);
+          const res = aplicarDobleJornadaAJugadas([jugada], juegoElegido);
+          jugada = res[0];
+          if (juegoElegido.hora) nuevoHora = juegoElegido.hora;
+        } catch (e) {}
+      }
+
       nuevasJugadas.push({
         ...jugada,
         estado: determinarEstadoJugada(jugada)
@@ -9279,15 +9767,25 @@ function iniciarApp() {
   document.addEventListener("input", (e) => {
     if (!e.target?.matches?.(".jugada-ev-input, .evento-principal-input")) return;
     const deporteSelect = document.getElementById("deporte");
-    if (!deporteSelect || deporteSelect.value) return;
-    if (detectarEquiposMlb(e.target.value).length > 0) {
-      deporteSelect.value = "mlb";
-      return;
-    }
-    if (extraerEquiposEventoFutbol(e.target.value).length >= 2) {
-      deporteSelect.value = "futbol";
+    if (deporteSelect && !deporteSelect.value) {
+      if (detectarEquiposMlb(e.target.value).length > 0) {
+        deporteSelect.value = "mlb";
+      } else if (extraerEquiposEventoFutbol(e.target.value).length >= 2) {
+        deporteSelect.value = "futbol";
+      }
     }
   });
+
+  const checkDhInputs = (target) => {
+    if (target?.matches?.(".jugada-ev-input, .evento-principal-input")) {
+      verificarDobleJornadaEnSlot(target);
+    } else if (target?.id === "fecha") {
+      document.querySelectorAll(".jugada-ev-input, .evento-principal-input").forEach(verificarDobleJornadaEnSlot);
+    }
+  };
+
+  document.addEventListener("blur", (e) => checkDhInputs(e.target), true);
+  document.addEventListener("change", (e) => checkDhInputs(e.target));
 
   // Initialize Simple container with first slot
   const simpleCont = document.getElementById("eventosSimpleContainer");

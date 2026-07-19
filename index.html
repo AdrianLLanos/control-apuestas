@@ -187,6 +187,26 @@
   </div>
 </div>
 
+<!-- Modal de Alerta y Selección de Doble Jornada MLB -->
+<div id="doubleheader-modal" class="custom-modal-backdrop" style="display: none;">
+  <div class="custom-modal-content doubleheader-modal-content">
+    <div class="custom-modal-header">
+      <span class="custom-modal-icon">⚾</span>
+      <h3 class="custom-modal-title">Partido de Doble Jornada</h3>
+    </div>
+    <div class="custom-modal-body">
+      <p id="dh-modal-desc">Se detectó que este evento tiene una <strong>doble jornada (2 juegos)</strong>. Selecciona el juego que deseas registrar:</p>
+      <div id="dh-modal-options" class="doubleheader-options-list">
+        <!-- Opciones generadas dinámicamente -->
+      </div>
+    </div>
+    <div class="custom-modal-footer">
+      <button type="button" id="dh-modal-cancel" class="custom-modal-btn custom-modal-btn-secondary">Cancelar</button>
+      <button type="button" id="dh-modal-confirm" class="custom-modal-btn custom-modal-btn-success">Confirmar Horario</button>
+    </div>
+  </div>
+</div>
+
 <button id="btnArriba">↑ NUEVA APUESTA</button>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
