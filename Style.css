@@ -1654,7 +1654,7 @@ table select option[value="pendiente"],
     color: white;
 }
 
-/* Estilos de Patente (añadidos aquí para no tocar patente.css) */
+/* Estilos de Patente y Dobles */
 .tarjeta-apuesta.patente {
     border-color: #fb7185;
     box-shadow: 0 0 12px rgba(251, 113, 133, 0.15);
@@ -1665,6 +1665,18 @@ table select option[value="pendiente"],
 }
 .edit-tipo-select.patente {
     color: #fb7185;
+}
+
+.tarjeta-apuesta.dobles {
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+.apuesta-edit-card.dobles {
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+.edit-tipo-select.dobles {
+    color: #38bdf8;
 }
 
 /* =========================

@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="estilos/crear-apuesta-simple.css?deploy=local">
 <link rel="stylesheet" href="estilos/simple-option-bet.css?deploy=local">
 <link rel="stylesheet" href="estilos/patente.css?deploy=local">
+<link rel="stylesheet" href="estilos/dobles.css?deploy=local">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
 </head>
 
@@ -73,6 +74,7 @@
         <select id="tipoApuesta" class="tipo-select-badge simple">
           <option value="simple">SIMPLE</option>
           <option value="combinada">COMBINADA</option>
+          <option value="dobles">DOBLES</option>
           <option value="patente">PATENTE</option>
           <option value="crear_apuesta">CREAR APUESTA COMBINADA</option>
           <option value="crear_apuesta_simple">CREAR APUESTA SIMPLE</option>
@@ -96,7 +98,33 @@
         <button type="button" id="btnAgregarCampo">➕ Agregar partido</button>
       </div>
 
-      <!-- ── CAMPOS CREAR APUESTA COMBINADA (ocultos por defecto) ── -->
+      <!-- ── CAMPOS DOBLES (ocultos por defecto) ── -->
+      <div id="camposDobles" style="display:none; flex-direction:column; gap:8px;">
+        <input type="text" id="eventoDobles"
+          placeholder="Nombre de la apuesta Dobles (Ej: Sistema Dobles MLB)"
+          class="evento-principal-input">
+        <div id="eventosDoblesContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarSeleccionDobles">+ Agregar seleccion</button>
+
+        <div class="dobles-calc-panel" style="margin-top:8px; padding:10px 12px; background:#1e293b; border:1px solid #334155; border-radius:8px; display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:13px; font-weight:600; color:#38bdf8;">Apuesta Unitaria (A):</span>
+              <input type="number" id="apuestaUnitariaDobles" placeholder="2.00" step="0.01" min="0" autocomplete="off"
+                style="width:100px; background:#0f172a; color:#ffffff; border:1px solid #38bdf8; border-radius:6px; padding:5px 8px; font-size:13px; font-weight:700;">
+            </div>
+            <div style="font-size:13px; color:#cbd5e1;">
+              Combinaciones (N): <strong id="lblCombinacionesDobles" style="color:#38bdf8;">0</strong>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:12px; color:#94a3b8; border-top:1px dashed #334155; padding-top:6px;">
+            <span>Monto Total (N &times; A): <strong id="lblMontoTotalDobles" style="color:#00ff88;">$0.00</strong></span>
+            <span>Ganancia Máxima: <strong id="lblGananciaMaximaDobles" style="color:#00ff88;">$0.00</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CAMPOS PATENTE (ocultos por defecto) ── -->
       <div id="camposPatente" style="display:none; flex-direction:column; gap:8px;">
         <input type="text" id="eventoPatente"
           placeholder="Nombre de la patente (Ej: Patente MLB)"
