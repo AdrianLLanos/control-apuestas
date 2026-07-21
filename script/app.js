@@ -1197,7 +1197,7 @@ function esErrorIndiceFirestore(error = {}) {
 
 function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOrden = usarConsultaApuestasFiltradaSinOrden) {
   const constraints = [];
-  const filtraCasa = casaId && casaId !== CASA_TODAS_ID;
+  const filtraCasa = casaId && casaId !== CASA_TODAS_ID && casaId !== CASA_DEFAULT_ID;
 
   if (filtraCasa) {
     constraints.push(where("casaId", "==", casaId));
@@ -7116,6 +7116,11 @@ function calcularResumenYEstadisticas() {
       bankrollFinal: bankrollInicial + balance + bankrollAjuste - pendiente
     },
     stats: {
+      ganadas,
+      perdidas,
+      nulas,
+      pendientes,
+      total: ganadas + perdidas + nulas + pendientes,
       pGanadas: (ganadas / totalStats) * 100,
       pPerdidas: (perdidas / totalStats) * 100,
       pNulas: (nulas / totalStats) * 100,
@@ -9398,13 +9403,14 @@ function renderResumenBankrollHtml(resumenYStats) {
 }
 
 function renderEstadisticasHtml(stats) {
+  const resumenCasaTitulo = filtroCasaId === CASA_TODAS_ID ? "Todas las casas" : getCasaNombre(filtroCasaId);
   return `
     <div class="page stats-box">
-      <h2>📊 Estadísticas</h2>
+      <h2>📊 Estadísticas - ${escapeHtml(resumenCasaTitulo)}</h2>
 
       <div class="stat">
         <div class="stat-label">
-          Ganadas ${stats.pGanadas.toFixed(1)}%
+          Ganadas: <strong>${stats.ganadas || 0}</strong> (${stats.pGanadas.toFixed(1)}%)
         </div>
         <div class="stat-bar">
           <div class="stat-fill ganada"
@@ -9414,7 +9420,7 @@ function renderEstadisticasHtml(stats) {
 
       <div class="stat">
         <div class="stat-label">
-          Perdidas ${stats.pPerdidas.toFixed(1)}%
+          Perdidas: <strong>${stats.perdidas || 0}</strong> (${stats.pPerdidas.toFixed(1)}%)
         </div>
         <div class="stat-bar">
           <div class="stat-fill perdida"
@@ -9424,7 +9430,7 @@ function renderEstadisticasHtml(stats) {
 
       <div class="stat">
         <div class="stat-label">
-          Nulas ${stats.pNulas.toFixed(1)}%
+          Nulas: <strong>${stats.nulas || 0}</strong> (${stats.pNulas.toFixed(1)}%)
         </div>
         <div class="stat-bar">
           <div class="stat-fill nula"
@@ -9434,7 +9440,7 @@ function renderEstadisticasHtml(stats) {
 
       <div class="stat">
         <div class="stat-label">
-          Pendientes ${stats.pPendientes.toFixed(1)}%
+          Pendientes: <strong>${stats.pendientes || 0}</strong> (${stats.pPendientes.toFixed(1)}%)
         </div>
         <div class="stat-bar">
           <div class="stat-fill pendiente"
