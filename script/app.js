@@ -631,8 +631,13 @@ function setEditingFinal(val) {
 }
 
 window.cambiarCasaFormulario = function (id) {
-  casaFormularioId = id || CASA_DEFAULT_ID;
-  renderCasasControls();
+  const nuevaCasaId = id || CASA_DEFAULT_ID;
+  casaFormularioId = nuevaCasaId;
+  if (filtroCasaId !== CASA_TODAS_ID && filtroCasaId !== nuevaCasaId) {
+    window.cambiarFiltroCasa(nuevaCasaId);
+  } else {
+    renderCasasControls();
+  }
 };
 
 window.cambiarFiltroCasa = function (id) {
@@ -1197,7 +1202,7 @@ function esErrorIndiceFirestore(error = {}) {
 
 function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOrden = usarConsultaApuestasFiltradaSinOrden) {
   const constraints = [];
-  const filtraCasa = casaId && casaId !== CASA_TODAS_ID && casaId !== CASA_DEFAULT_ID;
+  const filtraCasa = casaId && casaId !== CASA_TODAS_ID;
 
   if (filtraCasa) {
     constraints.push(where("casaId", "==", casaId));
