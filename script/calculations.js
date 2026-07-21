@@ -612,6 +612,8 @@ export function formatDecimal(val) {
 }
 
 export function formatCuotaTabla(val) {
-  if (val === undefined || val === null || isNaN(val)) return 0;
-  return Number(parseFloat(val).toFixed(3));
+  if (val === undefined || val === null || val === "" || isNaN(val)) return "0.00";
+  const num = parseFloat(val);
+  if (isNaN(num)) return "0.00";
+  return num.toFixed(2);
 }

@@ -9976,7 +9976,7 @@ function _render() {
 
           a.jugadas.forEach((j, matchIndex) => {
             const evText = getJugadaEvento(a, j);
-            const matchCuotaText = (typeof j === "object" && j.c) ? `<span style="color:${themeColor}; font-weight:bold; margin-left:6px;">(${j.c})</span>` : "";
+            const matchCuotaText = (typeof j === "object" && j.c) ? `<span style="color:${themeColor}; font-weight:bold; margin-left:6px;">(${formatCuotaTabla(j.c)})</span>` : "";
 
             let selections = [];
             if (typeof j === "object") {
@@ -10086,7 +10086,7 @@ function _render() {
 
           a.jugadas.forEach((j, matchIndex) => {
             const evText = getJugadaEvento(a, j);
-            const matchCuotaText = (!isSimpleBet && !isSimpleOptionBet && typeof j === "object" && j.c) ? `<span style="color:${themeColor}; font-weight:bold; margin-left:6px;">(${j.c})</span>` : "";
+            const matchCuotaText = (!isSimpleBet && !isSimpleOptionBet && typeof j === "object" && j.c) ? `<span style="color:${themeColor}; font-weight:bold; margin-left:6px;">(${formatCuotaTabla(j.c)})</span>` : "";
             const optionDetalleHtml = isSimpleOptionBet && typeof j === "object"
               ? `<div style="font-size:12px; color:#cbd5e1; margin-top:4px; display:flex; gap:10px; flex-wrap:wrap;">
                   <span>Opti odds: <strong style="color:${themeColor};">${formatCuotaTabla(j.optiOdds)}</strong></span>
