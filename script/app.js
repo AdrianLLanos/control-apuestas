@@ -574,11 +574,6 @@ function mostrarModalCasa({ tipo = "confirm", titulo, mensaje, nombre, confirmar
    AJUSTE DE BANKROLL FINAL
  ========================= */
 async function guardarAjusteFinal() {
-  if (filtroCasaId === CASA_TODAS_ID) {
-    mostrarModalValidacion(["Selecciona una casa especifica para ajustar el saldo final."]);
-    return;
-  }
-
   const input = document.getElementById("editBankrollFinalInput");
   if (!input) return;
   const nuevoFinal = parseFloat(input.value.trim());
@@ -588,16 +583,38 @@ async function guardarAjusteFinal() {
     return;
   }
 
+  let casaTarget;
+  if (filtroCasaId === CASA_TODAS_ID) {
+    casaTarget = getCasaPorId(CASA_DEFAULT_ID) || getCasasDisponibles()[0] || normalizarCasa();
+  } else {
+    casaTarget = getCasaPorId(filtroCasaId);
+  }
+
   const total = calcularResumenGeneral();
-  const casa = getCasaPorId(filtroCasaId);
   const rawBalance = total.balance;
-  // nuevoFinal = bankrollInicial + rawBalance + nuevoAjuste - pendiente
-  // nuevoAjuste = nuevoFinal - (bankrollInicial + rawBalance - pendiente)
-  const nuevoAjuste = nuevoFinal - (total.bankrollInicial + rawBalance - total.pendiente);
+  const nuevoAjusteTotal = nuevoFinal - (total.bankrollInicial + rawBalance - total.pendiente);
+
+  let nuevoAjusteCasaTarget;
+  if (filtroCasaId === CASA_TODAS_ID) {
+    const casasResumen = getCasasParaResumen();
+    const ajusteOtrasCasas = casasResumen
+      .filter(c => c.id !== casaTarget.id)
+      .reduce((acc, c) => acc + (parseFloat(c.ajuste) || 0), 0);
+    nuevoAjusteCasaTarget = nuevoAjusteTotal - ajusteOtrasCasas;
+  } else {
+    nuevoAjusteCasaTarget = nuevoAjusteTotal;
+  }
 
   try {
-    await setDoc(doc(db, "casas", casa.id), {
-      ajuste: nuevoAjuste
+    const index = casas.findIndex(c => c.id === casaTarget.id);
+    if (index >= 0) {
+      casas[index] = { ...casas[index], ajuste: nuevoAjusteCasaTarget };
+    } else {
+      casas.push(normalizarCasa({ ...casaTarget, ajuste: nuevoAjusteCasaTarget }));
+    }
+
+    await setDoc(doc(db, "casas", casaTarget.id), {
+      ajuste: nuevoAjusteCasaTarget
     }, { merge: true });
 
     isEditingFinal = false;
@@ -9320,7 +9337,6 @@ function renderResumenBankrollHtml(resumenYStats) {
   const total = resumenYStats.resumen;
   const roi = total.invertido ? (total.balance / total.invertido) * 100 : 0;
   const resumenCasaTitulo = filtroCasaId === CASA_TODAS_ID ? "Todas las casas" : getCasaNombre(filtroCasaId);
-  const puedeEditarFinal = filtroCasaId !== CASA_TODAS_ID;
 
   return `
     <div class="page" id="bankrollResumen">
@@ -9349,10 +9365,10 @@ function renderResumenBankrollHtml(resumenYStats) {
         </strong>
       </p>
 
-      ${isEditingFinal && puedeEditarFinal ? `
+      ${isEditingFinal ? `
         <p style="display: flex; align-items: center; gap: 8px; margin: 0 0 8px 0; padding: 0;">
           <span style="font-size: 16px; font-weight: 600; color: #cbd5e1; margin: 0; line-height: 1;">Final:</span>
-          <input type="number" step="0.01" id="editBankrollFinalInput" value="${total.bankrollFinal.toFixed(2)}" style="width: 100px; height: 34px; background: #1e293b; color: white; border: 1px solid #475569; padding: 0 10px; border-radius: 6px; font-weight: bold; font-family: inherit; font-size: 14px; box-sizing: border-box; outline: none; margin: 0;">
+          <input type="number" step="0.01" id="editBankrollFinalInput" value="${total.bankrollFinal.toFixed(2)}" onkeydown="if(event.key==='Enter') window.guardarAjusteFinal()" style="width: 100px; height: 34px; background: #1e293b; color: white; border: 1px solid #475569; padding: 0 10px; border-radius: 6px; font-weight: bold; font-family: inherit; font-size: 14px; box-sizing: border-box; outline: none; margin: 0;">
           <button onclick="window.guardarAjusteFinal()" style="display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); border-radius: 6px; color: #4ade80; cursor: pointer; font-size: 14px; box-sizing: border-box; transition: background 0.2s; margin: 0;" title="Guardar">💾</button>
           <button onclick="window.setEditingFinal(false)" style="display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; color: #f87171; cursor: pointer; font-size: 14px; box-sizing: border-box; transition: background 0.2s; margin: 0;" title="Cancelar">❌</button>
         </p>
@@ -9362,13 +9378,8 @@ function renderResumenBankrollHtml(resumenYStats) {
           <strong data-bankroll-final class="${total.bankrollFinal >= total.bankrollInicial ? 'ganada' : 'perdida'}">
             $${total.bankrollFinal.toFixed(2)}
           </strong>
-          ${puedeEditarFinal ? `<button onclick="window.setEditingFinal(true)" style="background: none; border: none; cursor: pointer; font-size: 14px; opacity: 0.6; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin: 0;" title="Ajustar saldo final">✏️</button>` : ""}
+          <button onclick="window.setEditingFinal(true)" style="background: none; border: none; cursor: pointer; font-size: 14px; opacity: 0.6; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin: 0;" title="Ajustar saldo final">✏️</button>
         </p>
-        ${!puedeEditarFinal ? `
-          <p style="font-size: 12px; color: #94a3b8; margin-top: -4px; margin-bottom: 12px;">
-            Filtra una casa especifica para ajustar el saldo final.
-          </p>
-        ` : ""}
         ${total.bankrollAjuste !== 0 ? `
           <p style="font-size: 12px; color: #94a3b8; margin-top: -4px; margin-bottom: 12px; font-style: italic;">
             (Ajuste manual: ${total.bankrollAjuste >= 0 ? '+' : ''}$${total.bankrollAjuste.toFixed(2)})
