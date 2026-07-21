@@ -314,7 +314,7 @@ function renderCasasControls() {
   const casaSelect = document.getElementById("casaApuesta");
   if (casaSelect) {
     casaSelect.innerHTML = opcionesCasa;
-    if (!getCasasDisponibles().some(c => c.id === casaFormularioId)) {
+    if (casasSnapshotRecibido && casas.length > 0 && !getCasasDisponibles().some(c => c.id === casaFormularioId)) {
       casaFormularioId = getCasasDisponibles()[0]?.id || CASA_DEFAULT_ID;
     }
     casaSelect.value = casaFormularioId;
@@ -323,7 +323,7 @@ function renderCasasControls() {
   const filtroSelect = document.getElementById("filtroCasa");
   if (filtroSelect) {
     filtroSelect.innerHTML = `<option value="${CASA_TODAS_ID}">Todas las casas</option>${opcionesFiltro}`;
-    if (filtroCasaId !== CASA_TODAS_ID && !getCasasRegistradas().some(c => c.id === filtroCasaId)) {
+    if (casasSnapshotRecibido && casas.length > 0 && filtroCasaId !== CASA_TODAS_ID && !getCasasRegistradas().some(c => c.id === filtroCasaId)) {
       filtroCasaId = CASA_TODAS_ID;
     }
     filtroSelect.value = filtroCasaId;
@@ -633,11 +633,7 @@ function setEditingFinal(val) {
 window.cambiarCasaFormulario = function (id) {
   const nuevaCasaId = id || CASA_DEFAULT_ID;
   casaFormularioId = nuevaCasaId;
-  if (filtroCasaId !== CASA_TODAS_ID && filtroCasaId !== nuevaCasaId) {
-    window.cambiarFiltroCasa(nuevaCasaId);
-  } else {
-    renderCasasControls();
-  }
+  window.cambiarFiltroCasa(nuevaCasaId);
 };
 
 window.cambiarFiltroCasa = function (id) {
