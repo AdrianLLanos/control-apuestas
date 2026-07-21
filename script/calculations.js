@@ -4,6 +4,9 @@ export const PATENTE_MAX_SELECTIONS = 8;
 export const DOBLES_MIN_SELECTIONS = 2;
 export const DOBLES_MAX_SELECTIONS = 15;
 
+export const SISTEMA_MIN_SELECTIONS = 2;
+export const SISTEMA_MAX_SELECTIONS = 20;
+
 export function contarCombinacionesDobles(n) {
   if (n < 2) return 0;
   return (n * (n - 1)) / 2;
@@ -380,7 +383,214 @@ export function determinarResultadoDobles(apuesta) {
   return "perdida";
 }
 
+export function getNombreSistema(k, n) {
+  if (k === 1) return "Individuales";
+  if (k === 2) return "Dobles";
+  if (k === 3) return "Trebles";
+  if (k === 4) return "Cuátruples";
+  if (k === 5) return "Quíntuples";
+  if (k === 6) return "Séxtuples";
+  if (k === 7) return "Séptuples";
+  if (k === 8) return "Óctuples";
+  if (k === 9) return "Nónuples";
+  if (k === 10) return "Décuples";
+  return `Combinaciones de ${k}`;
+}
+
+export function contarCombinacionesSistema(n, k) {
+  return binomial(n, k);
+}
+
+export function forEachCombination(items, k, callback) {
+  const combo = [];
+  function walk(start) {
+    if (combo.length === k) {
+      callback(combo.slice());
+      return;
+    }
+    for (let i = start; i <= items.length - (k - combo.length); i++) {
+      combo.push(items[i]);
+      walk(i + 1);
+      combo.pop();
+    }
+  }
+  walk(0);
+}
+
+export function getSistemaSelections(jugadas = []) {
+  return jugadas.map(j => {
+    if (typeof j !== "object" || !j) {
+      return { cuota: 0, estado: "pendiente" };
+    }
+
+    const selections = j.selections && j.selections.length
+      ? j.selections
+      : [{ estado: j.estado || "pendiente" }];
+
+    const hasPerdida = selections.some(sel => (sel.estado || "pendiente") === "perdida");
+    const hasPendiente = selections.some(sel => (sel.estado || "pendiente") === "pendiente");
+    const hasGanada = selections.some(sel => (sel.estado || "pendiente") === "ganada");
+    const allNula = selections.length > 0 && selections.every(sel => (sel.estado || "pendiente") === "nula");
+
+    let estado = "pendiente";
+    if (hasPerdida) estado = "perdida";
+    else if (hasPendiente) estado = "pendiente";
+    else if (hasGanada) estado = "ganada";
+    else if (allNula) estado = "nula";
+
+    return {
+      cuota: parseFloat(j.c) || 0,
+      estado
+    };
+  });
+}
+
+function getCuotaAplicableSistema(item) {
+  if (item.estado === "nula") return 1;
+  return item.cuota > 0 ? item.cuota : 0;
+}
+
+export function calcularCuotaMaximaSistema(jugadas = [], sistemaStakes = {}) {
+  const selecciones = getSistemaSelections(jugadas);
+  const n = selecciones.length;
+  if (n < 2) return 0;
+
+  let totalImporte = 0;
+  let totalGananciaMaxima = 0;
+
+  for (let k = 1; k <= n; k++) {
+    const stake = parseFloat(sistemaStakes[k] || sistemaStakes[String(k)]) || 0;
+    if (stake <= 0) continue;
+
+    const numCombos = binomial(n, k);
+    if (!numCombos) continue;
+
+    totalImporte += numCombos * stake;
+
+    let sumaProductos = 0;
+    forEachCombination(selecciones, k, combo => {
+      const producto = combo.reduce((acc, item) => acc * getCuotaAplicableSistema(item), 1);
+      sumaProductos += producto;
+    });
+
+    totalGananciaMaxima += sumaProductos * stake;
+  }
+
+  if (totalImporte <= 0) return 0;
+  return formatDecimal(totalGananciaMaxima / totalImporte);
+}
+
+export function calcularDetalleSistema(apuesta) {
+  const selecciones = getSistemaSelections(apuesta?.jugadas || []);
+  const n = selecciones.length;
+  const sistemaStakes = apuesta?.sistemaStakes || (apuesta?.tipoApuesta === "dobles" ? { 2: (parseFloat(apuesta?.importe) || 0) / (contarCombinacionesDobles(n) || 1) } : {});
+
+  let totalImporte = 0;
+  let totalGananciaMaxima = 0;
+  let retornoTotal = 0;
+  let combinacionesGanadas = 0;
+  let combinacionesPendientes = 0;
+  let totalCombinaciones = 0;
+
+  const tiersBreakdown = {};
+
+  for (let k = 1; k <= n; k++) {
+    const stake = parseFloat(sistemaStakes[k] || sistemaStakes[String(k)]) || 0;
+    const numCombos = binomial(n, k);
+
+    if (stake > 0 && numCombos > 0) {
+      totalCombinaciones += numCombos;
+      const importeTier = numCombos * stake;
+      totalImporte += importeTier;
+
+      let sumaProductos = 0;
+      let retornoTier = 0;
+      let ganadasTier = 0;
+      let pendientesTier = 0;
+
+      forEachCombination(selecciones, k, combo => {
+        const producto = combo.reduce((acc, item) => acc * getCuotaAplicableSistema(item), 1);
+        sumaProductos += producto;
+
+        const hasPerdida = combo.some(item => item.estado === "perdida");
+        const hasPendiente = combo.some(item => item.estado === "pendiente");
+        const ganadasCount = combo.filter(item => item.estado === "ganada").length;
+
+        if (hasPerdida) return;
+        if (hasPendiente) {
+          pendientesTier++;
+          combinacionesPendientes++;
+          return;
+        }
+        if (combo.every(item => item.estado === "nula")) {
+          retornoTier += stake;
+          return;
+        }
+        if (ganadasCount < 1) return;
+
+        retornoTier += stake * producto;
+        ganadasTier++;
+        combinacionesGanadas++;
+      });
+
+      const gananciaMaxTier = sumaProductos * stake;
+      totalGananciaMaxima += gananciaMaxTier;
+      retornoTotal += retornoTier;
+
+      tiersBreakdown[k] = {
+        nombre: getNombreSistema(k, n),
+        numCombos,
+        stake,
+        importeTier: formatDecimal(importeTier),
+        gananciaMaxTier: formatDecimal(gananciaMaxTier),
+        retornoTier: formatDecimal(retornoTier),
+        ganadasTier,
+        pendientesTier
+      };
+    }
+  }
+
+  if (totalImporte <= 0 && parseFloat(apuesta?.importe) > 0 && n >= 2) {
+    totalImporte = parseFloat(apuesta.importe) || 0;
+  }
+
+  const cuotaMaximaEquivalente = totalImporte > 0 ? totalGananciaMaxima / totalImporte : 0;
+
+  return {
+    retorno: formatDecimal(retornoTotal),
+    totalImporte: formatDecimal(totalImporte),
+    gananciaMaxima: formatDecimal(totalGananciaMaxima),
+    cuotaMaximaEquivalente: formatDecimal(cuotaMaximaEquivalente),
+    totalCombinaciones,
+    combinacionesGanadas,
+    combinacionesPendientes,
+    tiersBreakdown
+  };
+}
+
+export function determinarResultadoSistema(apuesta) {
+  const selecciones = getSistemaSelections(apuesta?.jugadas || []);
+  const tienePendientes = selecciones.some(sel => sel.estado === "pendiente");
+
+  if (tienePendientes) {
+    const seleccionesQueAunPuedenAportar = selecciones.filter(sel =>
+      sel.estado === "ganada" || sel.estado === "pendiente"
+    ).length;
+
+    if (seleccionesQueAunPuedenAportar < 2) return "perdida";
+    return "pendiente";
+  }
+
+  const detalle = calcularDetalleSistema(apuesta);
+  if (detalle.combinacionesGanadas > 0 || detalle.retorno > 0) return "ganada";
+  if (selecciones.length > 0 && selecciones.every(sel => sel.estado === "nula")) return "nula";
+  return "perdida";
+}
+
 export function calcularRetornoApuesta(apuesta) {
+  if (apuesta?.tipoApuesta === "sistema") {
+    return calcularDetalleSistema(apuesta).retorno;
+  }
   if (apuesta?.tipoApuesta === "patente") {
     return calcularDetallePatente(apuesta).retorno;
   }

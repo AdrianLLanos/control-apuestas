@@ -44,6 +44,13 @@ const {
   PATENTE_MAX_SELECTIONS,
   DOBLES_MIN_SELECTIONS,
   DOBLES_MAX_SELECTIONS,
+  SISTEMA_MIN_SELECTIONS,
+  SISTEMA_MAX_SELECTIONS,
+  getNombreSistema,
+  contarCombinacionesSistema,
+  calcularCuotaMaximaSistema,
+  calcularDetalleSistema,
+  determinarResultadoSistema,
   calcularCuotaMaximaDobles,
   calcularCuotaMaximaPatente,
   calcularCuotaSimpleOptionBet,
@@ -161,35 +168,61 @@ function deduplicarCasasPorNombre(base) {
   return vistas;
 }
 
+function normalizarNombreCasa(nombre = "") {
+  return String(nombre).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function getCasaPorId(id) {
-  return casas.find(c => c.id === id) || getCasasDisponibles()[0] || normalizarCasa();
+  if (!id) return getCasasDisponibles()[0] || normalizarCasa();
+  const targetNorm = normalizarNombreCasa(id);
+  const encontrada = casas.find(c => c.id === id || normalizarNombreCasa(c.nombre) === targetNorm);
+  return encontrada || getCasasDisponibles()[0] || normalizarCasa({ id, nombre: id });
 }
 
 function getCasaNombre(id) {
   return getCasaPorId(id).nombre;
 }
 
-function getCasaIdApuesta(apuesta) {
-  return apuesta?.casaId || CASA_DEFAULT_ID;
+function getCasaIdApuesta(apuesta = {}) {
+  if (apuesta.casaId) return apuesta.casaId;
+  const nombre = apuesta.casaNombre || apuesta.casa || "";
+  if (nombre) {
+    const coincidencia = getCasasRegistradas().find(c => normalizarNombreCasa(c.nombre) === normalizarNombreCasa(nombre));
+    if (coincidencia) return coincidencia.id;
+  }
+  return CASA_DEFAULT_ID;
 }
 
-function normalizarNombreCasa(nombre = "") {
-  return String(nombre).trim().replace(/\s+/g, " ").toLowerCase();
+function apuestaPerteneceCasa(apuesta = {}, casaId) {
+  if (!casaId || casaId === CASA_TODAS_ID) return true;
+  const targetCasa = getCasaPorId(casaId);
+  const idTarget = targetCasa.id;
+  const nombreTarget = normalizarNombreCasa(targetCasa.nombre);
+
+  const apuestaCasaId = apuesta.casaId;
+  const apuestaCasaNombre = normalizarNombreCasa(apuesta.casaNombre || apuesta.casa || "");
+
+  if (apuestaCasaId && apuestaCasaId === idTarget) return true;
+  if (apuestaCasaNombre && apuestaCasaNombre === nombreTarget) return true;
+  if (apuestaCasaId && normalizarNombreCasa(getCasaNombre(apuestaCasaId)) === nombreTarget) return true;
+  if (!apuestaCasaId && !apuestaCasaNombre && idTarget === CASA_DEFAULT_ID) return true;
+
+  return false;
 }
 
 function getApuestasFiltradas() {
   if (filtroCasaId === CASA_TODAS_ID) return apuestas;
-  return apuestas.filter(a => getCasaIdApuesta(a) === filtroCasaId);
+  return apuestas.filter(a => apuestaPerteneceCasa(a, filtroCasaId));
 }
 
 function getApuestasSyncScope(silencioso = false) {
   if (!silencioso) return getApuestasFiltradas();
   if (filtroCasaId === CASA_TODAS_ID) return apuestas;
-  return apuestas.filter(a => getCasaIdApuesta(a) === filtroCasaId);
+  return apuestas.filter(a => apuestaPerteneceCasa(a, filtroCasaId));
 }
 
 function apuestaPerteneceFiltroActual(apuesta = {}) {
-  return filtroCasaId === CASA_TODAS_ID || getCasaIdApuesta(apuesta) === filtroCasaId;
+  return apuestaPerteneceCasa(apuesta, filtroCasaId);
 }
 
 function deduplicarApuestasPorId(lista = []) {
@@ -331,7 +364,11 @@ function renderCasasControls() {
 
   const bankrollInput = document.getElementById("bankroll");
   if (bankrollInput) {
-    bankrollInput.placeholder = `Bankroll inicial - ${getCasaNombre(casaFormularioId)}`;
+    const casaForm = getCasaPorId(casaFormularioId);
+    bankrollInput.placeholder = `Bankroll inicial - ${casaForm.nombre}`;
+    if (document.activeElement !== bankrollInput) {
+      bankrollInput.value = casaForm.bankrollInicial > 0 ? casaForm.bankrollInicial : "";
+    }
   }
 
   const eliminarSelect = document.getElementById("casaEliminar");
@@ -385,8 +422,8 @@ async function guardarBankroll() {
   const valor = parseFloat(valorVal);
   const casa = getCasaPorId(casaFormularioId);
 
-  if (!valorVal || isNaN(valor) || valor <= 0) {
-    mostrarModalValidacion(["Ingresa un bankroll inicial válido (mayor a 0)."]);
+  if (valorVal === "" || isNaN(valor) || valor < 0) {
+    mostrarModalValidacion(["Ingresa un bankroll inicial válido (mayor o igual a 0)."]);
     return;
   }
 
@@ -397,10 +434,13 @@ async function guardarBankroll() {
       activa: true
     }, { merge: true });
 
-    casas = getCasasDisponibles().map(c =>
-      c.id === casa.id ? { ...c, bankrollInicial: valor, activa: true } : c
-    );
-    document.getElementById("bankroll").value = "";
+    const index = casas.findIndex(c => c.id === casa.id);
+    if (index >= 0) {
+      casas[index] = { ...casas[index], bankrollInicial: valor, activa: true };
+    } else {
+      casas.push(normalizarCasa({ ...casa, bankrollInicial: valor, activa: true }));
+    }
+
     renderCasasControls();
     render();
   } catch (e) {
@@ -479,7 +519,7 @@ async function eliminarCasaSeleccionada() {
     return;
   }
 
-  const tieneApuestas = apuestas.some(a => getCasaIdApuesta(a) === casa.id);
+  const tieneApuestas = apuestas.some(a => apuestaPerteneceCasa(a, casa.id));
   const confirmado = await mostrarModalCasa({
     tipo: "confirm",
     titulo: "Eliminar casa de apuestas",
@@ -645,11 +685,9 @@ window.cambiarFiltroCasa = function (id) {
   isEditingFinal = false;
   Object.keys(apuestasVisiblesPorDia).forEach(dia => delete apuestasVisiblesPorDia[dia]);
   renderCasasControls();
-  // Solo recargar Firestore si el filtro realmente cambió
+  render();
   if (nuevoFiltro !== filtroAnterior) {
     cargarApuestasIniciales();
-  } else {
-    render();
   }
 };
 
@@ -844,6 +882,9 @@ function normalizarJugadasConEstado(jugadas = []) {
 }
 
 function recalcularResultadoApuesta(apuesta) {
+  if (apuesta.tipoApuesta === "sistema") {
+    return determinarResultadoSistema(apuesta);
+  }
   if (apuesta.tipoApuesta === "patente") {
     return determinarResultadoPatente(apuesta);
   }
@@ -981,7 +1022,12 @@ function usuarioEstaEditandoFormulario() {
   const el = document.activeElement;
   if (!el || el === document.body) return false;
   if (el.isContentEditable) return true;
-  return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+    const type = (el.type || "").toLowerCase();
+    if (type === "button" || type === "submit" || type === "reset") return false;
+    return true;
+  }
+  return false;
 }
 
 function ejecutarCuandoEsteLibre(callback, timeout = 8000) {
@@ -1196,33 +1242,34 @@ function esErrorIndiceFirestore(error = {}) {
     message.includes("index");
 }
 
-function getConsultaApuestasPaginada(cursor = null, casaId = filtroCasaId, sinOrden = usarConsultaApuestasFiltradaSinOrden) {
-  const constraints = [];
-  const filtraCasa = casaId && casaId !== CASA_TODAS_ID;
-
-  if (filtraCasa) {
-    constraints.push(where("casaId", "==", casaId));
-  }
-
-  if (!sinOrden || !filtraCasa) {
-    constraints.push(orderBy("creadoEn", "desc"));
-  }
-
+function getConsultaApuestasPaginada(cursor = null) {
+  const constraints = [orderBy("creadoEn", "desc")];
   if (cursor) {
     constraints.push(startAfter(cursor));
   }
-
-  constraints.push(firestoreLimit(APUESTAS_PAGE_LIMIT));
+  constraints.push(firestoreLimit(APUESTAS_PAGE_LIMIT * 2));
   return query(collection(db, "apuestas"), ...constraints);
 }
 
 function autocorregirApuestasCargadas(lista = []) {
   lista.forEach(a => {
     if (!a.casaId) {
+      const nombreActual = a.casaNombre || a.casa || "";
+      let targetCasaId = CASA_DEFAULT_ID;
+      let targetCasaNombre = getCasaNombre(CASA_DEFAULT_ID);
+
+      if (nombreActual) {
+        const encontrada = getCasasRegistradas().find(c => normalizarNombreCasa(c.nombre) === normalizarNombreCasa(nombreActual));
+        if (encontrada) {
+          targetCasaId = encontrada.id;
+          targetCasaNombre = encontrada.nombre;
+        }
+      }
+
       marcarRenderSilenciosoApuesta(a.id);
       updateDoc(doc(db, "apuestas", a.id), {
-        casaId: CASA_DEFAULT_ID,
-        casaNombre: getCasaNombre(CASA_DEFAULT_ID)
+        casaId: targetCasaId,
+        casaNombre: targetCasaNombre
       }).catch(err => console.error("Error al asignar casa por defecto:", err));
     }
 
@@ -1233,10 +1280,11 @@ function autocorregirApuestasCargadas(lista = []) {
         .catch(err => console.error("Error al normalizar fecha de apuesta:", err));
     }
 
-    if (a.tipoApuesta === "patente" || a.tipoApuesta === "dobles") {
+    if (a.tipoApuesta === "patente" || a.tipoApuesta === "dobles" || a.tipoApuesta === "sistema") {
       const isDobles = a.tipoApuesta === "dobles";
-      const resultadoCalculado = isDobles ? determinarResultadoDobles(a) : determinarResultadoPatente(a);
-      const cuotaCalculada = isDobles ? calcularCuotaMaximaDobles(a.jugadas || []) : calcularCuotaMaximaPatente(a.jugadas || []);
+      const isSistema = a.tipoApuesta === "sistema";
+      const resultadoCalculado = isSistema ? determinarResultadoSistema(a) : (isDobles ? determinarResultadoDobles(a) : determinarResultadoPatente(a));
+      const cuotaCalculada = isSistema ? calcularCuotaMaximaSistema(a.jugadas || [], a.sistemaStakes || {}) : (isDobles ? calcularCuotaMaximaDobles(a.jugadas || []) : calcularCuotaMaximaPatente(a.jugadas || []));
       const updateData = {};
 
       if (a.resultado !== resultadoCalculado) {
@@ -3103,6 +3151,195 @@ window.eliminarSlotDobles = function (btn) {
   actualizarSlotsDobles();
 };
 
+function calcularTotalesSistemaForm() {
+  const container = document.getElementById("eventosSistemaContainer");
+  if (!container) return;
+  const slots = container.querySelectorAll(".sistema-slot");
+  const n = slots.length;
+
+  const listEl = document.getElementById("sistemaOpcionesList");
+  if (!listEl) return;
+
+  const currentStakes = {};
+  listEl.querySelectorAll(".sistema-tier-stake-input").forEach(inp => {
+    const tier = inp.dataset.tier;
+    if (tier && inp.value !== "") {
+      currentStakes[tier] = inp.value;
+    }
+  });
+
+  const cuotas = [];
+  slots.forEach(slot => {
+    const c = parseFloat(slot.querySelector(".jugada-cuota-input")?.value) || 0;
+    cuotas.push(c);
+  });
+
+  let totalMontoGlobal = 0;
+  let totalGananciaGlobal = 0;
+  let html = "";
+
+  for (let k = 1; k <= n; k++) {
+    const nombre = getNombreSistema(k, n);
+    const count = contarCombinacionesSistema(n, k);
+    const existingVal = currentStakes[k] !== undefined ? currentStakes[k] : "";
+    const unitStake = parseFloat(existingVal) || 0;
+
+    let sumaProductosTier = 0;
+    if (k <= cuotas.length && cuotas.every(c => c > 0)) {
+      calculations.forEachCombination(cuotas, k, combo => {
+        sumaProductosTier += combo.reduce((acc, c) => acc * c, 1);
+      });
+    }
+
+    const montoTier = count * unitStake;
+    const gananciaMaxTier = sumaProductosTier * unitStake;
+
+    totalMontoGlobal += montoTier;
+    totalGananciaGlobal += gananciaMaxTier;
+
+    html += `
+      <div class="sistema-opcion-item">
+        <div class="sistema-opcion-label">
+          <span>${nombre}</span>
+          <span class="sistema-opcion-count">${count} x</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="number" class="sistema-tier-stake-input" data-tier="${k}" placeholder="Coloca ap" step="0.01" min="0" autocomplete="off"
+            value="${existingVal}" oninput="window.calcularTotalesSistemaForm()">
+        </div>
+        <div class="sistema-opcion-retorno">
+          <div>Monto: <strong style="color:#00ff88;">$${montoTier.toFixed(2)}</strong></div>
+          <div>Max: <strong style="color:#00ff88;">$${gananciaMaxTier.toFixed(2)}</strong></div>
+        </div>
+      </div>
+    `;
+  }
+
+  listEl.innerHTML = html;
+
+  const lblMonto = document.getElementById("lblMontoTotalSistema");
+  if (lblMonto) lblMonto.textContent = `$${totalMontoGlobal.toFixed(2)}`;
+
+  const lblGan = document.getElementById("lblGananciaMaximaSistema");
+  if (lblGan) lblGan.textContent = `$${totalGananciaGlobal.toFixed(2)}`;
+
+  const cuotaEq = totalMontoGlobal > 0 ? (totalGananciaGlobal / totalMontoGlobal) : 0;
+  const lblCuota = document.getElementById("lblCuotaMaximaSistema");
+  if (lblCuota) lblCuota.textContent = cuotaEq.toFixed(3);
+
+  const mainImporte = document.getElementById("importe");
+  if (mainImporte && (document.activeElement?.classList?.contains("sistema-tier-stake-input") || !mainImporte.value || mainImporte.dataset.fromSistema === "1")) {
+    if (totalMontoGlobal > 0) {
+      mainImporte.value = totalMontoGlobal.toFixed(2);
+      mainImporte.dataset.fromSistema = "1";
+    }
+  }
+}
+window.calcularTotalesSistemaForm = calcularTotalesSistemaForm;
+
+function actualizarSlotsSistema() {
+  const container = document.getElementById("eventosSistemaContainer");
+  if (!container) return;
+
+  const slots = container.querySelectorAll(".sistema-slot");
+  slots.forEach((s, i) => {
+    const num = i + 1;
+    const numEl = s.querySelector(".jugada-slot-num");
+    if (numEl) numEl.textContent = `Selección #${num}`;
+    const evInput = s.querySelector(".jugada-ev-input");
+    if (evInput) evInput.placeholder = `Selección #${num} (Ej: Dodgers vs Mets)`;
+    const del = s.querySelector(".btn-eliminar-slot-sistema");
+    if (del) del.style.display = slots.length > SISTEMA_MIN_SELECTIONS ? "inline-block" : "none";
+  });
+
+  const addBtn = document.getElementById("btnAgregarSeleccionSistema");
+  if (addBtn) {
+    addBtn.style.display = slots.length >= SISTEMA_MAX_SELECTIONS ? "none" : "inline-block";
+  }
+
+  calcularTotalesSistemaForm();
+}
+
+function crearSlotSistema(num) {
+  const slot = document.createElement("div");
+  slot.className = "jugada-slot sistema-slot";
+  slot.style.cssText = "display:flex; flex-direction:column; gap:4px; border-left:2px solid #a855f7; padding-left:10px; margin-bottom:8px;";
+  slot.innerHTML = `
+    <div class="jugada-slot-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
+      <span class="jugada-slot-num" style="font-size:10px; font-weight:700; color:#a855f7; text-transform:uppercase; letter-spacing:0.5px;">Selección #${num}</span>
+      <button type="button" class="btn-eliminar-slot-sistema" onclick="window.eliminarSlotSistema(this)" style="display:${num > SISTEMA_MIN_SELECTIONS ? 'inline-block' : 'none'}; padding:2px 7px; font-size:11px; font-weight:700; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer;">✕</button>
+    </div>
+    <input type="text" class="jugada-ev-input" placeholder="Selección #${num} (Ej: Dodgers vs Mets)" autocomplete="off" style="font-size:12px; font-weight:600; color:#f1f5f9 !important; background:#1e293b !important; border:1px solid #334155 !important; border-radius:6px !important; padding:6px 10px !important;">
+    
+    <div class="selections-container" style="display:flex; flex-direction:column; gap:4px; margin-top:2px;">
+      <div class="selection-row" style="display:flex; align-items:center; gap:6px;">
+        <input type="text" class="jugada-jug-input" placeholder="Jugada (Ej: Dodgers gana)" autocomplete="off" style="background:#1e293b; color:white; border:1px dashed #475569; border-radius:6px; padding:5px 8px; font-size:12px; box-sizing:border-box; width:75%; min-width:120px;">
+        <button type="button" class="btn-eliminar-selection" onclick="window.eliminarFilaSeleccion(this)" style="display:none; padding:2px 7px; font-size:11px; font-weight:bold; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer; flex-shrink:0;">✕</button>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-top:2px;">
+      <span style="font-size:11px; color:#94a3b8; font-weight:600;">Cuota:</span>
+      <input type="number" class="jugada-cuota-input" placeholder="1.80" step="0.01" autocomplete="off" oninput="window.calcularTotalesSistemaForm()" readonly onfocus="this.removeAttribute('readonly')" onblur="this.setAttribute('readonly', '')" onmousedown="this.removeAttribute('readonly')" ontouchstart="this.removeAttribute('readonly')" style="width:90px; background:#1e293b; color:#a855f7; border:1px dashed #a855f7; border-radius:6px; padding:5px 8px; font-size:13px; font-weight:700; box-sizing:border-box;">
+    </div>
+
+    <button type="button" class="btn-agregar-sel-slot" onclick="window.agregarSeleccionAlSlotSistema(this)"
+      style="align-self:flex-start; font-size:11px; padding:3px 10px; background:#a855f7; color:white; font-weight:bold; border-radius:4px; border:none; cursor:pointer; margin-top:4px;">➕ Agregar jugada (Crear Apuesta)</button>
+  `;
+  requestAnimationFrame(() => {
+    slot.querySelectorAll("input[type='text'], input[type='number']").forEach(i => { i.value = ""; });
+  });
+  habilitarAutocompleteMlb(slot);
+  return slot;
+}
+
+function inicializarSistemaSlots() {
+  const container = document.getElementById("eventosSistemaContainer");
+  if (!container) return;
+  if (container.querySelectorAll(".sistema-slot").length === 0) {
+    for (let i = 0; i < 3; i++) {
+      container.appendChild(crearSlotSistema(i + 1));
+    }
+  }
+  actualizarSlotsSistema();
+}
+
+window.eliminarSlotSistema = function (btn) {
+  const container = document.getElementById("eventosSistemaContainer");
+  if (!container) return;
+
+  const slots = container.querySelectorAll(".sistema-slot");
+  if (slots.length <= SISTEMA_MIN_SELECTIONS) {
+    mostrarModalValidacion([`El sistema necesita al menos ${SISTEMA_MIN_SELECTIONS} selecciones.`]);
+    return;
+  }
+
+  btn.closest(".sistema-slot")?.remove();
+  actualizarSlotsSistema();
+};
+
+window.agregarSeleccionAlSlotSistema = function (btn) {
+  const slot = btn.closest(".sistema-slot");
+  const container = slot.querySelector(".selections-container");
+  const existingRows = container.querySelectorAll(".selection-row");
+  const num = existingRows.length + 1;
+
+  existingRows.forEach((r, i) => {
+    const inp = r.querySelector(".jugada-jug-input");
+    if (inp) inp.placeholder = `Jugada #${i + 1}`;
+    const delBtn = r.querySelector(".btn-eliminar-selection");
+    if (delBtn) delBtn.style.display = "inline-block";
+  });
+
+  const div = document.createElement("div");
+  div.innerHTML = crearFilaSeleccionHTML(num, true);
+  const row = div.firstElementChild;
+  row.querySelector(".btn-eliminar-selection").style.display = "inline-block";
+  container.appendChild(row);
+  habilitarAutocompleteMlb(row);
+  row.querySelector(".jugada-jug-input").focus();
+};
+
 
 function crearSlotCrearApuesta(num) {
   const slot = document.createElement("div");
@@ -3247,6 +3484,7 @@ async function agregarApuesta() {
   const isCombinada = tipoApuesta === "combinada";
   const isPatente = tipoApuesta === "patente";
   const isDobles = tipoApuesta === "dobles";
+  const isSistema = tipoApuesta === "sistema";
   const isCrearApuesta = tipoApuesta === "crear_apuesta";
   const isCrearApuestaSimple = tipoApuesta === "crear_apuesta_simple";
   const isSimpleOptionBet = tipoApuesta === "simple_option_bet";
@@ -3255,8 +3493,8 @@ async function agregarApuesta() {
   if (!fecha) errores.push("Rellena la fecha.");
 
   const importeVal = document.getElementById("importe").value.trim();
-  const importe = parseFloat(importeVal);
-  if (tipoApuesta !== "simple" && tipoApuesta !== "crear_apuesta_simple" && tipoApuesta !== "simple_option_bet") {
+  let importe = parseFloat(importeVal);
+  if (tipoApuesta !== "simple" && tipoApuesta !== "crear_apuesta_simple" && tipoApuesta !== "simple_option_bet" && tipoApuesta !== "sistema") {
     if (!importeVal || isNaN(importe) || importe <= 0) {
       errores.push("Rellena el importe (debe ser mayor a 0).");
     }
@@ -3265,8 +3503,61 @@ async function agregarApuesta() {
   let jugadas = [];
   let cuota = 0;
   let evento = "";
+  let sistemaStakes = {};
 
-  if (tipoApuesta === "simple") {
+  if (isSistema) {
+    evento = autocorregirTextoApuesta(document.getElementById("eventoSistema")?.value.trim() || "Sistema");
+    const slots = document.querySelectorAll("#eventosSistemaContainer .sistema-slot");
+
+    if (slots.length < SISTEMA_MIN_SELECTIONS || slots.length > SISTEMA_MAX_SELECTIONS) {
+      errores.push(`El sistema necesita entre ${SISTEMA_MIN_SELECTIONS} y ${SISTEMA_MAX_SELECTIONS} selecciones.`);
+    }
+
+    document.querySelectorAll("#sistemaOpcionesList .sistema-tier-stake-input").forEach(inp => {
+      const tier = inp.dataset.tier;
+      const val = parseFloat(inp.value);
+      if (tier && !isNaN(val) && val > 0) {
+        sistemaStakes[tier] = val;
+      }
+    });
+
+    if (Object.keys(sistemaStakes).length === 0) {
+      errores.push("Ingresa al menos una apuesta unitaria en las opciones de sistema (ej. Dobles, Trebles, etc.).");
+    }
+
+    slots.forEach((slot, idx) => {
+      const n = idx + 1;
+      const ev = autocorregirTextoApuesta(slot.querySelector(".jugada-ev-input")?.value.trim() || "");
+      const cuotaVal = slot.querySelector(".jugada-cuota-input")?.value.trim() || "";
+      const c = parseFloat(cuotaVal);
+
+      if (!ev) errores.push(`Rellena el partido/evento de la selección #${n}.`);
+      if (!cuotaVal || isNaN(c) || c <= 0) errores.push(`Rellena la cuota de la selección #${n} (debe ser mayor a 0).`);
+
+      const selections = [];
+      slot.querySelectorAll(".selection-row .jugada-jug-input").forEach(inp => {
+        const val = inp.value.trim();
+        if (val) selections.push(crearSeleccionDetectada(val, "pendiente", "", ev));
+      });
+
+      if (selections.length === 0) {
+        const singleJug = slot.querySelector(".jugada-jug-input")?.value.trim();
+        if (singleJug) {
+          selections.push(crearSeleccionDetectada(singleJug, "pendiente", "", ev));
+        } else {
+          errores.push(`Rellena la jugada de la selección #${n}.`);
+        }
+      }
+
+      jugadas.push({ ev, c: c || 0, estado: "pendiente", selections });
+    });
+
+    const detalle = calcularDetalleSistema({ jugadas, sistemaStakes });
+    cuota = detalle.cuotaMaximaEquivalente;
+    if (isNaN(importe) || importe <= 0) {
+      importe = detalle.totalImporte;
+    }
+  } else if (tipoApuesta === "simple") {
     // ── SIMPLE (multi-partido dinámico) ──
     const slots = document.querySelectorAll("#eventosSimpleContainer .simple-slot");
     if (slots.length === 0) {
@@ -3726,7 +4017,9 @@ async function agregarApuesta() {
       await addDoc(collection(db, "apuestas"), limpiarUndefinedFirestore({
         ...datosCasa,
         deporte,
-        fecha, evento, jugadas, tipoApuesta, cuota, importe,
+        fecha, evento, jugadas, tipoApuesta,
+        sistemaStakes: isSistema ? sistemaStakes : undefined,
+        cuota, importe,
         resultado,
         autoSync: crearAutoSyncPayload({}, resultado),
         dia, hora: apuestaHora,
@@ -3884,6 +4177,9 @@ async function cambiarEstado(id, nuevoEstado) {
         updatedCuota = a.cuota;
       } else if (a.tipoApuesta === "dobles") {
         a.cuota = calcularCuotaMaximaDobles(a.jugadas);
+        updatedCuota = a.cuota;
+      } else if (a.tipoApuesta === "sistema") {
+        a.cuota = calcularCuotaMaximaSistema(a.jugadas, a.sistemaStakes || {});
         updatedCuota = a.cuota;
       } else if (debeRecalcularCuotaCombinada(a.tipoApuesta)) {
         const cuotaRecalculada = recalcularCuotaCombinada(a.jugadas);
@@ -5454,6 +5750,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
     cuota = calcularCuotaMaximaPatente(nuevasJugadas);
   } else if (apuesta.tipoApuesta === "dobles") {
     cuota = calcularCuotaMaximaDobles(nuevasJugadas);
+  } else if (apuesta.tipoApuesta === "sistema") {
+    cuota = calcularCuotaMaximaSistema(nuevasJugadas, apuesta.sistemaStakes || {});
   } else if (apuesta.tipoApuesta === "simple_option_bet") {
     cuota = calcularCuotaSimpleOptionBet(apuestaTemp) || apuesta.cuota;
   } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
@@ -7078,7 +7376,73 @@ function elegirJuegoFutbolMasReciente(apiGame = null, espnGame = null) {
   return apiGame;
 }
 
+function calcularEstadisticasPorCasa(casaId) {
+  const casa = getCasaPorId(casaId);
+  const apuestasCasa = apuestas.filter(a => apuestaPerteneceCasa(a, casaId));
+
+  let invertido = 0;
+  let retornado = 0;
+  let pendiente = 0;
+  let ganadas = 0;
+  let perdidas = 0;
+  let nulas = 0;
+  let pendientes = 0;
+
+  apuestasCasa.forEach(a => {
+    if (a.resultado === "pendiente") {
+      pendiente += a.importe || 0;
+      pendientes++;
+    } else {
+      invertido += a.importe || 0;
+      retornado += calcularRetornoApuesta(a);
+      if (a.resultado === "ganada") ganadas++;
+      else if (a.resultado === "perdida") perdidas++;
+      else if (a.resultado === "nula") nulas++;
+    }
+  });
+
+  const bankrollInicial = parseFloat(casa.bankrollInicial) || 0;
+  const bankrollAjuste = parseFloat(casa.ajuste) || 0;
+  const balance = retornado - invertido;
+  const bankrollFinal = bankrollInicial + balance + bankrollAjuste - pendiente;
+  const roi = invertido > 0 ? (balance / invertido) * 100 : 0;
+  const totalStats = ganadas + perdidas + nulas + pendientes || 1;
+
+  return {
+    casa,
+    resumen: {
+      invertido,
+      retornado,
+      pendiente,
+      balance,
+      bankrollInicial,
+      bankrollAjuste,
+      bankrollFinal
+    },
+    stats: {
+      ganadas,
+      perdidas,
+      nulas,
+      pendientes,
+      total: ganadas + perdidas + nulas + pendientes,
+      pGanadas: (ganadas / totalStats) * 100,
+      pPerdidas: (perdidas / totalStats) * 100,
+      pNulas: (nulas / totalStats) * 100,
+      pPendientes: (pendientes / totalStats) * 100
+    },
+    roi
+  };
+}
+
 function calcularResumenYEstadisticas() {
+  if (filtroCasaId !== CASA_TODAS_ID) {
+    const datosCasa = calcularEstadisticasPorCasa(filtroCasaId);
+    return {
+      ...datosCasa,
+      desgloseCasas: []
+    };
+  }
+
   let invertido = 0;
   let retornado = 0;
   let pendiente = 0;
@@ -7106,6 +7470,8 @@ function calcularResumenYEstadisticas() {
   const balance = retornado - invertido;
   const totalStats = ganadas + perdidas + nulas + pendientes || 1;
 
+  const desgloseCasas = getCasasRegistradas().map(c => calcularEstadisticasPorCasa(c.id));
+
   return {
     resumen: {
       invertido,
@@ -7126,7 +7492,8 @@ function calcularResumenYEstadisticas() {
       pPerdidas: (perdidas / totalStats) * 100,
       pNulas: (nulas / totalStats) * 100,
       pPendientes: (pendientes / totalStats) * 100
-    }
+    },
+    desgloseCasas
   };
 }
 
@@ -8159,6 +8526,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     cuota = calcularCuotaMaximaPatente(nuevasJugadas);
   } else if (apuesta.tipoApuesta === "dobles") {
     cuota = calcularCuotaMaximaDobles(nuevasJugadas);
+  } else if (apuesta.tipoApuesta === "sistema") {
+    cuota = calcularCuotaMaximaSistema(nuevasJugadas, apuesta.sistemaStakes || {});
   } else if (apuesta.tipoApuesta === "simple_option_bet") {
     cuota = calcularCuotaSimpleOptionBet(apuestaTemp) || apuesta.cuota;
   } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
@@ -8897,7 +9266,7 @@ async function eliminarDia(dia) {
 async function eliminarTodo() {
   const lista = filtroCasaId === CASA_TODAS_ID
     ? [...apuestas]
-    : apuestas.filter(a => getCasaIdApuesta(a) === filtroCasaId);
+    : apuestas.filter(a => apuestaPerteneceCasa(a, filtroCasaId));
 
   if (lista.length === 0) {
     mostrarModalValidacion(["No hay apuestas para eliminar."]);
@@ -9711,8 +10080,9 @@ function _render() {
           const isSimpleOptionBet = a.tipoApuesta === "simple_option_bet";
           const isPatente = a.tipoApuesta === "patente";
           const isDobles = a.tipoApuesta === "dobles";
-          const themeColor = isSimpleBet ? "#00c6ff" : (isSimpleOptionBet ? "#22d3ee" : (isPatente ? "#fb7185" : (isDobles ? "#38bdf8" : "#fbbf24")));
-          const glowColor = isSimpleBet ? "rgba(0,198,255,0.6)" : (isSimpleOptionBet ? "rgba(34,211,238,0.6)" : (isPatente ? "rgba(251,113,133,0.6)" : (isDobles ? "rgba(56,189,248,0.6)" : "rgba(251,191,36,0.6)")));
+          const isSistema = a.tipoApuesta === "sistema";
+          const themeColor = isSimpleBet ? "#00c6ff" : (isSimpleOptionBet ? "#22d3ee" : (isPatente ? "#fb7185" : (isDobles ? "#38bdf8" : (isSistema ? "#a855f7" : "#fbbf24"))));
+          const glowColor = isSimpleBet ? "rgba(0,198,255,0.6)" : (isSimpleOptionBet ? "rgba(34,211,238,0.6)" : (isPatente ? "rgba(251,113,133,0.6)" : (isDobles ? "rgba(56,189,248,0.6)" : (isSistema ? "rgba(168,85,247,0.6)" : "rgba(251,191,36,0.6)"))));
 
           a.jugadas.forEach((j, matchIndex) => {
             const evText = getJugadaEvento(a, j);
@@ -9755,8 +10125,8 @@ function _render() {
               const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
               const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
               const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
-              const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : '');
-              const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : '');
+              const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
+              const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
                 apuestaId: a.id,
                 matchIndex,
@@ -9790,6 +10160,7 @@ function _render() {
                     themeColor === '#22d3ee' ? 'rgba(34,211,238,0.25)' :
                     themeColor === '#fb7185' ? 'rgba(251,113,133,0.25)' : 
                     themeColor === '#38bdf8' ? 'rgba(56,189,248,0.25)' : 
+                    themeColor === '#a855f7' ? 'rgba(168,85,247,0.25)' :
                     themeColor === '#fbbf24' ? 'rgba(251,191,36,0.25)' : 
                     themeColor === '#818cf8' ? 'rgba(129,140,248,0.25)' : 
                     themeColor === '#34d399' ? 'rgba(52,211,153,0.25)' : 
@@ -9837,6 +10208,18 @@ function _render() {
                 Dobles: ${a.jugadas.length} selecciones &middot; ${detalle.totalCombinaciones} comb. &middot; $${detalle.importePorCombinacion.toFixed(2)} c/u &middot; Ganadoras: ${detalle.combinacionesGanadas} &middot; Max: $${detalle.gananciaMaxima.toFixed(2)}
               </div>`;
             })()
+            : isSistema
+            ? (() => {
+              const detalle = calcularDetalleSistema(a);
+              const breakdownKeys = Object.keys(detalle.tiersBreakdown || {});
+              const breakdownText = breakdownKeys.map(k => {
+                const item = detalle.tiersBreakdown[k];
+                return `${item.nombre} (${item.numCombos}x)`;
+              }).join(", ") || `${a.jugadas.length} selecciones`;
+              return `<div style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
+                Sistema: ${a.jugadas.length} selecciones &middot; ${breakdownText} &middot; Max: $${detalle.gananciaMaxima.toFixed(2)}
+              </div>`;
+            })()
             : "";
           celdaEvento = `<div style="text-align: left; min-width: 150px;">
             ${tituloHtml}
@@ -9862,7 +10245,8 @@ function _render() {
         const isCombinada = a.tipoApuesta === "combinada";
         const isPatente = a.tipoApuesta === "patente";
         const isDobles = a.tipoApuesta === "dobles";
-        const isMulti = isCombinada || isPatente || isDobles || isCrear || isCrearSimple || (a.tipoApuesta !== "simple" && a.tipoApuesta !== "simple_option_bet" && a.jugadas && a.jugadas.length > 1);
+        const isSistema = a.tipoApuesta === "sistema";
+        const isMulti = isCombinada || isPatente || isDobles || isSistema || isCrear || isCrearSimple || (a.tipoApuesta !== "simple" && a.tipoApuesta !== "simple_option_bet" && a.jugadas && a.jugadas.length > 1);
 
         let badgeColor = '#fbbf24';
         let borderColor = '#fbbf24';
@@ -9879,6 +10263,11 @@ function _render() {
           borderColor = '#38bdf8';
           boxShadow = '0 0 12px rgba(56,189,248,0.15)';
           subThemeColor = '#38bdf8';
+        } else if (isSistema) {
+          badgeColor = '#a855f7';
+          borderColor = '#a855f7';
+          boxShadow = '0 0 12px rgba(168,85,247,0.15)';
+          subThemeColor = '#a855f7';
         } else if (isCrear) {
           badgeColor = '#818cf8';
           borderColor = '#818cf8';
@@ -9906,6 +10295,7 @@ function _render() {
             class="edit-tipo-select ${a.tipoApuesta}">
             <option value="simple" ${isSimple ? 'selected' : ''}>Simple</option>
             <option value="combinada" ${isCombinada ? 'selected' : ''}>Combinada</option>
+            <option value="sistema" ${isSistema ? 'selected' : ''}>Sistema</option>
             <option value="dobles" ${isDobles ? 'selected' : ''}>Dobles</option>
             <option value="patente" ${isPatente ? 'selected' : ''}>Patente</option>
             <option value="crear_apuesta" ${isCrear ? 'selected' : ''}>Crear Apuesta Combinada</option>
@@ -10048,16 +10438,17 @@ function _render() {
           </tr>
         `;
       } else {
-        if (a.tipoApuesta === "patente" || a.tipoApuesta === "dobles") {
+        if (a.tipoApuesta === "patente" || a.tipoApuesta === "dobles" || a.tipoApuesta === "sistema") {
           const isDoblesType = a.tipoApuesta === "dobles";
-          const rowClass = isDoblesType ? "dobles-table-row" : "patente-table-row";
-          const cellClass = isDoblesType ? "dobles-table-cell" : "patente-table-cell";
-          const cardClass = isDoblesType ? "dobles-card" : "patente-card";
-          const dateClass = isDoblesType ? "dobles-date" : "patente-date";
-          const detailClass = isDoblesType ? "dobles-detail" : "patente-detail";
-          const rowNumClass = isDoblesType ? "dobles-row-numbers" : "patente-row-numbers";
-          const stateClass = isDoblesType ? "dobles-state" : "patente-state";
-          const actionsClass = isDoblesType ? "dobles-actions" : "patente-actions";
+          const isSistemaType = a.tipoApuesta === "sistema";
+          const rowClass = isSistemaType ? "sistema-table-row" : (isDoblesType ? "dobles-table-row" : "patente-table-row");
+          const cellClass = isSistemaType ? "sistema-table-cell" : (isDoblesType ? "dobles-table-cell" : "patente-table-cell");
+          const cardClass = isSistemaType ? "sistema-card" : (isDoblesType ? "dobles-card" : "patente-card");
+          const dateClass = isSistemaType ? "sistema-date" : (isDoblesType ? "dobles-date" : "patente-date");
+          const detailClass = isSistemaType ? "sistema-detail" : (isDoblesType ? "dobles-detail" : "patente-detail");
+          const rowNumClass = isSistemaType ? "sistema-row-numbers" : (isDoblesType ? "dobles-row-numbers" : "patente-row-numbers");
+          const stateClass = isSistemaType ? "sistema-state" : (isDoblesType ? "dobles-state" : "patente-state");
+          const actionsClass = isSistemaType ? "sistema-actions" : (isDoblesType ? "dobles-actions" : "patente-actions");
 
           filas += `
           <tr class="${rowClass}">
@@ -10210,10 +10601,59 @@ function _render() {
   const resumenYStatsRender = calcularResumenYEstadisticas();
   html += renderResumenBankrollHtml(resumenYStatsRender);
   html += renderEstadisticasHtml(resumenYStatsRender.stats);
-
+  if (resumenYStatsRender.desgloseCasas && resumenYStatsRender.desgloseCasas.length > 0) {
+    html += renderDesgloseCasasHtml(resumenYStatsRender.desgloseCasas);
+  }
 
   contenido.innerHTML = html;
   postRenderCompleto();
+}
+
+function renderDesgloseCasasHtml(desgloseCasas = []) {
+  if (!desgloseCasas || desgloseCasas.length === 0) return "";
+
+  const cardsHtml = desgloseCasas.map(d => {
+    const c = d.casa;
+    const r = d.resumen;
+    const s = d.stats;
+    const roiVal = d.roi;
+    const isPositiveBalance = r.balance >= 0;
+
+    return `
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #334155; padding-bottom:8px;">
+          <span style="font-size:15px; font-weight:700; color:#38bdf8;">🏢 ${escapeHtml(c.nombre)}</span>
+          <button onclick="window.cambiarFiltroCasa('${escapeHtml(c.id)}')" style="padding:4px 10px; font-size:11px; font-weight:bold; background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); border-radius:6px; cursor:pointer; transition:0.2s;" title="Filtrar por esta casa">Filtrar</button>
+        </div>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px; color:#cbd5e1; margin-top:2px;">
+          <div>Bankroll Inicial: <strong style="color:white; font-size:13px;">$${r.bankrollInicial.toFixed(2)}</strong></div>
+          <div>Bankroll Final: <strong style="color:white; font-size:13px;">$${r.bankrollFinal.toFixed(2)}</strong></div>
+          <div>Invertido: <strong style="color:white;">$${r.invertido.toFixed(2)}</strong></div>
+          <div>Retornado: <strong style="color:white;">$${r.retornado.toFixed(2)}</strong></div>
+          <div>Balance: <strong style="color:${isPositiveBalance ? '#00ff88' : '#ff4444'}; font-size:13px;">$${r.balance.toFixed(2)}</strong></div>
+          <div>ROI: <strong style="color:${roiVal >= 0 ? '#00ff88' : '#ff4444'}; font-size:13px;">${roiVal.toFixed(2)}%</strong></div>
+        </div>
+
+        <div style="font-size:11px; color:#94a3b8; border-top:1px dashed #334155; padding-top:6px; margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;">
+          <span>Apuestas:</span>
+          <strong style="color:#00ff88;">${s.ganadas} Ganadas</strong>
+          <strong style="color:#ff4444;">${s.perdidas} Perdidas</strong>
+          <strong style="color:#888888;">${s.nulas} Nulas</strong>
+          <strong style="color:white;">${s.pendientes} Pendientes</strong>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="page" style="margin-top:20px;">
+      <h2>🏢 Desglose por Casa de Apuestas</h2>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-top:12px;">
+        ${cardsHtml}
+      </div>
+    </div>
+  `;
 }
 
 function obtenerFechaActualLocal() {
@@ -10407,6 +10847,7 @@ function iniciarApp() {
   tipoApuesta.addEventListener("change", (e) => {
     const valor = e.target.value;
     const esCombinada = valor === "combinada";
+    const esSistema = valor === "sistema";
     const esPatente = valor === "patente";
     const esDobles = valor === "dobles";
     const esCrear = valor === "crear_apuesta";
@@ -10425,6 +10866,7 @@ function iniciarApp() {
     // Show/hide field panels
     document.getElementById("camposSimple").style.display = esSimple ? "flex" : "none";
     document.getElementById("camposCombinada").style.display = esCombinada ? "flex" : "none";
+    document.getElementById("camposSistema").style.display = esSistema ? "flex" : "none";
     document.getElementById("camposDobles").style.display = esDobles ? "flex" : "none";
     document.getElementById("camposPatente").style.display = esPatente ? "flex" : "none";
     document.getElementById("camposCrearApuesta").style.display = esCrear ? "flex" : "none";
@@ -10437,6 +10879,10 @@ function iniciarApp() {
       if (cont.querySelectorAll(".jugada-slot").length === 0) {
         cont.appendChild(crearSlotCombinada(1));
       }
+    }
+
+    if (esSistema) {
+      inicializarSistemaSlots();
     }
 
     if (esDobles) {
@@ -10478,6 +10924,19 @@ function iniciarApp() {
       }
     }
   });
+
+  const btnAgregarSeleccionSistema = document.getElementById("btnAgregarSeleccionSistema");
+  if (btnAgregarSeleccionSistema) {
+    btnAgregarSeleccionSistema.addEventListener("click", () => {
+      const container = document.getElementById("eventosSistemaContainer");
+      if (!container) return;
+      const slots = container.querySelectorAll(".sistema-slot");
+      if (slots.length < SISTEMA_MAX_SELECTIONS) {
+        container.appendChild(crearSlotSistema(slots.length + 1));
+        actualizarSlotsSistema();
+      }
+    });
+  }
 
   // Wire up the "Agregar partido" button for Crear Apuesta
   const btnAgregarPartidoCrear = document.getElementById("btnAgregarPartidoCrear");
@@ -10894,6 +11353,8 @@ window.ajustarEstadisticaFutbol = async function (apuestaId, matchIndex, selInde
     apuesta.cuota = calcularCuotaMaximaPatente(apuesta.jugadas);
   } else if (apuesta.tipoApuesta === "dobles") {
     apuesta.cuota = calcularCuotaMaximaDobles(apuesta.jugadas);
+  } else if (apuesta.tipoApuesta === "sistema") {
+    apuesta.cuota = calcularCuotaMaximaSistema(apuesta.jugadas, apuesta.sistemaStakes || {});
   } else if (debeRecalcularCuotaCombinada(apuesta.tipoApuesta)) {
     const cuota = recalcularCuotaCombinada(apuesta.jugadas);
     if (cuota > 0) apuesta.cuota = cuota;

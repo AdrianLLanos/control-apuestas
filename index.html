@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="estilos/simple-option-bet.css?deploy=local">
 <link rel="stylesheet" href="estilos/patente.css?deploy=local">
 <link rel="stylesheet" href="estilos/dobles.css?deploy=local">
+<link rel="stylesheet" href="estilos/sistema.css?deploy=local">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
 </head>
 
@@ -74,6 +75,7 @@
         <select id="tipoApuesta" class="tipo-select-badge simple">
           <option value="simple">SIMPLE</option>
           <option value="combinada">COMBINADA</option>
+          <option value="sistema">SISTEMA</option>
           <option value="dobles">DOBLES</option>
           <option value="patente">PATENTE</option>
           <option value="crear_apuesta">CREAR APUESTA COMBINADA</option>
@@ -96,6 +98,32 @@
           class="evento-principal-input">
         <div id="eventosContainer" class="jugadas-lista" style="margin-top:4px;"></div>
         <button type="button" id="btnAgregarCampo">➕ Agregar partido</button>
+      </div>
+
+      <!-- ── CAMPOS SISTEMA (ocultos por defecto) ── -->
+      <div id="camposSistema" style="display:none; flex-direction:column; gap:8px;">
+        <input type="text" id="eventoSistema"
+          placeholder="Nombre de la apuesta Sistema (Ej: Sistema MLB)"
+          class="evento-principal-input">
+        <div id="eventosSistemaContainer" class="jugadas-lista" style="margin-top:4px;"></div>
+        <button type="button" id="btnAgregarSeleccionSistema">+ Agregar selección</button>
+
+        <div id="sistemaCalcPanel" class="sistema-calc-panel" style="margin-top:8px; padding:12px; background:#0f172a; border:1px solid #334155; border-radius:8px; display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:13px; font-weight:700; color:#a855f7; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #334155; padding-bottom:6px;">
+            <span>⚡ OPCIONES DE SISTEMA</span>
+            <span style="font-size:11px; color:#94a3b8; font-weight:normal;">Calculado automáticamente</span>
+          </div>
+
+          <div id="sistemaOpcionesList" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- Se generará dinámicamente: Individuales, Dobles, Trebles, Cuátruples, etc. -->
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:12px; color:#94a3b8; border-top:1px dashed #334155; padding-top:8px; margin-top:4px;">
+            <span>Monto Total: <strong id="lblMontoTotalSistema" style="color:#00ff88;">$0.00</strong></span>
+            <span>Ganancia Máxima: <strong id="lblGananciaMaximaSistema" style="color:#00ff88;">$0.00</strong></span>
+            <span>Cuota Máx Eq: <strong id="lblCuotaMaximaSistema" style="color:#fbbf24;">0.000</strong></span>
+          </div>
+        </div>
       </div>
 
       <!-- ── CAMPOS DOBLES (ocultos por defecto) ── -->
