@@ -6115,8 +6115,14 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   if (!suppressSchedule && showAutoMeta && (fechaJuego || autoMlb.horaJuego || autoMlb.gameNumber)) {
     const formattedTime = fechaJuego ? formatFechaJuego(fechaJuego) : "";
     const gameNumText = autoMlb.gameNumber ? `Juego ${autoMlb.gameNumber}` : "";
-    const timeText = formattedTime || (autoMlb.horaJuego ? `🕒 ${autoMlb.horaJuego} hs` : "");
-    const horarioMetaText = gameNumText || timeText;
+    const horaSolo = (autoMlb.horaJuego || (fechaJuego ? obtenerFechaHoraLocalDesdeIso(fechaJuego).hora : "") || selection?.hora || apuesta.hora || "").replace(/\s*hs$/i, "").trim();
+
+    let horarioMetaText = "";
+    if (gameNumText) {
+      horarioMetaText = horaSolo ? `${gameNumText} · ${horaSolo} hs` : gameNumText;
+    } else {
+      horarioMetaText = formattedTime || (horaSolo ? `🕒 ${horaSolo} hs` : "");
+    }
 
     if (horarioMetaText && (!marcadorHtml || estadoPrevio)) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(horarioMetaText)}</div>`;
