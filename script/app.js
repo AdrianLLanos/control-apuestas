@@ -6116,7 +6116,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     const formattedTime = fechaJuego ? formatFechaJuego(fechaJuego) : "";
     const gameNumText = autoMlb.gameNumber ? `Juego ${autoMlb.gameNumber}` : "";
     const timeText = formattedTime || (autoMlb.horaJuego ? `🕒 ${autoMlb.horaJuego} hs` : "");
-    const horarioMetaText = [gameNumText, timeText].filter(Boolean).join(" · ");
+    const horarioMetaText = gameNumText || timeText;
 
     if (horarioMetaText && (!marcadorHtml || estadoPrevio)) {
       horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(horarioMetaText)}</div>`;
