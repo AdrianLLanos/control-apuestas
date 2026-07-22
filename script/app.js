@@ -1339,6 +1339,20 @@ function autocorregirApuestasCargadas(lista = []) {
 
   const hoy = obtenerFechaActualLocal();
   lista.forEach(a => {
+    if (!a.hora) {
+      const horaInferida = (a.jugadas || [])[0]?.autoMlb?.horaJuego ||
+        (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.horaJuego;
+      if (horaInferida) {
+        a.hora = horaInferida;
+      } else {
+        const fechaJuego = (a.jugadas || [])[0]?.autoMlb?.fechaJuego || (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.fechaJuego;
+        if (fechaJuego) {
+          const { hora } = obtenerFechaHoraLocalDesdeIso(fechaJuego);
+          if (hora) a.hora = hora;
+        }
+      }
+    }
+
     if (apuestaPareceMlb(a)) {
       const fecha = a.fecha || a.dia;
       const esHoyOCercano = fecha === hoy || sonFechasCercanas(fecha, hoy);
@@ -1354,9 +1368,10 @@ function autocorregirApuestasCargadas(lista = []) {
 
       const targetHora = a.hora || (a.jugadas || [])[0]?.autoMlb?.horaJuego;
       const fechaJuegoActual = (a.jugadas || [])[0]?.autoMlb?.fechaJuego || (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.fechaJuego;
+      const tieneGamePk = (a.jugadas || []).some(j => j?.autoMlb?.gamePk != null || (j?.selections || []).some(sel => sel?.autoMlb?.gamePk != null));
 
       let horaDesfasada = false;
-      if (targetHora && fechaJuegoActual) {
+      if (targetHora && fechaJuegoActual && !tieneGamePk) {
         const { hora: horaLocalActual } = obtenerFechaHoraLocalDesdeIso(fechaJuegoActual);
         if (horaLocalActual) {
           const [tH, tM] = targetHora.split(":").map(Number);
@@ -3473,6 +3488,101 @@ window.agregarSeleccionAlSlotCrearSimple = function (btn) {
   row.querySelector(".jugada-jug-input").focus();
 };
 
+function resetearFormularioCreacion() {
+  const importeInput = document.getElementById("importe");
+  if (importeInput) {
+    importeInput.value = "";
+    delete importeInput.dataset.fromSistema;
+  }
+  const fechaInput = document.getElementById("fecha");
+  if (fechaInput) fechaInput.value = obtenerFechaActualLocal();
+  const resultadoInput = document.getElementById("resultado");
+  if (resultadoInput) resultadoInput.value = "pendiente";
+
+  // Reset dropdown y clase a SIMPLE
+  const tipoSelect = document.getElementById("tipoApuesta");
+  if (tipoSelect) {
+    tipoSelect.value = "simple";
+    tipoSelect.className = "tipo-select-badge simple";
+  }
+
+  const tarjeta = document.getElementById("tarjetaApuesta");
+  if (tarjeta) {
+    tarjeta.className = "tarjeta-apuesta simple";
+    tarjeta.style.borderColor = "";
+    tarjeta.style.boxShadow = "";
+  }
+
+  // Ocultar todos los paneles y mostrar únicamente camposSimple
+  ["camposSimple", "camposCombinada", "camposSistema", "camposDobles", "camposPatente", "camposCrearApuesta", "camposCrearApuestaSimple", "camposSimpleOptionBet"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (id === "camposSimple") ? "flex" : "none";
+  });
+
+  // Limpiar campos Simple (contenedor dinámico)
+  const simpleCont = document.getElementById("eventosSimpleContainer");
+  if (simpleCont) {
+    simpleCont.innerHTML = "";
+    simpleCont.appendChild(crearSlotSimple(1));
+  }
+
+  // Limpiar campos Sistema
+  const eventoSistema = document.getElementById("eventoSistema");
+  if (eventoSistema) eventoSistema.value = "";
+  const sistemaCont = document.getElementById("eventosSistemaContainer");
+  if (sistemaCont) sistemaCont.innerHTML = "";
+  const sistemaList = document.getElementById("sistemaOpcionesList");
+  if (sistemaList) sistemaList.innerHTML = "";
+  const lblMonto = document.getElementById("lblMontoTotalSistema");
+  if (lblMonto) lblMonto.textContent = "$0.00";
+  const lblGan = document.getElementById("lblGananciaMaximaSistema");
+  if (lblGan) lblGan.textContent = "$0.00";
+  const lblCuota = document.getElementById("lblCuotaMaximaSistema");
+  if (lblCuota) lblCuota.textContent = "0.000";
+
+  // Limpiar campos Dobles
+  const doblesEvento = document.getElementById("eventoDobles");
+  if (doblesEvento) doblesEvento.value = "";
+  const doblesUnitInput = document.getElementById("apuestaUnitariaDobles");
+  if (doblesUnitInput) doblesUnitInput.value = "";
+  const doblesCont = document.getElementById("eventosDoblesContainer");
+  if (doblesCont) doblesCont.innerHTML = "";
+
+  // Limpiar campos Patente
+  const patenteEvento = document.getElementById("eventoPatente");
+  if (patenteEvento) patenteEvento.value = "";
+  const patenteCont = document.getElementById("eventosPatenteContainer");
+  if (patenteCont) patenteCont.innerHTML = "";
+
+  // Limpiar campos Combinada
+  const eventoInput = document.getElementById("evento");
+  if (eventoInput) eventoInput.value = "";
+  const combinadaCont = document.getElementById("eventosContainer");
+  if (combinadaCont) combinadaCont.querySelectorAll(".jugada-slot").forEach(s => s.remove());
+
+  // Limpiar Crear Apuesta Combinada
+  const crearCont = document.getElementById("eventosCrearContainer");
+  if (crearCont) {
+    crearCont.innerHTML = "";
+    crearCont.appendChild(crearSlotCrearApuesta(1));
+  }
+
+  // Limpiar Crear Apuesta Simple
+  const crearSimpleCont = document.getElementById("eventosCrearSimpleContainer");
+  if (crearSimpleCont) {
+    crearSimpleCont.innerHTML = "";
+    crearSimpleCont.appendChild(crearSlotCrearApuestaSimple(1));
+  }
+
+  // Limpiar Simple Option
+  const simpleOptionCont = document.getElementById("eventosSimpleOptionContainer");
+  if (simpleOptionCont) {
+    simpleOptionCont.innerHTML = "";
+    simpleOptionCont.appendChild(crearSlotSimpleOption(1));
+  }
+}
+window.resetearFormularioCreacion = resetearFormularioCreacion;
+
 /* =========================
    AGREGAR APUESTA
    ========================= */
@@ -4049,74 +4159,7 @@ async function agregarApuesta() {
   }
 
   // ── Reset form ──
-  document.getElementById("importe").value = "";
-  document.getElementById("fecha").value = obtenerFechaActualLocal();
-  document.getElementById("resultado").value = "pendiente";
-
-  // Reset to SIMPLE
-  document.getElementById("tipoApuesta").value = "simple";
-  document.getElementById("tipoApuesta").className = "tipo-select-badge simple";
-  document.getElementById("tarjetaApuesta").className = "tarjeta-apuesta simple";
-  document.getElementById("tarjetaApuesta").style.borderColor = "";
-  document.getElementById("tarjetaApuesta").style.boxShadow = "";
-  document.getElementById("camposSimple").style.display = "flex";
-  document.getElementById("camposCombinada").style.display = "none";
-  document.getElementById("camposDobles").style.display = "none";
-  document.getElementById("camposPatente").style.display = "none";
-  document.getElementById("camposCrearApuesta").style.display = "none";
-  document.getElementById("camposCrearApuestaSimple").style.display = "none";
-  document.getElementById("camposSimpleOptionBet").style.display = "none";
-
-  // Clear simple fields (dynamic container)
-  const simpleCont = document.getElementById("eventosSimpleContainer");
-  if (simpleCont) {
-    simpleCont.innerHTML = "";
-    simpleCont.appendChild(crearSlotSimple(1));
-  }
-
-  // Clear crear apuesta combinada fields
-  const crearCont = document.getElementById("eventosCrearContainer");
-  if (crearCont) {
-    crearCont.innerHTML = "";
-    crearCont.appendChild(crearSlotCrearApuesta(1));
-  }
-
-  // Clear crear apuesta simple fields
-  const crearSimpleCont = document.getElementById("eventosCrearSimpleContainer");
-  if (crearSimpleCont) {
-    crearSimpleCont.innerHTML = "";
-    crearSimpleCont.appendChild(crearSlotCrearApuestaSimple(1));
-  }
-
-  const simpleOptionCont = document.getElementById("eventosSimpleOptionContainer");
-  if (simpleOptionCont) {
-    simpleOptionCont.innerHTML = "";
-    simpleOptionCont.appendChild(crearSlotSimpleOption(1));
-  }
-
-  // Clear dobles fields
-  const doblesEvento = document.getElementById("eventoDobles");
-  if (doblesEvento) doblesEvento.value = "";
-  const doblesUnitInput = document.getElementById("apuestaUnitariaDobles");
-  if (doblesUnitInput) doblesUnitInput.value = "";
-  const doblesCont = document.getElementById("eventosDoblesContainer");
-  if (doblesCont) {
-    doblesCont.innerHTML = "";
-    inicializarDoblesSlots();
-  }
-
-  // Clear patente fields
-  const patenteEvento = document.getElementById("eventoPatente");
-  if (patenteEvento) patenteEvento.value = "";
-  const patenteCont = document.getElementById("eventosPatenteContainer");
-  if (patenteCont) {
-    patenteCont.innerHTML = "";
-    inicializarPatenteSlots();
-  }
-
-  // Clear combinada fields
-  document.getElementById("evento").value = "";
-  document.getElementById("eventosContainer").querySelectorAll(".jugada-slot").forEach(s => s.remove());
+  resetearFormularioCreacion();
 
   // Sincronizar hora automáticamente desde la API solo si la apuesta es de hoy
   if (dia === obtenerFechaActualLocal()) {
@@ -4995,21 +5038,7 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
       const estadoDetallado = gameByPk?.status?.detailedState || gameByPk?.status?.abstractGameState || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esEstadoJuegoReembolso(estadoDetallado);
 
-      let horaCoincide = true;
-      if (targetHora && candidatos.length > 1) {
-        const iso = gameByPk.gameDate || gameByPk.date;
-        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
-        if (hora) {
-          const [tH, tM] = targetHora.split(":").map(Number);
-          const [gH, gM] = hora.split(":").map(Number);
-          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
-          if (diffMins > 90) {
-            horaCoincide = false;
-          }
-        }
-      }
-
-      if (!esPospuestoOtraFecha && horaCoincide) {
+      if (!esPospuestoOtraFecha) {
         return gameByPk;
       }
     }
@@ -5087,21 +5116,7 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
       const statusText = gameById?.status?.type?.name || gameById?.status?.type?.description || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esEstadoJuegoReembolso(statusText);
 
-      let horaCoincide = true;
-      if (targetHora && candidatos.length > 1) {
-        const iso = gameById.date || gameById.competitions?.[0]?.date;
-        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
-        if (hora) {
-          const [tH, tM] = targetHora.split(":").map(Number);
-          const [gH, gM] = hora.split(":").map(Number);
-          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
-          if (diffMins > 90) {
-            horaCoincide = false;
-          }
-        }
-      }
-
-      if (!esPospuestoOtraFecha && horaCoincide) {
+      if (!esPospuestoOtraFecha) {
         return gameById;
       }
     }
@@ -6097,10 +6112,14 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : "";
 
   let horaHtml = "";
-  if (_syncMlbActivado && !suppressSchedule && showAutoMeta && fechaJuego && estadoPrevio) {
-    const formattedTime = formatFechaJuego(fechaJuego);
-    if (formattedTime) {
-      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(formattedTime)}</div>`;
+  if (!suppressSchedule && showAutoMeta && (fechaJuego || autoMlb.horaJuego || autoMlb.gameNumber)) {
+    const formattedTime = fechaJuego ? formatFechaJuego(fechaJuego) : "";
+    const gameNumText = autoMlb.gameNumber ? `Juego ${autoMlb.gameNumber}` : "";
+    const timeText = formattedTime || (autoMlb.horaJuego ? `🕒 ${autoMlb.horaJuego} hs` : "");
+    const horarioMetaText = [gameNumText, timeText].filter(Boolean).join(" · ");
+
+    if (horarioMetaText && (!marcadorHtml || estadoPrevio)) {
+      horaHtml = `<div class="auto-mlb-score auto-mlb-score--status">${escapeHtml(horarioMetaText)}</div>`;
     }
   }
 
@@ -9896,6 +9915,36 @@ function postRenderCompleto() {
   programarScrollUltimoDiaAgregado();
 }
 
+function getHoraBetDisplay(apuesta = {}) {
+  if (apuesta.hora && String(apuesta.hora).trim()) {
+    const raw = String(apuesta.hora).trim();
+    return raw.includes("hs") ? raw : `${raw} hs`;
+  }
+  const jugadas = apuesta.jugadas || [];
+  for (const j of jugadas) {
+    const autoMlb = j?.autoMlb || j?.selections?.[0]?.autoMlb;
+    if (autoMlb?.horaJuego) return `${autoMlb.horaJuego} hs`;
+    if (autoMlb?.fechaJuego) {
+      const { hora } = obtenerFechaHoraLocalDesdeIso(autoMlb.fechaJuego);
+      if (hora) return `${hora} hs`;
+    }
+    const autoFutbol = j?.autoFutbol || j?.selections?.[0]?.autoFutbol;
+    if (autoFutbol?.fechaJuego) {
+      const { hora } = obtenerFechaHoraLocalDesdeIso(autoFutbol.fechaJuego);
+      if (hora) return `${hora} hs`;
+    }
+  }
+  return "";
+}
+
+function renderFechaYHoraCeldaHtml(apuesta = {}, fechaFormateada = "") {
+  const horaDisplay = getHoraBetDisplay(apuesta);
+  const horaHtml = horaDisplay
+    ? `<div style="font-size:11px; color:#94a3b8; font-weight:600; margin-top:2px; display:flex; align-items:center; justify-content:center; gap:3px;"><span>🕒</span> <span>${escapeHtml(horaDisplay)}</span></div>`
+    : "";
+  return `${fechaFormateada}${horaHtml}<br>${getCasaBadgeHtml(apuesta)}`;
+}
+
 function _render() {
   const contenido = document.getElementById("contenido");
   if (!contenido) return;
@@ -10378,7 +10427,7 @@ function _render() {
 
         filas += `
           <tr>
-            <td>${fechaFormateada}<br>${getCasaBadgeHtml(a)}</td>
+            <td>${renderFechaYHoraCeldaHtml(a, fechaFormateada)}</td>
             <td colspan="5" class="apuesta-edit-cell">
               <div class="apuesta-edit-card ${a.tipoApuesta}" id="edit-tarjeta-${a.id}">
                 <div class="apuesta-edit-header">
@@ -10454,7 +10503,7 @@ function _render() {
           <tr class="${rowClass}">
             <td colspan="7" class="${cellClass}">
               <div class="${cardClass}">
-                <div class="${dateClass}">${fechaFormateada}<br>${getCasaBadgeHtml(a)}</div>
+                <div class="${dateClass}">${renderFechaYHoraCeldaHtml(a, fechaFormateada)}</div>
                 <div class="${detailClass}">
                   ${celdaEvento}
                   <div class="${rowNumClass}">
@@ -10543,7 +10592,7 @@ function _render() {
             : "";
           filas += `
           <tr data-apuesta-row="${a.id}" class="${simpleOptionNoticeRow ? "simple-option-main-row" : ""}">
-            <td>${fechaFormateada}<br>${getCasaBadgeHtml(a)}</td>
+            <td>${renderFechaYHoraCeldaHtml(a, fechaFormateada)}</td>
             <td>${celdaEvento}</td>
             <td data-cuota-cell="${a.id}">${formatDecimal(a.cuota)}</td>
             <td>$${formatDecimal(a.importe)}</td>
@@ -10914,6 +10963,11 @@ function iniciarApp() {
       if (cont.querySelectorAll(".simple-option-slot").length === 0) {
         cont.appendChild(crearSlotSimpleOption(1));
       }
+    }
+
+    if (!esSistema) {
+      const mainImp = document.getElementById("importe");
+      if (mainImp) delete mainImp.dataset.fromSistema;
     }
 
     // When switching to SIMPLE, create one slot if container is empty
