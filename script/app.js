@@ -4557,7 +4557,7 @@ function formatFechaJuego(fechaJuegoStr, fechaBet = "") {
       d.getFullYear() === hoyObj.getFullYear() &&
       d.getMonth() === hoyObj.getMonth() &&
       d.getDate() === hoyObj.getDate()
-    );
+    ) || sonFechasCercanas(fechaLocalJuego, hoyStr);
 
     const horaFinal = hora || d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     if (esHoy) {
@@ -9953,11 +9953,7 @@ function getHoraBetDisplay(apuesta = {}) {
 }
 
 function renderFechaYHoraCeldaHtml(apuesta = {}, fechaFormateada = "") {
-  const horaDisplay = getHoraBetDisplay(apuesta);
-  const horaHtml = horaDisplay
-    ? `<div style="font-size:11px; color:#94a3b8; font-weight:600; margin-top:2px; display:flex; align-items:center; justify-content:center; gap:3px;"><span>🕒</span> <span>${escapeHtml(horaDisplay)}</span></div>`
-    : "";
-  return `${fechaFormateada}${horaHtml}<br>${getCasaBadgeHtml(apuesta)}`;
+  return `${fechaFormateada}<br>${getCasaBadgeHtml(apuesta)}`;
 }
 
 function _render() {
