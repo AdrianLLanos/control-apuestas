@@ -4544,21 +4544,34 @@ function obtenerFechaLocalEvent(event) {
   }
 }
 
-function formatFechaJuego(fechaJuegoStr) {
+function formatFechaJuego(fechaJuegoStr, fechaBet = "") {
   if (!fechaJuegoStr) return "";
   try {
     const d = new Date(fechaJuegoStr);
     if (Number.isNaN(d.getTime())) return "";
-    const hoy = new Date();
-    const esHoy = d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate();
     
-    const hora = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const { fecha: fechaLocalJuego, hora } = obtenerFechaHoraLocalDesdeIso(fechaJuegoStr);
+    const hoyStr = obtenerFechaActualLocal();
+    const hoyObj = new Date();
+    const esHoy = (fechaLocalJuego === hoyStr) || (fechaBet && fechaBet === hoyStr) || (
+      d.getFullYear() === hoyObj.getFullYear() &&
+      d.getMonth() === hoyObj.getMonth() &&
+      d.getDate() === hoyObj.getDate()
+    );
+
+    const horaFinal = hora || d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     if (esHoy) {
-      return `Hoy a las ${hora}`;
+      return `Hoy a las ${horaFinal}`;
+    }
+    if (fechaLocalJuego) {
+      const parts = fechaLocalJuego.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]} a las ${horaFinal}`;
+      }
     }
     const dia = String(d.getDate()).padStart(2, '0');
     const mes = String(d.getMonth() + 1).padStart(2, '0');
-    return `${dia}/${mes} a las ${hora}`;
+    return `${dia}/${mes} a las ${horaFinal}`;
   } catch (e) {
     return "";
   }
@@ -6113,9 +6126,10 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
 
   let horaHtml = "";
   if (!suppressSchedule && showAutoMeta && (fechaJuego || autoMlb.horaJuego || autoMlb.gameNumber)) {
-    const formattedTime = fechaJuego ? formatFechaJuego(fechaJuego) : "";
+    const fechaBet = options?.apuesta?.fecha || options?.apuesta?.dia || (typeof apuesta !== 'undefined' ? (apuesta?.fecha || apuesta?.dia) : "") || "";
+    const formattedTime = fechaJuego ? formatFechaJuego(fechaJuego, fechaBet) : "";
     const gameNumText = autoMlb.gameNumber ? `Juego ${autoMlb.gameNumber}` : "";
-    const horaSolo = (autoMlb.horaJuego || (fechaJuego ? obtenerFechaHoraLocalDesdeIso(fechaJuego).hora : "") || selection?.hora || apuesta.hora || "").replace(/\s*hs$/i, "").trim();
+    const horaSolo = (autoMlb.horaJuego || (fechaJuego ? obtenerFechaHoraLocalDesdeIso(fechaJuego).hora : "") || selection?.hora || (typeof apuesta !== 'undefined' ? apuesta?.hora : "") || "").replace(/\s*hs$/i, "").trim();
     const timeText = formattedTime || (horaSolo ? `Hoy a las ${horaSolo}` : "");
     const horarioMetaText = [gameNumText, timeText].filter(Boolean).join(" · ");
 
