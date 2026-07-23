@@ -5024,7 +5024,7 @@ async function verificarDobleJornadaEnSlot(input) {
   }
 }
 
-function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk = null, targetHora = "") {
+function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk = null, targetHora = "", targetGameNumber = null) {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
@@ -5051,10 +5051,24 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
       const estadoDetallado = gameByPk?.status?.detailedState || gameByPk?.status?.abstractGameState || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esEstadoJuegoReembolso(estadoDetallado);
 
-      if (!esPospuestoOtraFecha) {
+      const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
+        Number(gameByPk?.gameNumber) === Number(targetGameNumber) ||
+        [...candidatos].sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0)).indexOf(gameByPk) === (Number(targetGameNumber) - 1)
+      );
+
+      if (!esPospuestoOtraFecha && gameNumberValido) {
         return gameByPk;
       }
     }
+  }
+
+  if (candidatos.length > 1 && targetGameNumber) {
+    const gameByNumber = candidatos.find(g => Number(g.gameNumber) === Number(targetGameNumber));
+    if (gameByNumber) return gameByNumber;
+
+    const ordenados = [...candidatos].sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0));
+    const gameByIndex = ordenados[Number(targetGameNumber) - 1];
+    if (gameByIndex) return gameByIndex;
   }
 
   if (juegosFechaExacta.length === 1) {
@@ -5103,7 +5117,7 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
   return cercanosActivos[0] || juegosCercanos[0];
 }
 
-function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspnId = null, targetHora = "") {
+function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspnId = null, targetHora = "", targetGameNumber = null) {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
   const buscados = equipos.map(normalizarClaveMlb);
 
@@ -5129,10 +5143,20 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
       const statusText = gameById?.status?.type?.name || gameById?.status?.type?.description || "";
       const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esEstadoJuegoReembolso(statusText);
 
-      if (!esPospuestoOtraFecha) {
+      const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
+        [...candidatos].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)).indexOf(gameById) === (Number(targetGameNumber) - 1)
+      );
+
+      if (!esPospuestoOtraFecha && gameNumberValido) {
         return gameById;
       }
     }
+  }
+
+  if (candidatos.length > 1 && targetGameNumber) {
+    const ordenados = [...candidatos].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    const gameByIndex = ordenados[Number(targetGameNumber) - 1];
+    if (gameByIndex) return gameByIndex;
   }
 
   if (juegosFechaExacta.length === 1) {
@@ -5585,8 +5609,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
       ) {
         huboCambioMetadata = true;
       }
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
       const estadoEspecialMlb = getEstadoEspecialMlb(game);
       const estadoEspecialEspn = getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard");
       const estadoEspecial = (game && !estadoEspecialMlb)
@@ -5731,7 +5755,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
       const totalAuto = selections.find(sel => ["total_carreras", "total_hits"].includes(sel.autoMlb?.mercado))?.autoMlb;
-      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet, totalAuto.gamePk, totalAuto.horaJuego || totalAuto.hora || apuesta.hora) : null;
+      const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet, totalAuto.gamePk, totalAuto.horaJuego || totalAuto.hora || apuesta.hora, totalAuto.gameNumber) : null;
       const marcador = game ? getMarcadorMlb(game) : null;
       const finalizado = game ? juegoMlbFinalizado(game) : false;
       const totalObjetivo = getTotalObjetivoAutoMlb(totalAuto, marcador);
@@ -5851,8 +5875,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
       }
       const { autoFutbol, ...selMlb } = sel;
 
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora);
+      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
       const isoJuego = game?.gameDate || espnGame?.date || autoMlb.fechaJuego || "";
       const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
       if (!primeraHora && hora) primeraHora = hora;
@@ -5900,8 +5924,8 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
     };
     const autoJugada = jugada.autoMlb || (equiposMlb.length >= 2 ? { deporte: "mlb", equipos: equiposMlb.slice(0, 2) } : null);
     if (autoJugada) {
-      const game = buscarJuegoMlb(juegosFecha, autoJugada.equipos, fechaBet, autoJugada.gamePk, autoJugada.horaJuego || autoJugada.hora || apuesta.hora);
-      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoJugada.equipos, fechaBet, autoJugada.espnId, autoJugada.horaJuego || autoJugada.hora || apuesta.hora);
+      const game = buscarJuegoMlb(juegosFecha, autoJugada.equipos, fechaBet, autoJugada.gamePk, autoJugada.horaJuego || autoJugada.hora || apuesta.hora, autoJugada.gameNumber);
+      const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoJugada.equipos, fechaBet, autoJugada.espnId, autoJugada.horaJuego || autoJugada.hora || apuesta.hora, autoJugada.gameNumber);
       const isoJuego = game?.gameDate || espnGame?.date || autoJugada.fechaJuego || "";
       const { hora } = obtenerFechaHoraLocalDesdeIso(isoJuego);
       if (!primeraHora && hora) primeraHora = hora;
