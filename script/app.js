@@ -10191,55 +10191,106 @@ function _render() {
             const jugadaRender = (typeof j === "object" && j) ? { ...j, selections } : { selections };
             const suppressScheduleForMatch = jugadaTieneResultadoAutoVisible(jugadaRender);
 
-            const selectionsHtml = selections.map((sel, selIndex) => {
-              const jEstado = getEstadoSeleccionRender(sel, j, evText);
-              const iconHtml = getEstadoSeleccionIconHtml(jEstado);
-              const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+            const selectionsHtml = selections.length > 1
+              ? `
+                <div style="display:flex; flex-direction:column; margin-top:6px; gap:0px;">
+                  ${selections.map((sel, selIndex) => {
+                    const isLastSel = selIndex === selections.length - 1;
+                    const jEstado = getEstadoSeleccionRender(sel, j, evText);
+                    const iconHtml = getEstadoSeleccionIconHtml(jEstado);
+                    const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
-              const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
-              let styleMod = "";
-              if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
+                    const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
+                    let styleMod = "";
+                    if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
 
-              const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
-              const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
-              const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
-              const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
-              const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
-              const forceCornerIcon = /\b(corner|esquina)\b/.test(tituloNormalizado);
-              const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
-              const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
-              const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
-              const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
-              const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
-              const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
-                apuestaId: a.id,
-                matchIndex,
-                selIndex,
-                showAutoMeta: selIndex === selections.length - 1,
-                showFinalStatus: selIndex === selections.length - 1,
-                suppressSchedule: suppressScheduleForMatch,
-                evento: evText,
-                fallbackFechaJuego: fallbackFechaJuegoApuesta
-              });
-              return `
-                <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
-                  ${tituloVisible ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
-                  <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
-                    <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
-                  </div>
-                  ${autoMlbMarcadorHtml}
+                    const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+                    const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
+                    const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
+                    const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
+                    const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
+                    const forceCornerIcon = /\b(corner|esquina)\b/.test(tituloNormalizado);
+                    const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
+                    const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
+                    const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
+                    const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
+                    const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
+                    const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                      apuestaId: a.id,
+                      matchIndex,
+                      selIndex,
+                      showAutoMeta: selIndex === selections.length - 1,
+                      showFinalStatus: selIndex === selections.length - 1,
+                      suppressSchedule: suppressScheduleForMatch,
+                      evento: evText,
+                      fallbackFechaJuego: fallbackFechaJuegoApuesta
+                    });
+
+                    const subDotHtml = `<div style="width:6px; height:6px; background-color:#fbbf24; border-radius:50%; margin-top:5px; z-index:1; box-shadow:0 0 5px rgba(251,191,36,0.6); flex-shrink:0;"></div>`;
+
+                    return `
+                      <div style="display:flex; position:relative; margin-bottom:${isLastSel ? '0' : '10px'}; align-items: flex-start; ${styleMod}">
+                        <div style="width:16px; display:flex; flex-direction:column; align-items:center; flex-shrink:0; align-self: stretch;">
+                          ${subDotHtml}
+                          ${!isLastSel ? `<div style="width:2px; background-color:#fbbf24; flex-grow:1; margin-top:2px; margin-bottom:-12px; opacity:0.75;"></div>` : ''}
+                        </div>
+                        <div style="flex-grow: 1; padding-left: 4px;">
+                          ${tituloVisible ? `<div style="font-size:11px; color:#fbbf24; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
+                          <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
+                            <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
+                          </div>
+                          ${autoMlbMarcadorHtml}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
                 </div>
-              `;
-            }).join('');
+              `
+              : selections.map((sel, selIndex) => {
+                const jEstado = getEstadoSeleccionRender(sel, j, evText);
+                const iconHtml = getEstadoSeleccionIconHtml(jEstado);
+                const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+
+                const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
+                let styleMod = "";
+                if (jEstado === "nula" && !tieneEstadoEspecial) styleMod = "text-decoration: line-through; opacity: 0.6;";
+
+                const selAutoRender = prepararSeleccionAutoFutbolRender(sel, j, evText);
+                const detalleSeleccion = detectarDetalleSeleccionCrear({ ...selAutoRender, evento: evText });
+                const tituloNormalizado = normalizarTextoMercado(detalleSeleccion.titulo);
+                const tieneContextoMlbRender = esContextoMlb(evText, selAutoRender, j, detectarEquiposMlb);
+                const forceGoalIcon = debeForzarIconoGol({ isSimpleOptionBet, tituloNormalizado, contextoMlb: tieneContextoMlbRender });
+                const forceCornerIcon = /\b(corner|esquina)\b/.test(tituloNormalizado);
+                const forceCardIcon = /\btarjetas?\b/.test(tituloNormalizado);
+                const tituloVisible = detalleSeleccion.titulo || sel.titulo || "";
+                const formattedJugada = formatTextWithCorners(detalleSeleccion.jugada || sel.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
+                const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
+                const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
+                const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                  apuestaId: a.id,
+                  matchIndex,
+                  selIndex,
+                  showAutoMeta: selIndex === selections.length - 1,
+                  showFinalStatus: selIndex === selections.length - 1,
+                  suppressSchedule: suppressScheduleForMatch,
+                  evento: evText,
+                  fallbackFechaJuego: fallbackFechaJuegoApuesta
+                });
+                return `
+                  <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
+                    ${tituloVisible ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
+                    <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
+                      <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
+                    </div>
+                    ${autoMlbMarcadorHtml}
+                  </div>
+                `;
+              }).join('');
 
             const formattedEvText = formatTextWithCorners(evText);
-            timelineItems.push({
-              html: `
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                  <div style="font-size:14px; color:#ffffff; font-weight:700; display:flex; align-items:center;">
-                    ${formattedEvText} ${matchCuotaText}
-                  </div>
-                  <div style="padding-left:12px; border-left:1px dashed ${
+            const containerStyle = selections.length > 1
+              ? `padding-left:4px; margin-left:2px; margin-top:2px; padding-bottom:4px;`
+              : `padding-left:12px; border-left:1px dashed ${
                     themeColor === '#00c6ff' ? 'rgba(0,198,255,0.25)' : 
                     themeColor === '#22d3ee' ? 'rgba(34,211,238,0.25)' :
                     themeColor === '#fb7185' ? 'rgba(251,113,133,0.25)' : 
@@ -10249,7 +10300,15 @@ function _render() {
                     themeColor === '#818cf8' ? 'rgba(129,140,248,0.25)' : 
                     themeColor === '#34d399' ? 'rgba(52,211,153,0.25)' : 
                     'rgba(251,191,36,0.25)'
-                  }; margin-left:2px; margin-top:2px; padding-bottom:4px;">
+                  }; margin-left:2px; margin-top:2px; padding-bottom:4px;`;
+
+            timelineItems.push({
+              html: `
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                  <div style="font-size:14px; color:#ffffff; font-weight:700; display:flex; align-items:center;">
+                    ${formattedEvText} ${matchCuotaText}
+                  </div>
+                  <div style="${containerStyle}">
                     ${selectionsHtml}
                     ${optionDetalleHtml}
                   </div>
