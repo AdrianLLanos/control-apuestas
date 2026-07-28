@@ -4822,6 +4822,62 @@ function obtenerFechaHoraLocalDesdeIso(dateStr) {
   }
 }
 
+function parseHoraEnMinutos(horaStr = "") {
+  if (!horaStr) return null;
+  const str = String(horaStr).trim().toLowerCase().replace(/\s*hs$/i, "").trim();
+
+  const match12 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const ampm = match12[3];
+    if (ampm) {
+      const isPm = ampm.toLowerCase() === "pm";
+      const isAm = ampm.toLowerCase() === "am";
+      if (isPm && h < 12) h += 12;
+      if (isAm && h === 12) h = 0;
+    }
+    return h * 60 + m;
+  }
+
+  const matchSimple = str.match(/^(\d{1,2})\s*(am|pm)$/i);
+  if (matchSimple) {
+    let h = parseInt(matchSimple[1], 10);
+    const ampm = matchSimple[2];
+    if (ampm.toLowerCase() === "pm" && h < 12) h += 12;
+    if (ampm.toLowerCase() === "am" && h === 12) h = 0;
+    return h * 60;
+  }
+
+  return null;
+}
+
+function seleccionarMejorJuegoPorHora(pool = [], targetHora = "") {
+  if (!Array.isArray(pool) || pool.length === 0) return null;
+  if (pool.length === 1) return pool[0];
+
+  const targetMins = parseHoraEnMinutos(targetHora);
+  if (targetMins === null) return pool[0];
+
+  let mejorJuego = pool[0];
+  let minDiff = Infinity;
+
+  for (const game of pool) {
+    const iso = game.gameDate || game.date || game.competitions?.[0]?.date || game.fixture?.date;
+    const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
+    const gameMins = parseHoraEnMinutos(hora);
+    if (gameMins !== null) {
+      const diff = Math.abs(gameMins - targetMins);
+      if (diff < minDiff) {
+        minDiff = diff;
+        mejorJuego = game;
+      }
+    }
+  }
+
+  return mejorJuego;
+}
+
 async function cargarJuegosMlbPorFecha(fecha) {
   const timezone = getSportsTimezone();
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore,boxscore&timeZone=${encodeURIComponent(timezone)}`;
@@ -5326,29 +5382,7 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
   if (juegosFechaExacta.length > 1) {
     const activos = juegosFechaExacta.filter(g => !esEstadoJuegoReembolso(g?.status?.detailedState || g?.status?.abstractGameState || ""));
     const pool = activos.length > 0 ? activos : juegosFechaExacta;
-
-    if (targetHora) {
-      let mejorJuego = pool[0];
-      let minDiff = Infinity;
-      const [tH, tM] = targetHora.split(":").map(Number);
-      const targetMins = (tH || 0) * 60 + (tM || 0);
-
-      for (const game of pool) {
-        const iso = game.gameDate || game.date;
-        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
-        if (hora) {
-          const [gH, gM] = hora.split(":").map(Number);
-          const gameMins = gH * 60 + gM;
-          const diff = Math.abs(gameMins - targetMins);
-          if (diff < minDiff) {
-            minDiff = diff;
-            mejorJuego = game;
-          }
-        }
-      }
-      return mejorJuego;
-    }
-    return pool[0];
+    return seleccionarMejorJuegoPorHora(pool, targetHora);
   }
 
   const juegosCercanos = juegosEquipos.filter(game => {
@@ -5365,7 +5399,7 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
   if (juegosCercanos.length === 0) return null;
 
   const cercanosActivos = juegosCercanos.filter(g => !esEstadoJuegoReembolso(g?.status?.detailedState || g?.status?.abstractGameState || ""));
-  return cercanosActivos[0] || juegosCercanos[0];
+  return seleccionarMejorJuegoPorHora(cercanosActivos.length > 0 ? cercanosActivos : juegosCercanos, targetHora);
 }
 
 function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspnId = null, targetHora = "", targetGameNumber = null) {
@@ -5439,29 +5473,7 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
       return !esEstadoJuegoReembolso(statusText);
     });
     const pool = activos.length > 0 ? activos : juegosFechaExacta;
-
-    if (targetHora) {
-      let mejorJuego = pool[0];
-      let minDiff = Infinity;
-      const [tH, tM] = targetHora.split(":").map(Number);
-      const targetMins = (tH || 0) * 60 + (tM || 0);
-
-      for (const event of pool) {
-        const iso = event.date || event.competitions?.[0]?.date;
-        const { hora } = obtenerFechaHoraLocalDesdeIso(iso);
-        if (hora) {
-          const [gH, gM] = hora.split(":").map(Number);
-          const gameMins = gH * 60 + gM;
-          const diff = Math.abs(gameMins - targetMins);
-          if (diff < minDiff) {
-            minDiff = diff;
-            mejorJuego = event;
-          }
-        }
-      }
-      return mejorJuego;
-    }
-    return pool[0];
+    return seleccionarMejorJuegoPorHora(pool, targetHora);
   }
 
   const juegosCercanos = juegosEquipos.filter(event => {
@@ -5482,7 +5494,7 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
     const statusText = event?.status?.type?.name || event?.status?.type?.description || "";
     return !esEstadoJuegoReembolso(statusText);
   });
-  return cercanosActivos[0] || juegosCercanos[0];
+  return seleccionarMejorJuegoPorHora(cercanosActivos.length > 0 ? cercanosActivos : juegosCercanos, targetHora);
 }
 
 function getOrdenMarcadorMlbSegunEvento(evento = "", marcador) {
@@ -7557,36 +7569,43 @@ function textoJuegoContieneEquiposFutbol(game = {}, equipos = []) {
   });
 }
 
-function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "") {
+function buscarJuegoFutbol(juegos = [], equipos = [], fechaBet = "", targetHora = "") {
   if (!Array.isArray(equipos) || equipos.length < 2) return null;
 
-  let mejor = { game: null, score: 0 };
-  juegos.forEach(game => {
+  const juegosCandidatos = (juegos || []).filter(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(game);
-      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return;
+      const iso = game.fixture?.date || game.date || game.competitions?.[0]?.date;
+      const { fecha: fechaIso } = obtenerFechaHoraLocalDesdeIso(iso);
+      const esFechaAnterior = (fechaJuego && fechaJuego < fechaBet) || (fechaIso && fechaIso < fechaBet);
+      if (esFechaAnterior && juegoFutbolFinalizado(game)) return false;
+      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
     }
+    return true;
+  });
 
+  let candidatosScored = [];
+  juegosCandidatos.forEach(game => {
     const competitors = getCompetidoresFutbol(game);
     if (competitors.length < 2) return;
 
     const scoreA = Math.max(...competitors.map(c => scoreEquipoFutbol(equipos[0], c)));
     const scoreB = Math.max(...competitors.map(c => scoreEquipoFutbol(equipos[1], c)));
     const total = scoreA + scoreB;
-    if (total > mejor.score && scoreA >= 0.45 && scoreB >= 0.45) {
-      mejor = { game, score: total };
+    if (scoreA >= 0.45 && scoreB >= 0.45) {
+      candidatosScored.push({ game, score: total });
     }
   });
 
-  if (mejor.game) return mejor.game;
+  if (candidatosScored.length > 0) {
+    candidatosScored.sort((a, b) => b.score - a.score);
+    const maxScore = candidatosScored[0].score;
+    const mejores = candidatosScored.filter(item => item.score >= maxScore - 0.05).map(item => item.game);
+    return seleccionarMejorJuegoPorHora(mejores, targetHora);
+  }
 
-  return juegos.find(game => {
-    if (fechaBet) {
-      const fechaJuego = obtenerFechaLocalEvent(game);
-      if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
-    }
-    return textoJuegoContieneEquiposFutbol(game, equipos);
-  }) || null;
+  const fallbacks = juegosCandidatos.filter(game => textoJuegoContieneEquiposFutbol(game, equipos));
+  return seleccionarMejorJuegoPorHora(fallbacks, targetHora);
 }
 
 function getEquiposBusquedaAutoMlb(autoMlb = {}, jugada = {}, evento = "") {
@@ -7598,8 +7617,8 @@ function getEquiposBusquedaAutoMlb(autoMlb = {}, jugada = {}, evento = "") {
   return candidatos.find(equipos => Array.isArray(equipos) && equipos.length >= 2) || [];
 }
 
-function buscarJuegoEspnFutbol(juegos = [], equipos = [], fechaBet = "") {
-  return buscarJuegoFutbol(juegos, equipos, fechaBet);
+function buscarJuegoEspnFutbol(juegos = [], equipos = [], fechaBet = "", targetHora = "") {
+  return buscarJuegoFutbol(juegos, equipos, fechaBet, targetHora);
 }
 
 function autoFutbolTieneDatosJuego(autoFutbol = {}) {
