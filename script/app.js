@@ -5268,7 +5268,11 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
   if (juegosEquipos.length === 0) return null;
 
   const juegosFechaExacta = fechaBet
-    ? juegosEquipos.filter(g => obtenerFechaLocalJuego(g) === fechaBet)
+    ? juegosEquipos.filter(g => {
+        const f1 = obtenerFechaLocalJuego(g);
+        const { fecha: f2 } = obtenerFechaHoraLocalDesdeIso(g.gameDate || g.date);
+        return f1 === fechaBet || f2 === fechaBet;
+      })
     : [];
 
   const candidatos = juegosFechaExacta.length > 0 ? juegosFechaExacta : juegosEquipos;
@@ -5277,27 +5281,31 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
     const gameByPk = candidatos.find(g => Number(g.gamePk) === Number(targetGamePk));
     if (gameByPk) {
       const fechaGameByPk = obtenerFechaLocalJuego(gameByPk);
+      const { fecha: fechaIsoGameByPk } = obtenerFechaHoraLocalDesdeIso(gameByPk.gameDate || gameByPk.date);
+      const coincideFecha = !fechaBet || fechaGameByPk === fechaBet || fechaIsoGameByPk === fechaBet;
       const estadoDetallado = gameByPk?.status?.detailedState || gameByPk?.status?.abstractGameState || "";
       const esPospuesto = esEstadoJuegoReembolso(estadoDetallado);
-      const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esPospuesto;
+      const finalizadoPrevio = !coincideFecha && juegoMlbFinalizado(gameByPk) && (fechaGameByPk < fechaBet || fechaIsoGameByPk < fechaBet);
 
-      if (esPospuesto && candidatos.length > 1) {
-        const juegoActivoDoble = candidatos.find(g =>
-          g !== gameByPk &&
-          !esEstadoJuegoReembolso(g?.status?.detailedState || g?.status?.abstractGameState || "")
-        );
-        if (juegoActivoDoble) {
-          return juegoActivoDoble;
+      if (!finalizadoPrevio) {
+        if (esPospuesto && candidatos.length > 1) {
+          const juegoActivoDoble = candidatos.find(g =>
+            g !== gameByPk &&
+            !esEstadoJuegoReembolso(g?.status?.detailedState || g?.status?.abstractGameState || "")
+          );
+          if (juegoActivoDoble) {
+            return juegoActivoDoble;
+          }
         }
-      }
 
-      const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
-        Number(gameByPk?.gameNumber) === Number(targetGameNumber) ||
-        [...candidatos].sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0)).indexOf(gameByPk) === (Number(targetGameNumber) - 1)
-      );
+        const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
+          Number(gameByPk?.gameNumber) === Number(targetGameNumber) ||
+          [...candidatos].sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0)).indexOf(gameByPk) === (Number(targetGameNumber) - 1)
+        );
 
-      if (!esPospuestoOtraFecha && gameNumberValido && !esPospuesto) {
-        return gameByPk;
+        if (gameNumberValido && !esPospuesto) {
+          return gameByPk;
+        }
       }
     }
   }
@@ -5346,6 +5354,9 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
   const juegosCercanos = juegosEquipos.filter(game => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalJuego(game);
+      const { fecha: fechaIso } = obtenerFechaHoraLocalDesdeIso(game.gameDate || game.date);
+      const esFechaAnterior = (fechaJuego && fechaJuego < fechaBet) || (fechaIso && fechaIso < fechaBet);
+      if (esFechaAnterior && juegoMlbFinalizado(game)) return false;
       if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
     }
     return true;
@@ -5371,7 +5382,12 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
   if (juegosEquipos.length === 0) return null;
 
   const juegosFechaExacta = fechaBet
-    ? juegosEquipos.filter(event => obtenerFechaLocalEvent(event) === fechaBet)
+    ? juegosEquipos.filter(event => {
+        const f1 = obtenerFechaLocalEvent(event);
+        const iso = event.date || event.competitions?.[0]?.date;
+        const { fecha: f2 } = obtenerFechaHoraLocalDesdeIso(iso);
+        return f1 === fechaBet || f2 === fechaBet;
+      })
     : [];
 
   const candidatos = juegosFechaExacta.length > 0 ? juegosFechaExacta : juegosEquipos;
@@ -5380,24 +5396,29 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
     const gameById = candidatos.find(e => String(e.id) === String(targetEspnId));
     if (gameById) {
       const fechaGameById = obtenerFechaLocalEvent(gameById);
+      const iso = gameById.date || gameById.competitions?.[0]?.date;
+      const { fecha: fechaIsoGameById } = obtenerFechaHoraLocalDesdeIso(iso);
+      const coincideFecha = !fechaBet || fechaGameById === fechaBet || fechaIsoGameById === fechaBet;
       const statusText = gameById?.status?.type?.name || gameById?.status?.type?.description || "";
       const esPospuesto = esEstadoJuegoReembolso(statusText);
-      const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esPospuesto;
+      const finalizadoPrevio = !coincideFecha && juegoFutbolFinalizado(gameById) && (fechaGameById < fechaBet || fechaIsoGameById < fechaBet);
 
-      if (esPospuesto && candidatos.length > 1) {
-        const juegoActivoEspn = candidatos.find(e =>
-          e !== gameById &&
-          !esEstadoJuegoReembolso(e?.status?.type?.name || e?.status?.type?.description || "")
+      if (!finalizadoPrevio) {
+        if (esPospuesto && candidatos.length > 1) {
+          const juegoActivoEspn = candidatos.find(e =>
+            e !== gameById &&
+            !esEstadoJuegoReembolso(e?.status?.type?.name || e?.status?.type?.description || "")
+          );
+          if (juegoActivoEspn) return juegoActivoEspn;
+        }
+
+        const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
+          [...candidatos].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)).indexOf(gameById) === (Number(targetGameNumber) - 1)
         );
-        if (juegoActivoEspn) return juegoActivoEspn;
-      }
 
-      const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
-        [...candidatos].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)).indexOf(gameById) === (Number(targetGameNumber) - 1)
-      );
-
-      if (!esPospuestoOtraFecha && gameNumberValido && !esPospuesto) {
-        return gameById;
+        if (gameNumberValido && !esPospuesto) {
+          return gameById;
+        }
       }
     }
   }
@@ -5446,6 +5467,10 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
   const juegosCercanos = juegosEquipos.filter(event => {
     if (fechaBet) {
       const fechaJuego = obtenerFechaLocalEvent(event);
+      const iso = event.date || event.competitions?.[0]?.date;
+      const { fecha: fechaIso } = obtenerFechaHoraLocalDesdeIso(iso);
+      const esFechaAnterior = (fechaJuego && fechaJuego < fechaBet) || (fechaIso && fechaIso < fechaBet);
+      if (esFechaAnterior && juegoFutbolFinalizado(event)) return false;
       if (fechaJuego && !sonFechasCercanas(fechaJuego, fechaBet)) return false;
     }
     return true;
@@ -5952,7 +5977,8 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           esEstadoJuegoReembolso(autoMlb.estadoJuego) ||
           Boolean(autoMlb.estadoEspecial?.reembolso) ||
           autoMlb.estadoEspecial?.tipo === "pospuesto";
-        const nuevoEstadoSel = fueMarcadoReembolsoPrevio ? "pendiente" : estadoAnterior;
+        const juegoCambioOPendiente = juegoNoIniciado || autoMlb.gamePk !== game.gamePk;
+        const nuevoEstadoSel = (fueMarcadoReembolsoPrevio || juegoCambioOPendiente) ? "pendiente" : estadoAnterior;
 
         if (estadoAnterior !== nuevoEstadoSel) {
           huboCambio = true;
