@@ -7,36 +7,36 @@ const withDeployToken = (path) =>
 const { COUNTRY_FLAG_ENTRIES } = await import(withDeployToken("./countries.js?v=1.1"));
 
 export const MLB_TEAMS = [
-  { name: "Arizona Diamondbacks", logo: "arizona-diamondbacks.svg", aliases: ["Arizona Diamondbacks", "Arizona", "Diamondbacks", "D-backs", "Dbacks", "ARI"] },
-  { name: "Oakland Athletics", logo: "athletics.svg", aliases: ["Athletics", "Atletics", "A's", "Oakland", "Oaklands", "Oukland", "Ouklans", "Oakland Athletics", "Oakland Atletics", "Oakland A's", "Oaklands Athletics", "Oaklands Atletics", "Oukland Athletics", "Oukland Atletics", "Ouklans Athletics", "Ouklans Atletics"] },
-  { name: "Atlanta Braves", logo: "atlanta-braves.svg", aliases: ["Atlanta Braves", "Braves", "ATL"] },
-  { name: "Baltimore Orioles", logo: "baltimore-orioles.svg", aliases: ["Baltimore Orioles", "Orioles", "BAL"] },
-  { name: "Boston Red Sox", logo: "boston-red-sox.svg", aliases: ["Boston Red Sox", "Red Sox", "BOS"] },
-  { name: "Chicago Cubs", logo: "chicago-cubs.svg", aliases: ["Chicago Cubs", "Cubs", "CHC"] },
-  { name: "Chicago White Sox", logo: "chicago-white-sox.svg", aliases: ["Chicago White Sox", "White Sox", "Chi White Sox", "CHW", "CWS"] },
-  { name: "Cincinnati Reds", logo: "cincinnati-reds.svg", aliases: ["Cincinnati Reds", "Reds", "CIN"] },
-  { name: "Cleveland Guardians", logo: "cleveland-guardians.svg", aliases: ["Cleveland Guardians", "Guardians", "Cleveland Indians", "Indians", "CLE"] },
-  { name: "Colorado Rockies", logo: "colorado-rockies.svg", aliases: ["Colorado Rockies", "Rockies", "COL"] },
-  { name: "Detroit Tigers", logo: "detroit-tigers.svg", aliases: ["Detroit Tigers", "Tigers", "DET"] },
-  { name: "Houston Astros", logo: "houston-astros.svg", aliases: ["Houston Astros", "Astros", "HOU"] },
-  { name: "Kansas City Royals", logo: "kansas-city-royals.svg", aliases: ["Kansas City Royals", "Royals", "KC"] },
-  { name: "Los Angeles Angels", logo: "los-angeles-angels.svg", aliases: ["Los Angeles Angels", "LA Angels", "Angels", "LAA"] },
-  { name: "Los Angeles Dodgers", logo: "los-angeles-dodgers.svg", aliases: ["Los Angeles Dodgers", "LA Dodgers", "Dodgers", "LAD"] },
-  { name: "Miami Marlins", logo: "miami-marlins.svg", aliases: ["Miami Marlins", "Marlins", "MIA"] },
-  { name: "Milwaukee Brewers", logo: "milwaukee-brewers.svg", aliases: ["Milwaukee Brewers", "Brewers", "MIL"] },
-  { name: "Minnesota Twins", logo: "minnesota-twins.svg", aliases: ["Minnesota Twins", "Twins", "MIN"] },
-  { name: "New York Mets", logo: "new-york-mets.svg", aliases: ["New York Mets", "NY Mets", "Mets", "NYM"] },
-  { name: "New York Yankees", logo: "new-york-yankees.svg", aliases: ["New York Yankees", "NY Yankees", "Yankees", "NYY"] },
-  { name: "Philadelphia Phillies", logo: "philadelphia-phillies.svg", aliases: ["Philadelphia Phillies", "Phillies", "PHI"] },
-  { name: "Pittsburgh Pirates", logo: "pittsburgh-pirates.svg", aliases: ["Pittsburgh Pirates", "Pirates", "PIT"] },
-  { name: "San Diego Padres", logo: "san-diego-padres.svg", aliases: ["San Diego Padres", "Padres", "SD"] },
-  { name: "San Francisco Giants", logo: "san-francisco-giants.svg", aliases: ["San Francisco Giants", "SF Giants", "Giants", "SF"] },
-  { name: "Seattle Mariners", logo: "seattle-mariners.svg", aliases: ["Seattle Mariners", "Mariners", "SEA"] },
-  { name: "St. Louis Cardinals", logo: "st-louis-cardinals.svg", aliases: ["St. Louis Cardinals", "St Louis Cardinals", "Cardinals", "STL"] },
-  { name: "Tampa Bay Rays", logo: "tampa-bay-rays.svg", aliases: ["Tampa Bay Rays", "Rays", "TB"] },
-  { name: "Texas Rangers", logo: "texas-rangers.svg", aliases: ["Texas Rangers", "Rangers", "TEX"] },
-  { name: "Toronto Blue Jays", logo: "toronto-blue-jays.svg", aliases: ["Toronto Blue Jays", "Blue Jays", "TOR"] },
-  { name: "Washington Nationals", logo: "washington-nationals.svg", aliases: ["Washington Nationals", "Nationals", "WSH", "WAS"] }
+  { name: "Arizona Diamondbacks", logo: "arizona-diamondbacks.svg", aliases: ["Arizona Diamondbacks", "Arizona", "Diamondbacks", "D-backs", "Dbacks", "ARI"], pitchers: ["Slade Cecconi", "Zac Gallen", "Merrill Kelly", "Brandon Pfaadt", "Eduardo Rodríguez"] },
+  { name: "Oakland Athletics", logo: "athletics.svg", aliases: ["Athletics", "Atletics", "A's", "Oakland", "Oaklands", "Oukland", "Ouklans", "Oakland Athletics", "Oakland Atletics", "Oakland A's", "Oaklands Athletics", "Oaklands Atletics", "Oukland Athletics", "Oukland Atletics", "Ouklans Athletics", "Ouklans Atletics"], pitchers: ["JP Sears", "Mitch Spence", "Joey Estes", "Osvaldo Bido", "Luis Medina"] },
+  { name: "Atlanta Braves", logo: "atlanta-braves.svg", aliases: ["Atlanta Braves", "Braves", "ATL"], pitchers: ["Chris Sale", "Spencer Strider", "Reynaldo López", "Charlie Morton", "Max Fried"] },
+  { name: "Baltimore Orioles", logo: "baltimore-orioles.svg", aliases: ["Baltimore Orioles", "Orioles", "BAL"], pitchers: ["Corbin Burnes", "Grayson Rodriguez", "Zach Eflin", "Dean Kremer", "Albert Suárez"] },
+  { name: "Boston Red Sox", logo: "boston-red-sox.svg", aliases: ["Boston Red Sox", "Red Sox", "BOS"], pitchers: ["Tanner Houck", "Brayan Bello", "Kutter Crawford", "Lucas Giolito", "Nick Pivetta"] },
+  { name: "Chicago Cubs", logo: "chicago-cubs.svg", aliases: ["Chicago Cubs", "Cubs", "CHC"], pitchers: ["Shota Imanaga", "Justin Steele", "Jameson Taillon", "Javier Assad", "Kyle Hendricks"] },
+  { name: "Chicago White Sox", logo: "chicago-white-sox.svg", aliases: ["Chicago White Sox", "White Sox", "Chi White Sox", "CHW", "CWS"], pitchers: ["Garrett Crochet", "Erick Fedde", "Jonathan Cannon", "Chris Flexen", "Chad Kuhl"] },
+  { name: "Cincinnati Reds", logo: "cincinnati-reds.svg", aliases: ["Cincinnati Reds", "Reds", "CIN"], pitchers: ["Hunter Greene", "Nick Lodolo", "Andrew Abbott", "Nick Martinez", "Frankie Montas"] },
+  { name: "Cleveland Guardians", logo: "cleveland-guardians.svg", aliases: ["Cleveland Guardians", "Guardians", "Cleveland Indians", "Indians", "CLE"], pitchers: ["Slade Cecconi", "Tanner Bibee", "Gavin Williams", "Ben Lively", "Logan Allen"] },
+  { name: "Colorado Rockies", logo: "colorado-rockies.svg", aliases: ["Colorado Rockies", "Rockies", "COL"], pitchers: ["Kyle Freeland", "Cal Quantrill", "Ryan Feltner", "Austin Gomber", "Dakota Hudson"] },
+  { name: "Detroit Tigers", logo: "detroit-tigers.svg", aliases: ["Detroit Tigers", "Tigers", "DET"], pitchers: ["Tarik Skubal", "Jack Flaherty", "Reese Olson", "Keider Montero", "Matt Manning"] },
+  { name: "Houston Astros", logo: "houston-astros.svg", aliases: ["Houston Astros", "Astros", "HOU"], pitchers: ["Framber Valdez", "Justin Verlander", "Hunter Brown", "Ronel Blanco", "Spencer Arrighetti"] },
+  { name: "Kansas City Royals", logo: "kansas-city-royals.svg", aliases: ["Kansas City Royals", "Royals", "KC"], pitchers: ["Cole Ragans", "Seth Lugo", "Michael Wacha", "Brady Singer", "Alec Marsh"] },
+  { name: "Los Angeles Angels", logo: "los-angeles-angels.svg", aliases: ["Los Angeles Angels", "LA Angels", "Angels", "LAA"], pitchers: ["Tyler Anderson", "Griffin Canning", "Patrick Sandoval", "Reid Detmers", "José Soriano"] },
+  { name: "Los Angeles Dodgers", logo: "los-angeles-dodgers.svg", aliases: ["Los Angeles Dodgers", "LA Dodgers", "Dodgers", "LAD"], pitchers: ["Shohei Ohtani", "Tyler Glasnow", "Yoshinobu Yamamoto", "Clayton Kershaw", "Bobby Miller", "Gavin Stone"] },
+  { name: "Miami Marlins", logo: "miami-marlins.svg", aliases: ["Miami Marlins", "Marlins", "MIA"], pitchers: ["Sandy Alcántara", "Eury Pérez", "Jesús Luzardo", "Braxton Garrett", "Edward Cabrera"] },
+  { name: "Milwaukee Brewers", logo: "milwaukee-brewers.svg", aliases: ["Milwaukee Brewers", "Brewers", "MIL"], pitchers: ["Freddy Peralta", "Colin Rea", "Tobias Myers", "Aaron Civale", "DL Hall"] },
+  { name: "Minnesota Twins", logo: "minnesota-twins.svg", aliases: ["Minnesota Twins", "Twins", "MIN"], pitchers: ["Pablo López", "Joe Ryan", "Bailey Ober", "Simeon Woods Richardson", "Chris Paddack"] },
+  { name: "New York Mets", logo: "new-york-mets.svg", aliases: ["New York Mets", "NY Mets", "Mets", "NYM"], pitchers: ["Sean Manaea", "Luis Severino", "David Peterson", "Kodai Senga", "Jose Quintana"] },
+  { name: "New York Yankees", logo: "new-york-yankees.svg", aliases: ["New York Yankees", "NY Yankees", "Yankees", "NYY"], pitchers: ["Gerrit Cole", "Carlos Rodón", "Marcus Stroman", "Luis Gil", "Nestor Cortes"] },
+  { name: "Philadelphia Phillies", logo: "philadelphia-phillies.svg", aliases: ["Philadelphia Phillies", "Phillies", "PHI"], pitchers: ["Zack Wheeler", "Aaron Nola", "Ranger Suárez", "Cristopher Sánchez", "Taijuan Walker"] },
+  { name: "Pittsburgh Pirates", logo: "pittsburgh-pirates.svg", aliases: ["Pittsburgh Pirates", "Pirates", "PIT"], pitchers: ["Paul Skenes", "Mitch Keller", "Jared Jones", "Bailey Falter", "Quinn Priester"] },
+  { name: "San Diego Padres", logo: "san-diego-padres.svg", aliases: ["San Diego Padres", "Padres", "SD"], pitchers: ["Dylan Cease", "Michael King", "Yu Darvish", "Joe Musgrove", "Matt Waldron"] },
+  { name: "San Francisco Giants", logo: "san-francisco-giants.svg", aliases: ["San Francisco Giants", "SF Giants", "Giants", "SF"], pitchers: ["Logan Webb", "Blake Snell", "Kyle Harrison", "Jordan Hicks", "Robbie Ray"] },
+  { name: "Seattle Mariners", logo: "seattle-mariners.svg", aliases: ["Seattle Mariners", "Mariners", "SEA"], pitchers: ["Logan Gilbert", "George Kirby", "Luis Castillo", "Bryan Woo", "Bryce Miller"] },
+  { name: "St. Louis Cardinals", logo: "st-louis-cardinals.svg", aliases: ["St. Louis Cardinals", "St Louis Cardinals", "Cardinals", "STL"], pitchers: ["Sonny Gray", "Erick Fedde", "Kyle Gibson", "Miles Mikolas", "Lance Lynn"] },
+  { name: "Tampa Bay Rays", logo: "tampa-bay-rays.svg", aliases: ["Tampa Bay Rays", "Rays", "TB"], pitchers: ["Shane Baz", "Ryan Pepiot", "Taj Bradley", "Jeffrey Springs", "Zack Littell"] },
+  { name: "Texas Rangers", logo: "texas-rangers.svg", aliases: ["Texas Rangers", "Rangers", "TEX"], pitchers: ["Nathan Eovaldi", "Jacob deGrom", "Jon Gray", "Andrew Heaney", "Cody Bradford"] },
+  { name: "Toronto Blue Jays", logo: "toronto-blue-jays.svg", aliases: ["Toronto Blue Jays", "Blue Jays", "TOR"], pitchers: ["Kevin Gausman", "José Berríos", "Chris Bassitt", "Yariel Rodríguez", "Bowden Francis"] },
+  { name: "Washington Nationals", logo: "washington-nationals.svg", aliases: ["Washington Nationals", "Nationals", "WSH", "WAS"], pitchers: ["MacKenzie Gore", "Jake Irvin", "Mitchell Parker", "DJ Herz", "Trevor Williams"] }
 ];
 
 const MLB_LEAGUE_LOGO = { name: "MLB", logo: "mlb.svg", aliases: ["MLB", "MLN"] };
@@ -583,9 +583,162 @@ function generarOpcionesJugada(eventText, sport) {
 function matchOpcionConPalabras(opcion, query) {
   const queryLower = query.trim().toLowerCase();
   if (!queryLower) return true;
-  const words = queryLower.split(/\s+/);
+  const words = queryLower.split(/\s+/).filter(Boolean);
   const opcionLower = opcion.toLowerCase();
-  return words.every(word => opcionLower.includes(word));
+
+  return words.every(word => {
+    if (opcionLower.includes(word)) return true;
+
+    // Coincidencia flexible de palabras clave para ponches / strikeouts / strikes
+    if (/^(strike|strikes|strikeout|strikeouts|ponche|ponches|so)$/i.test(word)) {
+      return /(strike|strikes|strikeout|strikeouts|ponche|ponches|so)/i.test(opcionLower);
+    }
+
+    // Coincidencia flexible para carreras / runs
+    if (/^(carrera|carreras|run|runs)$/i.test(word)) {
+      return /(carrera|carreras|run|runs)/i.test(opcionLower);
+    }
+
+    return false;
+  });
+}
+
+export const MLB_TOP_PITCHERS = [
+  "Slade Cecconi",
+  "Shohei Ohtani",
+  "Paul Skenes",
+  "Tarik Skubal",
+  "Zack Wheeler",
+  "Gerrit Cole",
+  "Corbin Burnes",
+  "Chris Sale",
+  "Dylan Cease",
+  "Tyler Glasnow",
+  "Shota Imanaga",
+  "Logan Gilbert",
+  "George Kirby",
+  "Framber Valdez",
+  "Blake Snell",
+  "Yoshinobu Yamamoto",
+  "Spencer Strider",
+  "Luis Castillo",
+  "Freddy Peralta",
+  "Sonny Gray",
+  "Aaron Nola",
+  "Kevin Gausman",
+  "Seth Lugo",
+  "Hunter Greene",
+  "Max Fried",
+  "Zach Eflin",
+  "Tanner Houck",
+  "Ranger Suárez",
+  "MacKenzie Gore",
+  "Bryan Woo",
+  "Cole Ragans",
+  "Reynaldo López",
+  "Jack Flaherty",
+  "Nathan Eovaldi",
+  "Michael King",
+  "Pablo López",
+  "Joe Ryan",
+  "Cristopher Sánchez",
+  "Bryce Miller",
+  "Justin Verlander",
+  "Max Scherzer",
+  "Clayton Kershaw",
+  "Carlos Rodón",
+  "Marcus Stroman",
+  "Logan Webb",
+  "Merrill Kelly",
+  "Zac Gallen"
+];
+
+// Extrae posibles nombres de jugador del texto escrito al buscar ponches
+function extraerBusquedaNombreJugador(typed = "") {
+  const limpio = String(typed)
+    .replace(/\b(strike|strikes|strikeout|strikeouts|ponche|ponches|so)\b/gi, "")
+    .replace(/\b(mas|más|menos|over|under)\s*(?:de)?\b/gi, "")
+    .replace(/\b\d+(?:\.\d+)?\+?\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return limpio.length >= 2 ? limpio : "";
+}
+
+// Genera opciones dinámicas para ponches / strikeouts según la búsqueda del usuario
+function generarOpcionesStrikeoutsDinamicas(typed = "", competitors = []) {
+  const nombreDetectado = extraerBusquedaNombreJugador(typed);
+  const pitchersDelPartido = new Set();
+  const otrosPitchers = new Set();
+
+  if (nombreDetectado) {
+    otrosPitchers.add(nombreDetectado);
+  }
+
+  // 1. Extraer los pitchers de los equipos participantes en este partido
+  if (Array.isArray(competitors) && competitors.length > 0) {
+    competitors.forEach(comp => {
+      if (!comp) return;
+      const compKey = normalizeLookupKey(comp);
+      const teamMatch = MLB_TEAMS.find(team =>
+        team.aliases.some(alias => {
+          const aliasKey = normalizeLookupKey(alias);
+          return aliasKey === compKey || aliasKey.includes(compKey) || compKey.includes(aliasKey);
+        })
+      );
+
+      if (teamMatch && Array.isArray(teamMatch.pitchers)) {
+        teamMatch.pitchers.forEach(pitcher => {
+          if (!nombreDetectado || matchOpcionConPalabras(pitcher, nombreDetectado)) {
+            pitchersDelPartido.add(pitcher);
+          }
+        });
+      }
+    });
+  }
+
+  // 2. Agregar el resto de pitchers estrella
+  MLB_TOP_PITCHERS.forEach(pitcher => {
+    if (!pitchersDelPartido.has(pitcher)) {
+      if (!nombreDetectado || matchOpcionConPalabras(pitcher, nombreDetectado)) {
+        otrosPitchers.add(pitcher);
+      }
+    }
+  });
+
+  const arrNombres = [...pitchersDelPartido, ...otrosPitchers];
+  const options = [];
+
+  arrNombres.forEach(nombre => {
+    options.push(
+      `Strikeouts del jugador (${nombre}) 4+`,
+      `Strikeouts del jugador (${nombre}) 5+`,
+      `Strikeouts del jugador (${nombre}) 6+`,
+      `${nombre} 4+ strikes`,
+      `${nombre} 5+ strikes`,
+      `${nombre} 6+ strikes`,
+      `${nombre} Mas de 3.5 strikes`,
+      `${nombre} Mas de 4.5 strikes`
+    );
+  });
+
+  options.push(
+    "Strikeouts del jugador 4+",
+    "Strikeouts del jugador 5+",
+    "Strikeouts del jugador 6+",
+    "Strikeouts del jugador 7+",
+    "Strikeouts del jugador al menos 4+",
+    "Strikeouts del jugador al menos 5+",
+    "4+ strikes",
+    "5+ strikes",
+    "6+ strikes",
+    "7+ strikes",
+    "Mas de 3.5 strikes",
+    "Mas de 4.5 strikes",
+    "Mas de 5.5 strikes",
+    "Mas de 6.5 strikes"
+  );
+
+  return [...new Set(options)];
 }
 
 // Genera opciones para todos los equipos que coincidan con el texto libre
@@ -641,9 +794,16 @@ function prepararAutocompleteJugada(input) {
   const typedLower = typed.toLowerCase();
   const sport = detectarDeporteDesdeSlot(input, eventText || typed);
 
-  let opciones;
+  let opciones = [];
 
-  if (eventText) {
+  const esBusquedaStrikeouts = /\b(strike|strikes|strikeout|strikeouts|ponche|ponches|so)\b/i.test(typedLower);
+
+  if (esBusquedaStrikeouts) {
+    const competitors = extraerCompetidoresDesdeEvento(eventText);
+    const opcionesStrikeouts = generarOpcionesStrikeoutsDinamicas(typed, competitors);
+    opciones = opcionesStrikeouts.filter(o => matchOpcionConPalabras(o, typedLower));
+    if (opciones.length === 0) opciones = opcionesStrikeouts;
+  } else if (eventText) {
     // Partido definido: generar opciones basadas en los equipos del partido
     const todasLasOpciones = generarOpcionesJugada(eventText, sport);
     opciones = typedLower
