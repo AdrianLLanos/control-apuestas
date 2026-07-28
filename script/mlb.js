@@ -501,7 +501,15 @@ function generarOpcionesJugada(eventText, sport) {
       "Mas de 8.5",
       "Menos de 8.5",
       "Mas de 9.5",
-      "Menos de 9.5"
+      "Menos de 9.5",
+      "Strikeouts del jugador",
+      "Mas de 3.5 strikeouts",
+      "Mas de 4.5 strikeouts",
+      "Mas de 5.5 strikeouts",
+      "Mas de 6.5 strikeouts",
+      "4+ strikeouts",
+      "5+ strikeouts",
+      "6+ strikeouts"
     );
     if (competitors.length >= 2) {
       const [teamA, teamB] = competitors;

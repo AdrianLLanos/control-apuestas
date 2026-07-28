@@ -31,7 +31,7 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
   const mercadoOriginal = autoOriginal.mercado || "";
   const mantenerMercadoOriginal = Boolean(mercadoOriginal) && (
     mercadoDetectado === "total_carreras" &&
-    ["total_hits", "handicap", "ganador_partido", "ambos_equipos_anotan"].includes(mercadoOriginal)
+    ["total_hits", "handicap", "ganador_partido", "ambos_equipos_anotan", "strikeouts_jugador"].includes(mercadoOriginal)
   );
 
   return {

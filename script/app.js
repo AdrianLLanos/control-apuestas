@@ -1906,6 +1906,74 @@ function esTotalHitsMlb(texto = "") {
   return tienePalabraMercado(normalizado, ["hit", "hits", "imparable", "imparables"]);
 }
 
+function esStrikeoutsMlb(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  return tienePalabraMercado(normalizado, ["strikeout", "strikeouts", "strike", "strikes", "ponche", "ponches", "so"]);
+}
+
+function extraerNombreJugadorStrikeouts(texto = "") {
+  let limpio = String(texto)
+    .replace(/\(incl\.?\s*extra\s*innings?\)/gi, "")
+    .replace(/incl\.?\s*extra\s*innings?/gi, "")
+    .replace(/\bstrikeouts?\s+del\s+jugador\s+al\s+menos\b/gi, "")
+    .replace(/\bstrikeouts?\s+del\s+jugador\b/gi, "")
+    .replace(/\bstrikeouts?\s+al\s+menos\b/gi, "")
+    .replace(/\bstrikeouts?\b/gi, "")
+    .replace(/\bstrikes?\b/gi, "")
+    .replace(/\bponches?\b/gi, "")
+    .replace(/\bal\s+menos\b/gi, "")
+    .replace(/\b(mas|más|menos|over|under)\s*(?:de)?\b/gi, "")
+    .replace(/\b\d+(?:\.\d+)?\+?\s*(?:strikes?|strikeouts?|ponches?)?\b/gi, "")
+    .replace(/\b[A-Z]{2,3}\b/g, "");
+
+  limpio = limpio.replace(/\(\s*([^()]+)\s*\)/g, "$1").replace(/[()]/g, "").trim();
+  limpio = limpiarEspaciosMercado(limpio.replace(/^[-–—:]+/, "").replace(/[-–—:]+$/, ""));
+
+  const norm = normalizarTextoMercado(limpio);
+  if (!limpio || norm === "del jugador" || norm === "jugador") {
+    return "";
+  }
+  return capitalizarPalabrasMercado(limpio);
+}
+
+function extraerLineaStrikeouts(texto = "") {
+  const limpio = String(texto).replace(/\(incl\.?\s*extra\s*innings?\)/gi, "");
+
+  const plusMatch = limpio.match(/(\d+(?:\.\d+)?)\s*\+/);
+  if (plusMatch) {
+    const num = parseFloat(plusMatch[1]);
+    const numDec = num > 0 ? (num - 0.5) : num;
+    return `Más de ${numDec} strikes`;
+  }
+
+  const masDeMatch = limpio.match(/\b(?:más|mas|over)\s*(?:de)?\s*(\d+(?:\.\d+)?)/i);
+  if (masDeMatch) {
+    const val = parseFloat(masDeMatch[1]);
+    return `Más de ${val} strikes`;
+  }
+
+  const menosDeMatch = limpio.match(/\b(?:menos|under)\s*(?:de)?\s*(\d+(?:\.\d+)?)/i);
+  if (menosDeMatch) {
+    const val = parseFloat(menosDeMatch[1]);
+    return `Menos de ${val} strikes`;
+  }
+
+  const numMatch = limpio.match(/-?\d+(?:\.\d+)?/);
+  if (numMatch) {
+    const val = parseFloat(numMatch[0]);
+    return `Más de ${val} strikes`;
+  }
+
+  return capitalizarMercado(limpio);
+}
+
+function formatearLineaStrikeoutsAuto(auto = {}) {
+  const linea = Number(auto.linea);
+  if (Number.isNaN(linea)) return "";
+  const tipoTotal = auto.tipoTotal === "under" ? "Menos de" : "Más de";
+  return `${tipoTotal} ${String(linea).replace(",", ".")} strikes`;
+}
+
 function limpiarEquipoGanador(texto = "", evento = "") {
   let equipo = String(texto)
     .replace(/\b(equipo\s+)?ganador\b/ig, "")
@@ -2041,6 +2109,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
+  if (autoMlb?.mercado === "strikeouts_jugador") {
+    const jugador = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompleto);
+    return {
+      titulo: jugador ? `Strikeouts del jugador (${jugador})` : "Strikeouts del jugador",
+      jugada: formatearLineaStrikeoutsAuto(autoMlb) || extraerLineaStrikeouts(jugadaActual || textoCompleto)
+    };
+  }
+
   if (autoMlb?.mercado === "total_hits") {
     return {
       titulo: formatearTituloTotalHitsMlb(),
@@ -2094,6 +2170,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: "Total tarjetas",
       jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["tarjeta", "tarjetas", "card", "cards"])
+    };
+  }
+
+  if (esStrikeoutsMlb(textoCompleto)) {
+    const jugador = extraerNombreJugadorStrikeouts(textoCompleto);
+    return {
+      titulo: jugador ? `Strikeouts del jugador (${jugador})` : "Strikeouts del jugador",
+      jugada: extraerLineaStrikeouts(jugadaActual || textoCompleto)
     };
   }
 
@@ -2371,6 +2455,28 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
         mercado: "total_carreras",
         equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
         seleccionEquipo,
+        tipoTotal,
+        linea
+      };
+    }
+  }
+
+  if (esStrikeoutsMlb(textoCompleto)) {
+    const plusMatch = textoCompleto.match(/(\d+(?:\.\d+)?)\s*\+/);
+    let linea = extraerNumeroJugada(textoCompleto);
+    let tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto) || "over";
+    if (plusMatch) {
+      const num = parseFloat(plusMatch[1]);
+      linea = num > 0 ? (num - 0.5) : num;
+      tipoTotal = "over";
+    }
+    const jugador = extraerNombreJugadorStrikeouts(textoCompleto);
+    if (linea !== null && tipoTotal) {
+      return {
+        deporte: "mlb",
+        mercado: "strikeouts_jugador",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        jugador,
         tipoTotal,
         linea
       };
