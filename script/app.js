@@ -4834,37 +4834,93 @@ async function cargarJuegosMlbPorFecha(fecha) {
   return (data.dates || []).flatMap(d => d.games || []);
 }
 
+const mlbBoxscoreFetchCache = new Map();
+
+async function obtenerBoxscoreMlbDirecto(gamePk) {
+  if (!gamePk) return null;
+  const key = String(gamePk);
+  const now = Date.now();
+  if (mlbBoxscoreFetchCache.has(key)) {
+    const cached = mlbBoxscoreFetchCache.get(key);
+    if (now - cached.ts < 20000) return cached.data;
+  }
+  try {
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    mlbBoxscoreFetchCache.set(key, { ts: now, data });
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 function extraerStrikeoutsJugadorGame(game, nombreJugador = "") {
   if (!game || !nombreJugador) return null;
   const normBuscado = normalizarTextoMercado(nombreJugador);
   if (!normBuscado) return null;
 
-  const boxscore = game.boxscore || game.liveData?.boxscore;
-  const teamsObj = boxscore?.teams || game.teams;
-  if (!teamsObj) return null;
+  const posiblesTeams = [
+    game?.boxscore?.teams,
+    game?.liveData?.boxscore?.teams,
+    game?.teams,
+    game?.lineups
+  ].filter(Boolean);
 
-  const buscarEnPlayers = (playersObj) => {
-    if (!playersObj) return null;
-    const playersList = typeof playersObj === "object" ? Object.values(playersObj) : [];
-    for (const p of playersList) {
-      const fullName = p?.person?.fullName || p?.fullName || "";
-      const normName = normalizarTextoMercado(fullName);
-      if (normName && (normName === normBuscado || normName.includes(normBuscado) || normBuscado.includes(normName))) {
-        const pitching = p?.stats?.pitching;
-        if (pitching && (pitching.strikeOuts !== undefined || pitching.strikeouts !== undefined || pitching.so !== undefined)) {
-          const count = Number(pitching.strikeOuts ?? pitching.strikeouts ?? pitching.so ?? 0);
-          return {
-            fullName: p?.person?.fullName || fullName,
-            strikeouts: count,
-            inningsPitched: pitching.inningsPitched || ""
-          };
+  for (const teamsObj of posiblesTeams) {
+    const buscarEnEquipo = (teamData) => {
+      if (!teamData) return null;
+
+      if (teamData.players) {
+        const playersList = typeof teamData.players === "object" ? Object.values(teamData.players) : [];
+        for (const p of playersList) {
+          const fullName = p?.person?.fullName || p?.fullName || p?.name || "";
+          const normName = normalizarTextoMercado(fullName);
+          if (normName && (normName === normBuscado || normName.includes(normBuscado) || normBuscado.includes(normName))) {
+            const pitching = p?.stats?.pitching;
+            if (pitching) {
+              const so = pitching.strikeOuts ?? pitching.strikeouts ?? pitching.so ?? pitching.k;
+              if (so !== undefined && so !== null) {
+                return {
+                  fullName: p?.person?.fullName || fullName,
+                  strikeouts: Number(so),
+                  inningsPitched: pitching.inningsPitched || ""
+                };
+              }
+            }
+          }
         }
       }
-    }
-    return null;
-  };
 
-  return buscarEnPlayers(teamsObj.home?.players) || buscarEnPlayers(teamsObj.away?.players);
+      if (Array.isArray(teamData.pitchers)) {
+        for (const p of teamData.pitchers) {
+          const fullName = p?.person?.fullName || p?.fullName || p?.name || "";
+          const normName = normalizarTextoMercado(fullName);
+          if (normName && (normName === normBuscado || normName.includes(normBuscado) || normBuscado.includes(normName))) {
+            const pitching = p?.stats?.pitching || p;
+            const so = pitching?.strikeOuts ?? pitching?.strikeouts ?? pitching?.so ?? pitching?.k;
+            if (so !== undefined && so !== null) {
+              return {
+                fullName: p?.person?.fullName || fullName,
+                strikeouts: Number(so),
+                inningsPitched: pitching?.inningsPitched || ""
+              };
+            }
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const resHome = buscarEnEquipo(teamsObj.home);
+    if (resHome) return resHome;
+
+    const resAway = buscarEnEquipo(teamsObj.away);
+    if (resAway) return resAway;
+  }
+
+  return null;
 }
 
 async function cargarJuegosEspnMlbPorFecha(fecha) {
@@ -5222,14 +5278,25 @@ function buscarJuegoMlb(juegos = [], equipos = [], fechaBet = "", targetGamePk =
     if (gameByPk) {
       const fechaGameByPk = obtenerFechaLocalJuego(gameByPk);
       const estadoDetallado = gameByPk?.status?.detailedState || gameByPk?.status?.abstractGameState || "";
-      const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esEstadoJuegoReembolso(estadoDetallado);
+      const esPospuesto = esEstadoJuegoReembolso(estadoDetallado);
+      const esPospuestoOtraFecha = fechaBet && fechaGameByPk !== fechaBet && esPospuesto;
+
+      if (esPospuesto && candidatos.length > 1) {
+        const juegoActivoDoble = candidatos.find(g =>
+          g !== gameByPk &&
+          !esEstadoJuegoReembolso(g?.status?.detailedState || g?.status?.abstractGameState || "")
+        );
+        if (juegoActivoDoble) {
+          return juegoActivoDoble;
+        }
+      }
 
       const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
         Number(gameByPk?.gameNumber) === Number(targetGameNumber) ||
         [...candidatos].sort((a, b) => new Date(a.gameDate || 0) - new Date(b.gameDate || 0)).indexOf(gameByPk) === (Number(targetGameNumber) - 1)
       );
 
-      if (!esPospuestoOtraFecha && gameNumberValido) {
+      if (!esPospuestoOtraFecha && gameNumberValido && !esPospuesto) {
         return gameByPk;
       }
     }
@@ -5314,13 +5381,22 @@ function buscarJuegoEspnMlb(juegos = [], equipos = [], fechaBet = "", targetEspn
     if (gameById) {
       const fechaGameById = obtenerFechaLocalEvent(gameById);
       const statusText = gameById?.status?.type?.name || gameById?.status?.type?.description || "";
-      const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esEstadoJuegoReembolso(statusText);
+      const esPospuesto = esEstadoJuegoReembolso(statusText);
+      const esPospuestoOtraFecha = fechaBet && fechaGameById !== fechaBet && esPospuesto;
+
+      if (esPospuesto && candidatos.length > 1) {
+        const juegoActivoEspn = candidatos.find(e =>
+          e !== gameById &&
+          !esEstadoJuegoReembolso(e?.status?.type?.name || e?.status?.type?.description || "")
+        );
+        if (juegoActivoEspn) return juegoActivoEspn;
+      }
 
       const gameNumberValido = !targetGameNumber || candidatos.length <= 1 || (
         [...candidatos].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)).indexOf(gameById) === (Number(targetGameNumber) - 1)
       );
 
-      if (!esPospuestoOtraFecha && gameNumberValido) {
+      if (!esPospuestoOtraFecha && gameNumberValido && !esPospuesto) {
         return gameById;
       }
     }
@@ -5764,18 +5840,18 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
   return null;
 }
 
-function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
   const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadasBase = normalizarJugadasConEstado(apuesta.jugadas || []);
   const jugadas = repararTotalesEquipoMlbPartidos(jugadasBase);
   let huboCambio = false;
   let huboCambioMetadata = JSON.stringify(jugadasBase) !== JSON.stringify(jugadas);
 
-  const nuevasJugadas = jugadas.map(jugada => {
+  const nuevasJugadas = await Promise.all(jugadas.map(async jugada => {
     if (typeof jugada !== "object" || !jugada) return jugada;
 
     const ev = jugada.ev || jugada.evento || apuesta.evento || "";
-    const selections = getSelectionsFromJugada(jugada).map(sel => {
+    const selections = await Promise.all(getSelectionsFromJugada(jugada).map(async sel => {
       const autoMlbOriginal = sel.autoMlb || null;
       const autoMlbDetectado = crearAutoMlbSeleccion({
         evento: ev,
@@ -5846,9 +5922,21 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         const marcador = juegoNoIniciado ? null : getMarcadorMlb(game);
         const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
         const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
-        const statsStrikeouts = autoMlb.mercado === "strikeouts_jugador" ? extraerStrikeoutsJugadorGame(game, autoMlb.jugador) : null;
+        
+        let statsStrikeouts = (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))
+          ? extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`))
+          : null;
+
+        if (!statsStrikeouts && game?.gamePk && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))) {
+          const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
+          if (directBox) {
+            statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+          }
+        }
+
         const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (autoMlb.totalStrikes ?? autoMlb.strikes);
-        const marcadorStrikeoutsTexto = statsStrikeouts ? `${statsStrikeouts.fullName || autoMlb.jugador}: ${statsStrikeouts.strikeouts} strikes` : null;
+        const jugadorNombre = autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+        const marcadorStrikeoutsTexto = (statsStrikeouts || totalStrikes != null) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
         const marcadorTexto = marcador
           ? formatMarcadorSegunEvento(ev, marcador)
@@ -5857,7 +5945,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           ? formatHitsMlbSegunEvento(ev, marcador)
           : null;
         const esMercadoHits = autoMlb.mercado === "total_hits";
-        const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador";
+        const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`);
 
         const estadoAnterior = sel.estado || "pendiente";
         const fueMarcadoReembolsoPrevio = estadoAnterior === "nula" ||
@@ -5892,6 +5980,8 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
           estado: nuevoEstadoSel,
           autoMlb: {
             ...autoMlb,
+            mercado: esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado,
+            jugador: jugadorNombre || autoMlb.jugador,
             gamePk: game.gamePk,
             estadoJuego,
             estadoEspecial: null,
@@ -5908,18 +5998,32 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
       const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
       const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
-      const statsStrikeouts = autoMlb.mercado === "strikeouts_jugador" ? (evaluacion.strikes != null ? { fullName: evaluacion.pitcher, strikeouts: evaluacion.strikes } : extraerStrikeoutsJugadorGame(game, autoMlb.jugador)) : null;
+      
+      let statsStrikeouts = (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))
+        ? (evaluacion.strikes != null ? { fullName: evaluacion.pitcher, strikeouts: evaluacion.strikes } : extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`)))
+        : null;
+
+      if (!statsStrikeouts && game?.gamePk && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))) {
+        const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
+        if (directBox) {
+          statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+        }
+      }
+
       const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (evaluacion.strikes ?? autoMlb.totalStrikes);
-      const marcadorStrikeoutsTexto = statsStrikeouts ? `${statsStrikeouts.fullName || autoMlb.jugador}: ${statsStrikeouts.strikeouts} strikes` : null;
+      const jugadorNombre = autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+      const marcadorStrikeoutsTexto = (statsStrikeouts || totalStrikes != null) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
       const esMercadoHits = autoMlb.mercado === "total_hits";
-      const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador";
+      const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`);
       const pagoAnticipado = Boolean(evaluacion.pagoAnticipado || autoMlb.pagoAnticipado);
       const siguiente = {
         ...selMlb,
         estado: evaluacion.estado,
         autoMlb: {
           ...autoMlb,
+          mercado: esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado,
+          jugador: jugadorNombre || autoMlb.jugador,
           gamePk: game.gamePk,
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           estadoEspecial: null,
@@ -5945,7 +6049,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
         huboCambioMetadata = true;
       }
       return siguiente;
-    });
+    }));
 
     const equiposMlb = detectarEquiposMlb(ev);
     const jugadaActualizada = {
@@ -5982,7 +6086,7 @@ function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha =
 
     jugadaActualizada.estado = determinarEstadoJugada(jugadaActualizada);
     return jugadaActualizada;
-  });
+  }));
 
   if (!huboCambio && !huboCambioMetadata) return null;
 
@@ -6262,7 +6366,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
       const juegosEspnApuesta = juegosEspnPorFecha.get(fecha) || [];
       const debeSincronizarResultado = candidatasResultados.some(item => item.id === apuesta.id);
       const updateData = debeSincronizarResultado
-        ? aplicarResultadoMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta)
+        ? await aplicarResultadoMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta)
         : aplicarHorarioMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
       if (!updateData) continue;
 
