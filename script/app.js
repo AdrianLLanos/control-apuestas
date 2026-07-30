@@ -1792,8 +1792,11 @@ function formatHandicapJugada(texto = "") {
 }
 
 function tienePalabraMercado(normalizado = "", palabras = []) {
-  const tokens = normalizado.split(/\s+/).filter(Boolean);
+  const tokens = normalizado.split(/\s+/).map(t => t.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
   return palabras.some(palabra => {
+    if (palabra.length <= 4) {
+      return tokens.includes(palabra);
+    }
     if (normalizado.includes(palabra)) return true;
     return tokens.some(token => token.length >= 4 && distanciaEdicion(token, palabra) <= 1);
   });
@@ -1961,6 +1964,11 @@ function extraerNombreJugadorStrikeouts(texto = "") {
   if (!limpio || norm === "del jugador" || norm === "jugador") {
     return "";
   }
+
+  if (detectarEquiposMlb(limpio).length > 0 || esHandicapMlbTexto(limpio) || /\b(handicap|handi|hcap|ganador|carreras|goles|total|hits|corners|tarjetas)\b/i.test(norm)) {
+    return "";
+  }
+
   return capitalizarPalabrasMercado(limpio);
 }
 
@@ -2137,7 +2145,7 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
-  if (autoMlb?.mercado === "strikeouts_jugador") {
+  if (autoMlb?.mercado === "strikeouts_jugador" && esStrikeoutsMlb(textoCompleto)) {
     const jugador = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompleto);
     return {
       titulo: jugador ? `Strikeouts del jugador (${jugador})` : "Strikeouts del jugador",
@@ -2460,14 +2468,14 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
   if (esHandicapMlbTexto(textoCompleto) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
     const linea = extraerNumeroConSigno(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
-    const seleccionEquipo = equiposJugada[0] || null;
-    if (linea !== null && seleccionEquipo) {
+    const seleccionEquipo = equiposJugada[0] || (equiposEvento[0] || null);
+    if (seleccionEquipo || esHandicapMlbTexto(textoCompleto)) {
       return {
         deporte: "mlb",
         mercado: "handicap",
         equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
-        seleccionEquipo,
-        linea
+        seleccionEquipo: seleccionEquipo || (equiposEvento[0] || null),
+        linea: linea ?? 0
       };
     }
   }
@@ -5960,20 +5968,25 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
         const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
         
-        let statsStrikeouts = (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))
-          ? extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`))
+        const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
+        const esMercadoStrikeouts = esStrikeoutsMlb(textoSelCompletoSync);
+        const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
+        const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado);
+
+        let statsStrikeouts = esMercadoStrikeouts
+          ? extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync))
           : null;
 
-        if (!statsStrikeouts && game?.gamePk && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))) {
+        if (!statsStrikeouts && game?.gamePk && esMercadoStrikeouts) {
           const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
           if (directBox) {
-            statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+            statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
           }
         }
 
         const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (autoMlb.totalStrikes ?? autoMlb.strikes);
-        const jugadorNombre = autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
-        const marcadorStrikeoutsTexto = (statsStrikeouts || totalStrikes != null) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
+        const jugadorNombre = esMercadoStrikeouts ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync))) : undefined;
+        const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
         const marcadorTexto = marcador
           ? formatMarcadorSegunEvento(ev, marcador)
@@ -5982,7 +5995,6 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           ? formatHitsMlbSegunEvento(ev, marcador)
           : null;
         const esMercadoHits = autoMlb.mercado === "total_hits";
-        const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`);
 
         const estadoAnterior = sel.estado || "pendiente";
         const fueMarcadoReembolsoPrevio = estadoAnterior === "nula" ||
@@ -6018,17 +6030,17 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           estado: nuevoEstadoSel,
           autoMlb: {
             ...autoMlb,
-            mercado: esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado,
-            jugador: jugadorNombre || autoMlb.jugador,
+            mercado: mercadoSync,
+            jugador: jugadorNombre,
             gamePk: game.gamePk,
             estadoJuego,
             estadoEspecial: null,
             marcador: marcadorTexto,
             marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
-            marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : autoMlb.marcadorStrikeouts,
+            marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : undefined,
             totalCarreras: autoMlb.mercado === "total_carreras" && !juegoNoIniciado ? totalObjetivo : undefined,
             totalHits: esMercadoHits && !juegoNoIniciado ? totalObjetivo : undefined,
-            totalStrikes: esMercadoStrikeouts && !juegoNoIniciado && totalStrikes != null ? totalStrikes : autoMlb.totalStrikes,
+            totalStrikes: esMercadoStrikeouts && !juegoNoIniciado && totalStrikes != null ? totalStrikes : undefined,
             fechaJuego: game.gameDate
           }
         };
@@ -6037,37 +6049,41 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
       const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
       
-      let statsStrikeouts = (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))
-        ? (evaluacion.strikes != null ? { fullName: evaluacion.pitcher, strikeouts: evaluacion.strikes } : extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`)))
+      const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
+      const esMercadoStrikeouts = esStrikeoutsMlb(textoSelCompletoSync);
+      const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
+      const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado);
+
+      let statsStrikeouts = esMercadoStrikeouts
+        ? (evaluacion.strikes != null ? { fullName: evaluacion.pitcher, strikeouts: evaluacion.strikes } : extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync)))
         : null;
 
-      if (!statsStrikeouts && game?.gamePk && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`))) {
+      if (!statsStrikeouts && game?.gamePk && esMercadoStrikeouts) {
         const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
         if (directBox) {
-          statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
+          statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
         }
       }
 
       const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (evaluacion.strikes ?? autoMlb.totalStrikes);
-      const jugadorNombre = autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(`${sel.titulo || ''} ${sel.jugada || ''}`));
-      const marcadorStrikeoutsTexto = (statsStrikeouts || totalStrikes != null) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
+      const jugadorNombre = esMercadoStrikeouts ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync))) : undefined;
+      const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
       const esMercadoHits = autoMlb.mercado === "total_hits";
-      const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(`${sel.titulo || ''} ${sel.jugada || ''}`);
       const pagoAnticipado = Boolean(evaluacion.pagoAnticipado || autoMlb.pagoAnticipado);
       const siguiente = {
         ...selMlb,
         estado: evaluacion.estado,
         autoMlb: {
           ...autoMlb,
-          mercado: esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado,
-          jugador: jugadorNombre || autoMlb.jugador,
+          mercado: mercadoSync,
+          jugador: jugadorNombre,
           gamePk: game.gamePk,
           estadoJuego: game?.status?.detailedState || game?.status?.abstractGameState || "Final",
           estadoEspecial: null,
           marcador: formatMarcadorSegunEvento(ev, evaluacion.marcador),
           marcadorHits: esMercadoHits ? marcadorHitsTexto : autoMlb.marcadorHits,
-          marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : autoMlb.marcadorStrikeouts,
+          marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : undefined,
           totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
           totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
           totalStrikes: esMercadoStrikeouts && totalStrikes != null ? totalStrikes : autoMlb.totalStrikes,
@@ -6487,7 +6503,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const totalHits = Number(autoMlb.totalHits);
   const totalStrikes = Number(autoMlb.totalStrikes ?? autoMlb.strikes);
   const textoCompletoSel = `${selection.titulo || ""} ${selection.jugada || ""}`;
-  const esStrikeouts = autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(textoCompletoSel);
+  const esStrikeouts = esStrikeoutsMlb(textoCompletoSel);
   const jugadorStrikeouts = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompletoSel) || "Jugador";
 
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";

@@ -431,6 +431,8 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`gana (RL) ${nA}`);
         options.push(`${nA} -1.5`);
         options.push(`${nA} +1.5`);
+        options.push(`Hándicap ${nA} -1.5`);
+        options.push(`Hándicap ${nA} +1.5`);
       } else {
         options.push(`${nA} o Empate`);
         options.push(`${nA} a cero`);
@@ -447,6 +449,8 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`gana (RL) ${nB}`);
         options.push(`${nB} -1.5`);
         options.push(`${nB} +1.5`);
+        options.push(`Hándicap ${nB} -1.5`);
+        options.push(`Hándicap ${nB} +1.5`);
       } else {
         options.push(`${nB} o Empate`);
         options.push(`${nB} a cero`);
@@ -479,6 +483,8 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`gana (RL) ${n}`);
         options.push(`${n} -1.5`);
         options.push(`${n} +1.5`);
+        options.push(`Hándicap ${n} -1.5`);
+        options.push(`Hándicap ${n} +1.5`);
       } else {
         options.push(`${n} o Empate`);
         options.push(`${n} a cero`);
@@ -509,7 +515,11 @@ function generarOpcionesJugada(eventText, sport) {
       "Mas de 6.5 strikeouts",
       "4+ strikeouts",
       "5+ strikeouts",
-      "6+ strikeouts"
+      "6+ strikeouts",
+      "Hándicap -1.5",
+      "Hándicap +1.5",
+      "Hándicap -2.5",
+      "Hándicap +2.5"
     );
     if (competitors.length >= 2) {
       const [teamA, teamB] = competitors;
@@ -521,7 +531,11 @@ function generarOpcionesJugada(eventText, sport) {
         `${teamA} Mas de 4.5 carreras`,
         `${teamA} Menos de 4.5 carreras`,
         `${teamB} Mas de 4.5 carreras`,
-        `${teamB} Menos de 4.5 carreras`
+        `${teamB} Menos de 4.5 carreras`,
+        `Hándicap ${teamA} -1.5`,
+        `Hándicap ${teamA} +1.5`,
+        `Hándicap ${teamB} -1.5`,
+        `Hándicap ${teamB} +1.5`
       );
     }
   } else {
@@ -572,7 +586,9 @@ function generarOpcionesJugada(eventText, sport) {
       "Menos de 2.5 goles",
       "Ambos marcan",
       "Mas de 8.5 carreras",
-      "Menos de 8.5 carreras"
+      "Menos de 8.5 carreras",
+      "Hándicap -1.5",
+      "Hándicap +1.5"
     );
   }
 
@@ -591,7 +607,12 @@ function matchOpcionConPalabras(opcion, query) {
 
     // Coincidencia flexible de palabras clave para ponches / strikeouts / strikes
     if (/^(strike|strikes|strikeout|strikeouts|ponche|ponches|so)$/i.test(word)) {
-      return /(strike|strikes|strikeout|strikeouts|ponche|ponches|so)/i.test(opcionLower);
+      return /(strike|strikes|strikeout|strikeouts|ponche|ponches|\bso\b)/i.test(opcionLower);
+    }
+
+    // Coincidencia flexible de palabras clave para hándicap
+    if (/^(handicap|hándicap|handi|hcap|runline|spread)$/i.test(word)) {
+      return /(handicap|hándicap|handi|hcap|runline|spread|h[aá]ndicap)/i.test(opcionLower);
     }
 
     // Coincidencia flexible para carreras / runs
@@ -741,6 +762,98 @@ function generarOpcionesStrikeoutsDinamicas(typed = "", competitors = []) {
   return [...new Set(options)];
 }
 
+function extraerBusquedaNombreHandicap(typed = "") {
+  const limpio = String(typed)
+    .replace(/\bh(?:a|á)?ndicap\b/gi, "")
+    .replace(/\b(handi|hcap|runline|spread)\b/gi, "")
+    .replace(/[+-]?\d+(?:\.\d+)?\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return limpio.length >= 2 ? limpio : "";
+}
+
+function generarOpcionesHandicapDinamicas(typed = "", competitors = []) {
+  const textoDetectado = extraerBusquedaNombreHandicap(typed);
+  const options = [];
+
+  if (Array.isArray(competitors) && competitors.length > 0) {
+    competitors.forEach(comp => {
+      if (!comp) return;
+      options.push(
+        `Hándicap ${comp} -1.5`,
+        `Hándicap ${comp} +1.5`,
+        `Hándicap ${comp} -0.5`,
+        `Hándicap ${comp} +0.5`,
+        `Hándicap ${comp} -2.5`,
+        `Hándicap ${comp} +2.5`,
+        `${comp} -1.5`,
+        `${comp} +1.5`
+      );
+    });
+  }
+
+  if (textoDetectado) {
+    const queryNorm = normalizeLookupKey(textoDetectado);
+    MLB_TEAMS.forEach(team => {
+      const coincide = [team.name, ...team.aliases].some(alias =>
+        normalizeLookupKey(alias).includes(queryNorm) || queryNorm.includes(normalizeLookupKey(alias))
+      );
+      if (coincide) {
+        options.push(
+          `Hándicap ${team.name} -1.5`,
+          `Hándicap ${team.name} +1.5`,
+          `Hándicap ${team.name} -0.5`,
+          `Hándicap ${team.name} +0.5`,
+          `${team.name} -1.5`,
+          `${team.name} +1.5`
+        );
+      }
+    });
+  }
+
+  options.push(
+    "Hándicap -1.5",
+    "Hándicap +1.5",
+    "Hándicap -2.5",
+    "Hándicap +2.5",
+    "Hándicap -0.5",
+    "Hándicap +0.5"
+  );
+
+  return [...new Set(options)];
+}
+
+function generarOpcionesCarrerasDinamicas(typed = "", competitors = []) {
+  const options = [];
+
+  if (Array.isArray(competitors) && competitors.length > 0) {
+    competitors.forEach(comp => {
+      if (!comp) return;
+      options.push(
+        `${comp} Mas de 3.5 carreras`,
+        `${comp} Menos de 3.5 carreras`,
+        `${comp} Mas de 4.5 carreras`,
+        `${comp} Menos de 4.5 carreras`,
+        `${comp} Mas de 5.5 carreras`,
+        `${comp} Menos de 5.5 carreras`
+      );
+    });
+  }
+
+  options.push(
+    "Mas de 7.5 carreras",
+    "Menos de 7.5 carreras",
+    "Mas de 8.5 carreras",
+    "Menos de 8.5 carreras",
+    "Mas de 9.5 carreras",
+    "Menos de 9.5 carreras",
+    "Mas de 10.5 carreras",
+    "Menos de 10.5 carreras"
+  );
+
+  return [...new Set(options)];
+}
+
 // Genera opciones para todos los equipos que coincidan con el texto libre
 function generarOpcionesDesdeTextoLibre(typed, sport) {
   const typedLower = typed.toLowerCase();
@@ -773,6 +886,8 @@ function generarOpcionesDesdeTextoLibre(typed, sport) {
         options.push(`gana (RL) ${name}`);
         options.push(`${name} -1.5`);
         options.push(`${name} +1.5`);
+        options.push(`Hándicap ${name} -1.5`);
+        options.push(`Hándicap ${name} +1.5`);
       } else {
         options.push(`${name} o Empate`);
         options.push(`${name} a cero`);
@@ -797,12 +912,24 @@ function prepararAutocompleteJugada(input) {
   let opciones = [];
 
   const esBusquedaStrikeouts = /\b(strike|strikes|strikeout|strikeouts|ponche|ponches|so)\b/i.test(typedLower);
+  const esBusquedaHandicap = /\b(handicap|hándicap|handi|hcap|runline|spread)\b/i.test(typedLower);
+  const esBusquedaCarreras = /\b(carrera|carreras|run|runs)\b/i.test(typedLower);
 
   if (esBusquedaStrikeouts) {
     const competitors = extraerCompetidoresDesdeEvento(eventText);
     const opcionesStrikeouts = generarOpcionesStrikeoutsDinamicas(typed, competitors);
     opciones = opcionesStrikeouts.filter(o => matchOpcionConPalabras(o, typedLower));
     if (opciones.length === 0) opciones = opcionesStrikeouts;
+  } else if (esBusquedaHandicap) {
+    const competitors = extraerCompetidoresDesdeEvento(eventText);
+    const opcionesHandicap = generarOpcionesHandicapDinamicas(typed, competitors);
+    opciones = opcionesHandicap.filter(o => matchOpcionConPalabras(o, typedLower));
+    if (opciones.length === 0) opciones = opcionesHandicap;
+  } else if (esBusquedaCarreras) {
+    const competitors = extraerCompetidoresDesdeEvento(eventText);
+    const opcionesCarreras = generarOpcionesCarrerasDinamicas(typed, competitors);
+    opciones = opcionesCarreras.filter(o => matchOpcionConPalabras(o, typedLower));
+    if (opciones.length === 0) opciones = opcionesCarreras;
   } else if (eventText) {
     // Partido definido: generar opciones basadas en los equipos del partido
     const todasLasOpciones = generarOpcionesJugada(eventText, sport);
