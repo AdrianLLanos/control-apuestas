@@ -124,8 +124,11 @@ function getPatenteSelections(jugadas = []) {
     else if (hasGanada) estado = "ganada";
     else if (allNula) estado = "nula";
 
+    const sel0 = (j.selections && j.selections[0]) ? j.selections[0] : {};
+    const cuota = parseFloat(j.c || j.cuota || sel0.c || sel0.cuota || j.optiOdds || sel0.optiOdds) || 0;
+
     return {
-      cuota: parseFloat(j.c) || 0,
+      cuota,
       estado
     };
   });
@@ -267,8 +270,11 @@ function getDoblesSelections(jugadas = []) {
     else if (hasGanada) estado = "ganada";
     else if (allNula) estado = "nula";
 
+    const sel0 = (j.selections && j.selections[0]) ? j.selections[0] : {};
+    const cuota = parseFloat(j.c || j.cuota || sel0.c || sel0.cuota || j.optiOdds || sel0.optiOdds) || 0;
+
     return {
-      cuota: parseFloat(j.c) || 0,
+      cuota,
       estado
     };
   });
@@ -438,8 +444,11 @@ export function getSistemaSelections(jugadas = []) {
     else if (hasGanada) estado = "ganada";
     else if (allNula) estado = "nula";
 
+    const sel0 = (j.selections && j.selections[0]) ? j.selections[0] : {};
+    const cuota = parseFloat(j.c || j.cuota || sel0.c || sel0.cuota || j.optiOdds || sel0.optiOdds) || 0;
+
     return {
-      cuota: parseFloat(j.c) || 0,
+      cuota,
       estado
     };
   });

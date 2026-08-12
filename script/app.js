@@ -9460,6 +9460,7 @@ async function guardarEdicion(id) {
     const isCombinada = nuevoTipo === "combinada";
     const isPatente = nuevoTipo === "patente";
     const isDobles = nuevoTipo === "dobles";
+    const isSistema = nuevoTipo === "sistema";
     const isSimpleOption = nuevoTipo === "simple_option_bet";
     let nuevasJugadas = [];
     const slots = document.querySelectorAll(`.edit-jugada-slot-${id}`);
@@ -9470,6 +9471,10 @@ async function guardarEdicion(id) {
 
     if (isDobles && (slots.length < DOBLES_MIN_SELECTIONS || slots.length > DOBLES_MAX_SELECTIONS)) {
       errores.push(`El sistema Dobles necesita entre ${DOBLES_MIN_SELECTIONS} y ${DOBLES_MAX_SELECTIONS} selecciones.`);
+    }
+
+    if (isSistema && (slots.length < SISTEMA_MIN_SELECTIONS || slots.length > SISTEMA_MAX_SELECTIONS)) {
+      errores.push(`El sistema necesita entre ${SISTEMA_MIN_SELECTIONS} y ${SISTEMA_MAX_SELECTIONS} selecciones.`);
     }
 
     slots.forEach((slot, index) => {
@@ -9519,7 +9524,7 @@ async function guardarEdicion(id) {
       if (selections.length === 0) {
         selections.push({ titulo: "", jugada: "", estado: "pendiente" });
       }
-      if (isPatente || isDobles) {
+      if (isPatente || isDobles || isSistema) {
         const n = index + 1;
         if (!ev) errores.push(`Rellena el partido/evento de la seleccion #${n}.`);
         if (!cuotaVal || isNaN(c) || c <= 0) errores.push(`Rellena la cuota de la seleccion #${n} (debe ser mayor a 0).`);
@@ -9541,7 +9546,7 @@ async function guardarEdicion(id) {
         }
       }
 
-      const isMulti = nuevoTipo === "combinada" || nuevoTipo === "patente" || nuevoTipo === "dobles" || nuevoTipo === "crear_apuesta" || nuevoTipo === "crear_apuesta_simple";
+      const isMulti = nuevoTipo === "combinada" || nuevoTipo === "patente" || nuevoTipo === "dobles" || nuevoTipo === "sistema" || nuevoTipo === "crear_apuesta" || nuevoTipo === "crear_apuesta_simple";
       let jugada = isSimpleOption
         ? { ev, c: optiOdds || 0, optiOdds: optiOdds || 0, maxOdds: maxOdds || 0, resultadoTotal, selections }
         : { ev, c: isMulti ? (c || 0) : 0, selections };
@@ -9575,6 +9580,9 @@ async function guardarEdicion(id) {
       nuevaCuota = calcularCuotaMaximaPatente(nuevasJugadas);
     } else if (nuevoTipo === "dobles") {
       nuevaCuota = calcularCuotaMaximaDobles(nuevasJugadas);
+    } else if (nuevoTipo === "sistema") {
+      const originalBet = apuestas.find(a => a.id === id);
+      nuevaCuota = calcularCuotaMaximaSistema(nuevasJugadas, originalBet?.sistemaStakes || {});
     } else if (nuevoTipo === "simple_option_bet") {
       nuevaCuota = calcularCuotaSimpleOptionBet({
         tipoApuesta: nuevoTipo,
@@ -11655,10 +11663,13 @@ window.cambiarTipoEdicion = function (id, valor) {
 
   const esCombinada = valor === "combinada";
   const esPatente = valor === "patente";
+  const esDobles = valor === "dobles";
+  const esSistema = valor === "sistema";
   const esCrear = valor === "crear_apuesta";
   const esCrearSimple = valor === "crear_apuesta_simple";
   const esSimpleOption = valor === "simple_option_bet";
   const esSimple = valor === "simple";
+  const esMultiSlot = esCombinada || esPatente || esDobles || esSistema || esCrear || esCrearSimple;
 
   if (tarjeta) {
     tarjeta.className = "apuesta-edit-card " + valor;
@@ -11675,7 +11686,7 @@ window.cambiarTipoEdicion = function (id, valor) {
 
   const inputEvento = document.getElementById(`edit-evento-${id}`);
   if (inputEvento) {
-    inputEvento.style.display = (esCombinada || esPatente || esCrear || esCrearSimple) ? 'block' : 'none';
+    inputEvento.style.display = esMultiSlot ? 'block' : 'none';
   }
 
   // Show/hide cuota wrapper divs (each cuota is wrapped in a flex div)
@@ -11683,14 +11694,14 @@ window.cambiarTipoEdicion = function (id, valor) {
   cuotaInputs.forEach(input => {
     const wrapper = input.parentElement;
     if (wrapper && wrapper.tagName === 'DIV') {
-      wrapper.style.display = (esCombinada || esPatente || esCrear || esCrearSimple) ? 'flex' : 'none';
+      wrapper.style.display = esMultiSlot ? 'flex' : 'none';
     } else {
-      input.style.display = (esCombinada || esPatente || esCrear || esCrearSimple) ? 'block' : 'none';
+      input.style.display = esMultiSlot ? 'block' : 'none';
     }
   });
 
   const deleteSlotBtns = container.querySelectorAll(".btn-eliminar-slot");
-  deleteSlotBtns.forEach(b => b.style.display = (esCombinada || esPatente || esCrear || esCrearSimple) ? 'inline-block' : 'none');
+  deleteSlotBtns.forEach(b => b.style.display = esMultiSlot ? 'inline-block' : 'none');
 
   if (esSimpleOption) {
     btn.style.display = "none";
@@ -11699,7 +11710,7 @@ window.cambiarTipoEdicion = function (id, valor) {
       slots[i].remove();
     }
     window.calcularCuotaEditSimpleOption(id);
-  } else if (esCombinada || esPatente || esCrear || esCrearSimple) {
+  } else if (esMultiSlot) {
     btn.style.display = "inline-block";
     if (container.children.length === 0) {
       window.agregarJugadaEdit(id);
@@ -11724,7 +11735,7 @@ window.cambiarTipoEdicion = function (id, valor) {
 
 window.calcularCuotaEditCombinada = function (id) {
   const tipoApuesta = document.getElementById(`edit-tipo-${id}`)?.value;
-  if (tipoApuesta !== "combinada" && tipoApuesta !== "patente" && tipoApuesta !== "crear_apuesta" && tipoApuesta !== "crear_apuesta_simple") return;
+  if (tipoApuesta !== "combinada" && tipoApuesta !== "patente" && tipoApuesta !== "dobles" && tipoApuesta !== "sistema" && tipoApuesta !== "crear_apuesta" && tipoApuesta !== "crear_apuesta_simple") return;
 
   if (tipoApuesta === "patente") {
     const jugadas = [];
@@ -11740,6 +11751,42 @@ window.calcularCuotaEditCombinada = function (id) {
     const cuotaMain = document.getElementById(`edit-cuota-${id}`);
     if (cuotaMain) {
       cuotaMain.value = calcularCuotaMaximaPatente(jugadas).toFixed(2);
+    }
+    return;
+  }
+
+  if (tipoApuesta === "dobles") {
+    const jugadas = [];
+    const apuestaOriginal = apuestas.find(a => a.id === id);
+    document.querySelectorAll(`.edit-jugada-slot-${id}`).forEach((slot, index) => {
+      const c = parseFloat(slot.querySelector(".edit-jugada-cuota-input")?.value);
+      const estado = apuestaOriginal?.jugadas?.[index]
+        ? determinarEstadoJugada(apuestaOriginal.jugadas[index])
+        : "ganada";
+      jugadas.push({ c: c || 0, selections: [{ estado }] });
+    });
+
+    const cuotaMain = document.getElementById(`edit-cuota-${id}`);
+    if (cuotaMain) {
+      cuotaMain.value = calcularCuotaMaximaDobles(jugadas).toFixed(2);
+    }
+    return;
+  }
+
+  if (tipoApuesta === "sistema") {
+    const jugadas = [];
+    const apuestaOriginal = apuestas.find(a => a.id === id);
+    document.querySelectorAll(`.edit-jugada-slot-${id}`).forEach((slot, index) => {
+      const c = parseFloat(slot.querySelector(".edit-jugada-cuota-input")?.value);
+      const estado = apuestaOriginal?.jugadas?.[index]
+        ? determinarEstadoJugada(apuestaOriginal.jugadas[index])
+        : "ganada";
+      jugadas.push({ c: c || 0, selections: [{ estado }] });
+    });
+
+    const cuotaMain = document.getElementById(`edit-cuota-${id}`);
+    if (cuotaMain) {
+      cuotaMain.value = calcularCuotaMaximaSistema(jugadas, apuestaOriginal?.sistemaStakes || {}).toFixed(2);
     }
     return;
   }
@@ -11957,10 +12004,15 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
   normalizedMatch.estado = determinarEstadoJugada(normalizedMatch);
   apuesta.jugadas = normalizarJugadasConEstado(apuesta.jugadas);
 
-  if (apuesta.tipoApuesta === 'patente' || apuesta.tipoApuesta === 'dobles') {
+  if (apuesta.tipoApuesta === 'patente' || apuesta.tipoApuesta === 'dobles' || apuesta.tipoApuesta === 'sistema') {
     const isDobles = apuesta.tipoApuesta === 'dobles';
-    apuesta.cuota = isDobles ? calcularCuotaMaximaDobles(apuesta.jugadas) : calcularCuotaMaximaPatente(apuesta.jugadas);
-    const overallResultado = isDobles ? determinarResultadoDobles(apuesta) : determinarResultadoPatente(apuesta);
+    const isSistema = apuesta.tipoApuesta === 'sistema';
+    apuesta.cuota = isSistema
+      ? calcularCuotaMaximaSistema(apuesta.jugadas, apuesta.sistemaStakes || {})
+      : (isDobles ? calcularCuotaMaximaDobles(apuesta.jugadas) : calcularCuotaMaximaPatente(apuesta.jugadas));
+    const overallResultado = isSistema
+      ? determinarResultadoSistema(apuesta)
+      : (isDobles ? determinarResultadoDobles(apuesta) : determinarResultadoPatente(apuesta));
     apuesta.resultado = overallResultado;
     apuesta.autoSync = crearAutoSyncPayload(apuesta, overallResultado);
 
@@ -11977,6 +12029,9 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
       });
     } catch (e) {
       console.error(e);
+      renderSilenciosoApuestas.delete(apuesta.id);
+      render();
+      window.scrollTo(0, scrollPosition);
     }
     return;
   }
