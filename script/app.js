@@ -10830,7 +10830,7 @@ function _render() {
             <option value="simple" ${isSimple ? 'selected' : ''}>Simple</option>
             <option value="combinada" ${isCombinada ? 'selected' : ''}>Combinada</option>
             <option value="sistema" ${isSistema ? 'selected' : ''}>Sistema</option>
-            <option value="dobles" ${isDobles ? 'selected' : ''}>Dobles</option>
+            ${isDobles ? '<option value="dobles" selected disabled>Dobles (histórico)</option>' : ''}
             <option value="patente" ${isPatente ? 'selected' : ''}>Patente</option>
             <option value="crear_apuesta" ${isCrear ? 'selected' : ''}>Crear Apuesta Combinada</option>
             <option value="crear_apuesta_simple" ${isCrearSimple ? 'selected' : ''}>Crear Apuesta Simple</option>
@@ -11383,7 +11383,6 @@ function iniciarApp() {
     const esCombinada = valor === "combinada";
     const esSistema = valor === "sistema";
     const esPatente = valor === "patente";
-    const esDobles = valor === "dobles";
     const esCrear = valor === "crear_apuesta";
     const esCrearSimple = valor === "crear_apuesta_simple";
     const esSimpleOption = valor === "simple_option_bet";
@@ -11401,7 +11400,6 @@ function iniciarApp() {
     document.getElementById("camposSimple").style.display = esSimple ? "flex" : "none";
     document.getElementById("camposCombinada").style.display = esCombinada ? "flex" : "none";
     document.getElementById("camposSistema").style.display = esSistema ? "flex" : "none";
-    document.getElementById("camposDobles").style.display = esDobles ? "flex" : "none";
     document.getElementById("camposPatente").style.display = esPatente ? "flex" : "none";
     document.getElementById("camposCrearApuesta").style.display = esCrear ? "flex" : "none";
     document.getElementById("camposCrearApuestaSimple").style.display = esCrearSimple ? "flex" : "none";
@@ -11419,9 +11417,6 @@ function iniciarApp() {
       inicializarSistemaSlots();
     }
 
-    if (esDobles) {
-      inicializarDoblesSlots();
-    }
 
     if (esPatente) {
       inicializarPatenteSlots();
