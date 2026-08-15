@@ -15,11 +15,11 @@ const [
 ] = await Promise.all([
   import(withDeployToken("./firebase-store.js")),
   import(withDeployToken("./calculations.js")),
-  import(withDeployToken("./mlb.js?v=2.1")),
+  import(withDeployToken("./mlb.js?v=2.2")),
   import(withDeployToken("./countries.js?v=1.1")),
   import(withDeployToken("./validation-modal.js")),
   import(withDeployToken("./sports/market-conflicts.js?v=1.1")),
-  import(withDeployToken("./football-auto-presenter.js?v=1.0"))
+  import(withDeployToken("./football-auto-presenter.js?v=1.1"))
 ]);
 
 const {
@@ -66,6 +66,7 @@ const {
 } = calculations;
 const {
   MLB_TEAMS,
+  NFL_TEAMS,
   autocorregirTextoConLogos,
   crearMlbTeamsDatalist,
   crearMlbPlaysDatalist,
@@ -236,7 +237,7 @@ function deduplicarApuestasPorId(lista = []) {
 function getFechasAutoSyncGlobal(deporte = "") {
   const hoy = obtenerFechaActualLocal();
   const fechas = [hoy];
-  const lookback = deporte === "futbol" ? API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS : 0;
+  const lookback = ["futbol", "nfl"].includes(deporte) ? API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS : 0;
   const base = new Date(`${hoy}T00:00:00`);
   if (!Number.isNaN(base.getTime())) {
     for (let i = 1; i <= lookback; i++) {
@@ -277,6 +278,8 @@ async function getApuestasAutoSyncScope(deporte = "") {
     ? apuestaPareceMlb
     : deporte === "futbol"
       ? apuestaPareceFutbol
+      : deporte === "nfl"
+        ? apuestaPareceNfl
       : () => true;
   return deduplicarApuestasPorId([...locales, ...globales]).filter(pareceDeporte);
 }
@@ -974,7 +977,7 @@ let inicializado = false;
 let ultimoScrollGuardado = 0;
 const renderSilenciosoApuestas = new Set();
 const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-const MLB_AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const MLB_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
 const AUTO_SYNC_RESUME_GRACE_MS = 12000;
 const DEPLOY_VERSION_URL = "/version.json";
 const DEPLOY_INDEX_URL = "/index.html";
@@ -1202,6 +1205,7 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
   if (!paginaEstaVisible()) return;
   if (deporte === "mlb" && !_syncMlbActivado) return;
   if (deporte === "futbol" && !_syncFutbolActivado) return;
+  if (deporte === "nfl" && !_syncNflActivado) return;
   if (autoSyncTimers.has(deporte)) {
     if (!force) return;
     clearTimeout(autoSyncTimers.get(deporte));
@@ -1222,6 +1226,8 @@ function programarSyncSilenciosa(deporte, delay = 0, force = false) {
         ejecutarAutoSyncMlb(force);
       } else if (deporte === "futbol") {
         ejecutarAutoSyncFutbol(force);
+      } else if (deporte === "nfl") {
+        ejecutarAutoSyncNfl(force);
       }
     });
   }, delayFinal);
@@ -2119,7 +2125,9 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 
   if (autoFutbol?.mercado === "total_goles") {
     return {
-      titulo: formatearTituloTotalGolesFutbol(autoFutbol.seleccionEquipo),
+      titulo: autoFutbol.deporte === "nfl"
+        ? (autoFutbol.seleccionEquipo ? `Puntos de ${autoFutbol.seleccionEquipo}` : "Total puntos")
+        : formatearTituloTotalGolesFutbol(autoFutbol.seleccionEquipo),
       jugada: formatearLineaTotalAuto(autoFutbol) || jugadaActual
     };
   }
@@ -2403,6 +2411,15 @@ function detectarEquiposMlb(texto = "") {
   });
 
   return [...new Set(encontrados)];
+}
+
+function detectarEquiposNfl(texto = "") {
+  const normalizado = normalizarClaveMlb(texto);
+  if (!normalizado) return [];
+
+  return [...new Set(NFL_TEAMS
+    .filter(team => [team.name, ...(team.aliases || [])].some(alias => textoContieneAliasMlb(normalizado, alias)))
+    .map(team => team.name))];
 }
 
 function detectarEquipoMlbEnTexto(texto = "", equiposPermitidos = []) {
@@ -2704,6 +2721,8 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
   const equipos = extraerEquiposEventoFutbol(evento);
   if (equipos.length < 2) return null;
 
+  const deporteDetectado = detectarEquiposNfl(evento).length >= 2 ? "nfl" : "futbol";
+
   const textoCompleto = limpiarEspaciosMercado(`${titulo} ${jugada}`);
   const normalizado = normalizarTextoMercado(textoCompleto);
   const seleccionEquipoTotal = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo)) || "";
@@ -2757,7 +2776,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     const tipoTotal = detectarLadoTotal(textoCompleto);
     if (linea !== null && tipoTotal) {
       return {
-        deporte: "futbol",
+        deporte: deporteDetectado,
         mercado: "total_goles",
         equipos,
         ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
@@ -2775,7 +2794,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     const tipoTotal = detectarLadoTotal(textoCompleto);
     if (linea !== null && tipoTotal) {
       return {
-        deporte: "futbol",
+        deporte: deporteDetectado,
         mercado: "total_goles",
         equipos,
         ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
@@ -2871,7 +2890,7 @@ function aplicarDetalleAutoFutbolSeleccion(selection = {}, autoFutbol = null, ev
 }
 
 function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
-  if (deporte !== "futbol") return jugadas;
+  if (!["futbol", "nfl"].includes(deporte)) return jugadas;
 
   return jugadas.map(jugada => {
     if (typeof jugada !== "object" || !jugada) return jugada;
@@ -2890,7 +2909,7 @@ function enriquecerJugadasAutoFutbol(jugadas = [], deporte = "") {
 
     return {
       ...jugada,
-      autoFutbol: equipos.length >= 2 ? { deporte: "futbol", equipos } : (jugada.autoFutbol ?? null),
+      autoFutbol: equipos.length >= 2 ? { deporte, equipos } : (jugada.autoFutbol ?? null),
       selections
     };
   });
@@ -6702,7 +6721,7 @@ const API_SPORTS_FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const API_SPORTS_FOOTBALL_DISCOVERY_VERSION = "v2";
 const API_SPORTS_FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const API_SPORTS_FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
-const MLB_LIVE_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const MLB_LIVE_SYNC_INTERVAL_MS = 90 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
@@ -9224,6 +9243,132 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 
 
 
+const NFL_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
+let _autoSyncNflIntervalId = null;
+let _autoSyncNflEnCurso = false;
+let _ultimoAutoSyncNfl = 0;
+let _syncNflActivado = false;
+let _autoSyncNflListenersRegistrados = false;
+
+function setNflSyncStatus(message = "", type = "") {
+  const el = document.getElementById("nflSyncStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = `mlb-sync-status${type ? ` ${type}` : ""}`;
+}
+
+async function cargarJuegosEspnNflPorFecha(fecha) {
+  if (!fecha) return [];
+  const date = String(fecha).replace(/-/g, "");
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${encodeURIComponent(date)}&limit=100&lang=es&region=mx&tz=${encodeURIComponent(getSportsTimezone())}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`ESPN respondio ${response.status}`);
+  const data = await response.json();
+  return (data.events || []).map(event => ({
+    ...event,
+    leagueLabel: data?.leagues?.[0]?.name || "NFL",
+    leagueSlug: "nfl"
+  }));
+}
+
+function apuestaPareceNfl(apuesta = {}) {
+  return apuesta?.deporte === "nfl" || detectarEquiposNfl(`${apuesta?.evento || ""} ${(apuesta?.jugadas || []).map(j => j?.ev || j?.evento || "").join(" ")}`).length >= 2;
+}
+
+async function sincronizarResultadosNfl(silencioso = false) {
+  const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
+  const candidatas = apuestasSync.filter(apuesta =>
+    apuestaPareceNfl(apuesta) &&
+    Array.isArray(apuesta.jugadas) && apuesta.jugadas.length > 0 &&
+    (!silencioso || (apuestaResultadoPendiente(apuesta) && !apuestaSyncCerrada(apuesta)))
+  );
+
+  if (candidatas.length === 0) {
+    if (!silencioso) setNflSyncStatus("No hay apuestas NFL pendientes para sincronizar.");
+    return;
+  }
+
+  const btn = document.getElementById("btnSincronizarNfl");
+  if (!silencioso) {
+    if (btn) btn.disabled = true;
+    setNflSyncStatus("Sincronizando resultados NFL con ESPN...");
+  }
+
+  try {
+    const juegosPorFecha = new Map();
+    const fechas = [...new Set(candidatas.flatMap(apuesta => getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal())) )];
+    for (const fecha of fechas) {
+      try {
+        juegosPorFecha.set(fecha, await cargarJuegosEspnNflPorFecha(fecha));
+      } catch (error) {
+        console.warn("No se pudo cargar ESPN NFL:", fecha, error);
+        juegosPorFecha.set(fecha, []);
+      }
+    }
+
+    let actualizadas = 0;
+    let revisadas = 0;
+    for (const apuesta of candidatas) {
+      revisadas++;
+      const fechasApuesta = getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal());
+      const juegos = fechasApuesta.flatMap(fecha => juegosPorFecha.get(fecha) || []);
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegos);
+      if (!updateData) continue;
+
+      updateData.deporte = "nfl";
+      updateData.autoSync = crearAutoSyncPayload(apuesta, updateData.resultado || apuesta.resultado, {
+        proveedor: "espn_nfl_scoreboard",
+        ultimaRevision: Date.now()
+      });
+      if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
+      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      actualizadas++;
+    }
+
+    if (!silencioso) {
+      setNflSyncStatus(`NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas con ESPN.`, actualizadas ? "success" : "");
+      render();
+    }
+  } catch (error) {
+    console.error("Error sincronizando NFL:", error);
+    if (!silencioso) setNflSyncStatus(`No se pudo sincronizar NFL: ${error.message}`, "error");
+  } finally {
+    if (!silencioso && btn) btn.disabled = false;
+  }
+}
+
+async function ejecutarAutoSyncNfl(force = false) {
+  if (!paginaEstaVisible() || !_syncNflActivado || _autoSyncNflEnCurso) return;
+  if (!force && Date.now() - _ultimoAutoSyncNfl < NFL_AUTO_SYNC_INTERVAL_MS) return;
+  _autoSyncNflEnCurso = true;
+  _ultimoAutoSyncNfl = Date.now();
+  try {
+    await sincronizarResultadosNfl(true);
+  } catch (error) {
+    console.warn("Auto-sync NFL - error general:", error.message);
+  } finally {
+    _autoSyncNflEnCurso = false;
+  }
+}
+
+function startAutoSyncNfl() {
+  _syncNflActivado = true;
+  if (_autoSyncNflIntervalId === null) {
+    _autoSyncNflIntervalId = setInterval(() => programarSyncSilenciosa("nfl", 0), NFL_AUTO_SYNC_INTERVAL_MS);
+  }
+  programarSyncSilenciosa("nfl", 0, true);
+
+  if (_autoSyncNflListenersRegistrados) return;
+  _autoSyncNflListenersRegistrados = true;
+  document.addEventListener("visibilitychange", () => {
+    if (paginaEstaVisible() && _syncNflActivado) programarSyncSilenciosa("nfl", 1000, true);
+  });
+  window.addEventListener("focus", () => {
+    if (_syncNflActivado) programarSyncSilenciosa("nfl", 1000, true);
+  });
+}
+
 let _autoSyncFutbolIntervalId = null;
 let _autoSyncFutbolEnCurso = false;
 let _ultimoAutoSyncFutbol = 0;
@@ -11236,12 +11381,21 @@ function iniciarApp() {
       sincronizarResultadosFutbol();
     };
   }
+  const btnSincronizarNfl = document.getElementById("btnSincronizarNfl");
+  if (btnSincronizarNfl) {
+    btnSincronizarNfl.onclick = () => {
+      startAutoSyncNfl();
+      sincronizarResultadosNfl();
+    };
+  }
   document.addEventListener("input", (e) => {
     if (!e.target?.matches?.(".jugada-ev-input, .evento-principal-input")) return;
     const deporteSelect = document.getElementById("deporte");
     if (deporteSelect && !deporteSelect.value) {
       if (detectarEquiposMlb(e.target.value).length > 0) {
         deporteSelect.value = "mlb";
+      } else if (detectarEquiposNfl(e.target.value).length > 0) {
+        deporteSelect.value = "nfl";
       } else if (extraerEquiposEventoFutbol(e.target.value).length >= 2) {
         deporteSelect.value = "futbol";
       }

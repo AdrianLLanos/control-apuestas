@@ -208,16 +208,17 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
   if (horaHtml && !marcadorActual) return horaHtml;
 
   const totalGoles = Number(futbolAuto.totalGoles);
+  const esNfl = futbolAuto.deporte === "nfl";
   const totalGolesHtml = futbolAuto.mercado === "total_goles" &&
     futbolAuto.seleccionEquipo &&
     Number.isFinite(totalGoles)
-    ? ` &middot; Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
+    ? ` &middot; ${esNfl ? "Puntos" : "Goles"} de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
     : "";
 
   if (!marcadorActual && futbolAuto.mercado === "total_goles" && Number.isFinite(totalGoles)) {
     const etiquetaTotal = futbolAuto.seleccionEquipo
-      ? `Goles de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
-      : `Total goles: ${escapeHtml(totalGoles)}`;
+      ? `${esNfl ? "Puntos" : "Goles"} de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalGoles)}`
+      : `Total ${esNfl ? "puntos" : "goles"}: ${escapeHtml(totalGoles)}`;
     return getAutoFutbolResultadoHtml(etiquetaTotal);
   }
 

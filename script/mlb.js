@@ -39,8 +39,46 @@ export const MLB_TEAMS = [
   { name: "Washington Nationals", logo: "washington-nationals.svg", aliases: ["Washington Nationals", "Nationals", "WSH", "WAS"], pitchers: ["MacKenzie Gore", "Jake Irvin", "Mitchell Parker", "DJ Herz", "Trevor Williams"] }
 ];
 
+// Equipos NFL: los logos se guardan localmente para que sigan disponibles aunque ESPN no cargue.
+export const NFL_TEAMS = [
+  { name: "Arizona Cardinals", logo: "nfl-ari.png", aliases: ["Arizona Cardinals", "Cardinals", "ARI"] },
+  { name: "Atlanta Falcons", logo: "nfl-atl.png", aliases: ["Atlanta Falcons", "Falcons", "ATL"] },
+  { name: "Baltimore Ravens", logo: "nfl-bal.png", aliases: ["Baltimore Ravens", "Ravens", "BAL"] },
+  { name: "Buffalo Bills", logo: "nfl-buf.png", aliases: ["Buffalo Bills", "Bills", "BUF"] },
+  { name: "Carolina Panthers", logo: "nfl-car.png", aliases: ["Carolina Panthers", "Panthers", "CAR"] },
+  { name: "Chicago Bears", logo: "nfl-chi.png", aliases: ["Chicago Bears", "Bears", "CHI"] },
+  { name: "Cincinnati Bengals", logo: "nfl-cin.png", aliases: ["Cincinnati Bengals", "Bengals", "CIN"] },
+  { name: "Cleveland Browns", logo: "nfl-cle.png", aliases: ["Cleveland Browns", "Browns", "CLE"] },
+  { name: "Dallas Cowboys", logo: "nfl-dal.png", aliases: ["Dallas Cowboys", "Cowboys", "DAL"] },
+  { name: "Denver Broncos", logo: "nfl-den.png", aliases: ["Denver Broncos", "Broncos", "DEN"] },
+  { name: "Detroit Lions", logo: "nfl-det.png", aliases: ["Detroit Lions", "Lions", "DET"] },
+  { name: "Green Bay Packers", logo: "nfl-gb.png", aliases: ["Green Bay Packers", "Packers", "GB"] },
+  { name: "Houston Texans", logo: "nfl-hou.png", aliases: ["Houston Texans", "Texans", "HOU"] },
+  { name: "Indianapolis Colts", logo: "nfl-ind.png", aliases: ["Indianapolis Colts", "Colts", "IND"] },
+  { name: "Jacksonville Jaguars", logo: "nfl-jax.png", aliases: ["Jacksonville Jaguars", "Jaguars", "Jacksonville", "JAX"] },
+  { name: "Kansas City Chiefs", logo: "nfl-kc.png", aliases: ["Kansas City Chiefs", "Chiefs", "KC"] },
+  { name: "Las Vegas Raiders", logo: "nfl-lv.png", aliases: ["Las Vegas Raiders", "Raiders", "LV"] },
+  { name: "Los Angeles Chargers", logo: "nfl-lac.png", aliases: ["Los Angeles Chargers", "LA Chargers", "Chargers", "LAC"] },
+  { name: "Los Angeles Rams", logo: "nfl-lar.png", aliases: ["Los Angeles Rams", "LA Rams", "Rams", "LAR"] },
+  { name: "Miami Dolphins", logo: "nfl-mia.png", aliases: ["Miami Dolphins", "Dolphins", "MIA"] },
+  { name: "Minnesota Vikings", logo: "nfl-min.png", aliases: ["Minnesota Vikings", "Vikings", "MIN"] },
+  { name: "New England Patriots", logo: "nfl-ne.png", aliases: ["New England Patriots", "Patriots", "NE"] },
+  { name: "New Orleans Saints", logo: "nfl-no.png", aliases: ["New Orleans Saints", "Saints", "NO"] },
+  { name: "New York Giants", logo: "nfl-nyg.png", aliases: ["New York Giants", "NY Giants", "Giants", "NYG"] },
+  { name: "New York Jets", logo: "nfl-nyj.png", aliases: ["New York Jets", "NY Jets", "Jets", "NYJ"] },
+  { name: "Philadelphia Eagles", logo: "nfl-phi.png", aliases: ["Philadelphia Eagles", "Eagles", "PHI"] },
+  { name: "Pittsburgh Steelers", logo: "nfl-pit.png", aliases: ["Pittsburgh Steelers", "Steelers", "PIT"] },
+  { name: "San Francisco 49ers", logo: "nfl-sf.png", aliases: ["San Francisco 49ers", "San Francisco Forty Niners", "49ers", "Niners", "SF"] },
+  { name: "Seattle Seahawks", logo: "nfl-sea.png", aliases: ["Seattle Seahawks", "Seahawks", "SEA"] },
+  { name: "Tampa Bay Buccaneers", logo: "nfl-tb.png", aliases: ["Tampa Bay Buccaneers", "Buccaneers", "Bucs", "TB"] },
+  { name: "Tennessee Titans", logo: "nfl-ten.png", aliases: ["Tennessee Titans", "Titans", "TEN"] },
+  { name: "Washington Commanders", logo: "nfl-wsh.png", aliases: ["Washington Commanders", "Commanders", "WSH", "WAS"] }
+];
+
 const MLB_LEAGUE_LOGO = { name: "MLB", logo: "mlb.svg", aliases: ["MLB", "MLN"] };
 const MLB_LOGO_ENTRIES = [MLB_LEAGUE_LOGO, ...MLB_TEAMS];
+const NFL_LEAGUE_LOGO = { name: "NFL", logo: "nfl.png", aliases: ["NFL"] };
+const NFL_LOGO_ENTRIES = [NFL_LEAGUE_LOGO, ...NFL_TEAMS];
 const COUNTRY_LOGO_ENTRIES = COUNTRY_FLAG_ENTRIES.map(country => ({
   type: "country",
   name: country.name,
@@ -50,6 +88,7 @@ const COUNTRY_LOGO_ENTRIES = COUNTRY_FLAG_ENTRIES.map(country => ({
 }));
 const LOGO_ENTRIES = [
   ...MLB_LOGO_ENTRIES.map(entry => ({ ...entry, type: "mlb" })),
+  ...NFL_LOGO_ENTRIES.map(entry => ({ ...entry, type: "nfl" })),
   ...COUNTRY_LOGO_ENTRIES
 ];
 
@@ -134,7 +173,7 @@ function distanciaEdicion(a = "", b = "") {
 
 function getNombreCortoLogo(entry) {
   if (!entry) return "";
-  if (entry.type === "mlb" && entry.name !== "MLB") {
+  if (["mlb", "nfl"].includes(entry.type) && !["MLB", "NFL"].includes(entry.name)) {
     const corto = [...entry.aliases]
       .filter(alias => alias.length > 2 && !/^[A-Z]{2,3}$/.test(alias))
       .sort((a, b) => a.length - b.length)[0];
