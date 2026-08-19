@@ -938,6 +938,54 @@ function generarOpcionesDesdeTextoLibre(typed, sport) {
   return [...new Set(options)];
 }
 
+// Historial personal de mercados escritos por el usuario. Se guarda en el
+// navegador para que no dependa de la disponibilidad de Firebase ni mezcle
+// sugerencias entre usuarios.
+const HISTORIAL_JUGADAS_STORAGE_KEY = "apuestas.autocomplete.jugadas.v1";
+const HISTORIAL_JUGADAS_MAXIMO = 150;
+
+function obtenerHistorialJugadas() {
+  try {
+    const guardadas = JSON.parse(localStorage.getItem(HISTORIAL_JUGADAS_STORAGE_KEY) || "[]");
+    return Array.isArray(guardadas)
+      ? guardadas.filter(jugada => typeof jugada === "string" && jugada.trim()).slice(0, HISTORIAL_JUGADAS_MAXIMO)
+      : [];
+  } catch (error) {
+    console.warn("No se pudo leer el historial de autocompletado:", error);
+    return [];
+  }
+}
+
+function guardarJugadaEnHistorial(jugada = "") {
+  const limpia = String(jugada).replace(/\s+/g, " ").trim();
+  if (limpia.length < 2) return;
+
+  try {
+    const clave = normalizeLookupKey(limpia);
+    const anteriores = obtenerHistorialJugadas().filter(item => normalizeLookupKey(item) !== clave);
+    localStorage.setItem(
+      HISTORIAL_JUGADAS_STORAGE_KEY,
+      JSON.stringify([limpia, ...anteriores].slice(0, HISTORIAL_JUGADAS_MAXIMO))
+    );
+  } catch (error) {
+    console.warn("No se pudo guardar el historial de autocompletado:", error);
+  }
+}
+
+function combinarOpcionesConHistorial(opciones = [], typed = "") {
+  const consulta = String(typed).trim().toLowerCase();
+  const historialCoincidente = obtenerHistorialJugadas().filter(opcion =>
+    !consulta || matchOpcionConPalabras(opcion, consulta)
+  );
+  const vistas = new Set();
+  return [...historialCoincidente, ...opciones].filter(opcion => {
+    const clave = normalizeLookupKey(opcion);
+    if (!clave || vistas.has(clave)) return false;
+    vistas.add(clave);
+    return true;
+  });
+}
+
 function prepararAutocompleteJugada(input) {
   const datalist = document.getElementById("mlbPlaysList");
   if (!datalist) return;
@@ -993,7 +1041,7 @@ function prepararAutocompleteJugada(input) {
     opciones = generarOpcionesJugada("", sport);
   }
 
-  datalist.innerHTML = opciones
+  datalist.innerHTML = combinarOpcionesConHistorial(opciones, typed)
     .map(option => `<option value="${escapeHtml(option)}"></option>`)
     .join("");
 }
@@ -1023,6 +1071,8 @@ export function habilitarAutocompleteMlb(root = document) {
         input.addEventListener("click", actualizar);
         input.addEventListener("input", actualizar);
         input.addEventListener("keydown", actualizar);
+        input.addEventListener("change", () => guardarJugadaEnHistorial(input.value));
+        input.addEventListener("blur", () => guardarJugadaEnHistorial(input.value));
         input.dataset.playAutocompleteReady = "1";
       }
     });
