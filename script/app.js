@@ -11264,7 +11264,7 @@ function obtenerFechaActualLocal() {
  ========================= */
 let appInicializada = false;
 
-const MODOS_VISUALES_VALIDOS = new Set(["claro", "noctis", "lectura"]);
+const MODOS_VISUALES_VALIDOS = new Set(["claro", "noctis", "tarde-noche", "lectura"]);
 
 function aplicarModoVisual(modo = "noctis") {
   const modoSeguro = MODOS_VISUALES_VALIDOS.has(modo) ? modo : "noctis";

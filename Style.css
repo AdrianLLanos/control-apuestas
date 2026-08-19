@@ -2148,3 +2148,51 @@ html[data-modo-visual="claro"] .bet-system-number {
 
 html[data-modo-visual] .modo-visual-control { background: transparent; border: 0; }
 
+/* Tarde-noche: inspirado en el antiguo modo "Dim" de Twitter. */
+html[data-modo-visual="tarde-noche"] body { background: #15202b !important; color: #ffffff !important; }
+html[data-modo-visual="tarde-noche"] .formulario-global,
+html[data-modo-visual="tarde-noche"] .page,
+html[data-modo-visual="tarde-noche"] .skeleton-box,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta,
+html[data-modo-visual="tarde-noche"] .apuesta-edit-card,
+html[data-modo-visual="tarde-noche"] .dobles-calc-panel,
+html[data-modo-visual="tarde-noche"] .sistema-calc-panel {
+    background: #192734 !important;
+    color: #ffffff !important;
+    border-color: #38444d !important;
+}
+html[data-modo-visual="tarde-noche"] input,
+html[data-modo-visual="tarde-noche"] select,
+html[data-modo-visual="tarde-noche"] textarea,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta .jugada-ev-input,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta .jugada-jug-input,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta input[type="text"],
+html[data-modo-visual="tarde-noche"] .evento-principal-input,
+html[data-modo-visual="tarde-noche"] .apuesta-edit-field input,
+html[data-modo-visual="tarde-noche"] .apuesta-edit-field select {
+    background: #253341 !important;
+    color: #ffffff !important;
+    border-color: #38444d !important;
+}
+html[data-modo-visual="tarde-noche"] .tarjeta-label,
+html[data-modo-visual="tarde-noche"] .modo-visual-label,
+html[data-modo-visual="tarde-noche"] .mlb-sync-status,
+html[data-modo-visual="tarde-noche"] .page [style*="color:#cbd5e1"],
+html[data-modo-visual="tarde-noche"] .page [style*="color: #cbd5e1"] { color: #8899a6 !important; }
+html[data-modo-visual="tarde-noche"] .page,
+html[data-modo-visual="tarde-noche"] .page td,
+html[data-modo-visual="tarde-noche"] .page th { color: #ffffff; border-color: #38444d; }
+html[data-modo-visual="tarde-noche"] tr { border-color: #38444d; }
+html[data-modo-visual="tarde-noche"] .bet-event-title,
+html[data-modo-visual="tarde-noche"] .bet-main-title,
+html[data-modo-visual="tarde-noche"] .bet-selection-line,
+html[data-modo-visual="tarde-noche"] .bet-selection-value,
+html[data-modo-visual="tarde-noche"] .mlb-team-chip { color: #ffffff !important; }
+html[data-modo-visual="tarde-noche"] .bet-event-title .mlb-versus { color: #8899a6 !important; }
+html[data-modo-visual="tarde-noche"] .modo-visual-btn.is-active {
+    background: #1da1f2;
+    border-color: #71c9f8;
+    color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(29, 161, 242, .20);
+}
+
