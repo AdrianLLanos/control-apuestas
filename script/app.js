@@ -1343,95 +1343,11 @@ function autocorregirApuestasCargadas(lista = []) {
     }
   });
 
-  const hoy = obtenerFechaActualLocal();
-  lista.forEach(a => {
-    if (!a.hora) {
-      const horaInferida = (a.jugadas || [])[0]?.autoMlb?.horaJuego ||
-        (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.horaJuego;
-      if (horaInferida) {
-        a.hora = horaInferida;
-      } else {
-        const fechaJuego = (a.jugadas || [])[0]?.autoMlb?.fechaJuego || (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.fechaJuego;
-        if (fechaJuego) {
-          const { hora } = obtenerFechaHoraLocalDesdeIso(fechaJuego);
-          if (hora) a.hora = hora;
-        }
-      }
-    }
-
-    if (apuestaPareceMlb(a)) {
-      const fecha = a.fecha || a.dia;
-      const esHoyOCercano = fecha === hoy || sonFechasCercanas(fecha, hoy);
-      const teniaReembolsoPospuesto = (a.resultado === "nula") || (a.jugadas || []).some(j =>
-        esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
-        Boolean(j?.autoMlb?.estadoEspecial) ||
-        (j?.selections || []).some(sel =>
-          sel?.estado === "nula" ||
-          Boolean(sel?.autoMlb?.estadoEspecial) ||
-          esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego)
-        )
-      );
-
-      const targetHora = a.hora || (a.jugadas || [])[0]?.autoMlb?.horaJuego;
-      const fechaJuegoActual = (a.jugadas || [])[0]?.autoMlb?.fechaJuego || (a.jugadas || [])[0]?.selections?.[0]?.autoMlb?.fechaJuego;
-      const tieneGamePk = (a.jugadas || []).some(j => j?.autoMlb?.gamePk != null || (j?.selections || []).some(sel => sel?.autoMlb?.gamePk != null));
-
-      let horaDesfasada = false;
-      if (targetHora && fechaJuegoActual && !tieneGamePk) {
-        const { hora: horaLocalActual } = obtenerFechaHoraLocalDesdeIso(fechaJuegoActual);
-        if (horaLocalActual) {
-          const [tH, tM] = targetHora.split(":").map(Number);
-          const [gH, gM] = horaLocalActual.split(":").map(Number);
-          const diffMins = Math.abs((tH * 60 + tM) - (gH * 60 + gM));
-          if (diffMins > 90) {
-            horaDesfasada = true;
-          }
-        }
-      }
-
-      if (esHoyOCercano && (teniaReembolsoPospuesto || horaDesfasada)) {
-        let huboCambioAutocorrecion = false;
-        a.jugadas = (a.jugadas || []).map(j => {
-          if (typeof j !== "object" || !j) return j;
-          const estadoJuegoReseteado = teniaReembolsoPospuesto ? "Programado" : (j.autoMlb?.estadoJuego || "Programado");
-          const autoMlbJ = j.autoMlb ? { ...j.autoMlb, gamePk: horaDesfasada ? null : j.autoMlb.gamePk, espnId: horaDesfasada ? null : j.autoMlb.espnId, estadoEspecial: null, estadoJuego: estadoJuegoReseteado } : null;
-          const selections = (j.selections || []).map(sel => {
-            const estadoSelReseteado = teniaReembolsoPospuesto ? "Programado" : (sel.autoMlb?.estadoJuego || "Programado");
-            const autoMlbSel = sel.autoMlb ? { ...sel.autoMlb, gamePk: horaDesfasada ? null : sel.autoMlb.gamePk, espnId: horaDesfasada ? null : sel.autoMlb.espnId, estadoEspecial: null, estadoJuego: estadoSelReseteado } : null;
-            const nuevoEstado = sel.estado === "nula" ? "pendiente" : (sel.estado || "pendiente");
-            const necesitaLimpiarHora = horaDesfasada && ((sel.autoMlb?.gamePk != null) || (sel.autoMlb?.espnId != null) || (j.autoMlb?.gamePk != null) || (j.autoMlb?.espnId != null));
-            if (sel.estado !== nuevoEstado || sel.autoMlb?.estadoEspecial != null || necesitaLimpiarHora) {
-              huboCambioAutocorrecion = true;
-            }
-            return {
-              ...sel,
-              estado: nuevoEstado,
-              ...(autoMlbSel ? { autoMlb: autoMlbSel } : {})
-            };
-          });
-          if (j.estado === "nula") huboCambioAutocorrecion = true;
-          return {
-            ...j,
-            estado: "pendiente",
-            selections,
-            ...(autoMlbJ ? { autoMlb: autoMlbJ } : {})
-          };
-        });
-
-        const nuevoResultado = recalcularResultadoApuesta(a);
-        if (a.resultado !== nuevoResultado || huboCambioAutocorrecion) {
-          a.resultado = nuevoResultado;
-          a.autoSync = crearAutoSyncPayload(a, nuevoResultado);
-          marcarRenderSilenciosoApuesta(a.id);
-          updateDoc(doc(db, "apuestas", a.id), {
-            jugadas: a.jugadas,
-            resultado: nuevoResultado,
-            autoSync: a.autoSync
-          }).catch(err => console.error("Error al corregir apuesta pospuesta MLB:", err));
-        }
-      }
-    }
-  });
+  // La reprogramación de un partido MLB se resuelve exclusivamente durante la
+  // sincronización contra el proveedor. Reabrir aquí una selección `nula` era
+  // inseguro: `nula` también representa un push legítimo (por ejemplo, total 7
+  // con línea 7) y este código la convertía erróneamente en `pendiente`.
+  // Además podía reemplazar un estado Final por "Programado" con datos locales.
 }
 
 function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
