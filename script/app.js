@@ -11264,9 +11264,38 @@ function obtenerFechaActualLocal() {
  ========================= */
 let appInicializada = false;
 
+const MODOS_VISUALES_VALIDOS = new Set(["claro", "noctis", "lectura"]);
+
+function aplicarModoVisual(modo = "noctis") {
+  const modoSeguro = MODOS_VISUALES_VALIDOS.has(modo) ? modo : "noctis";
+  document.documentElement.dataset.modoVisual = modoSeguro;
+
+  try {
+    localStorage.setItem("apuestas.modoVisual", modoSeguro);
+  } catch (error) {
+    console.warn("No se pudo guardar el modo visual:", error);
+  }
+
+  document.querySelectorAll(".modo-visual-btn").forEach(btn => {
+    const activo = btn.dataset.modoVisual === modoSeguro;
+    btn.classList.toggle("is-active", activo);
+    btn.setAttribute("aria-pressed", String(activo));
+  });
+}
+
+function inicializarControlModoVisual() {
+  const modoInicial = document.documentElement.dataset.modoVisual || "noctis";
+  aplicarModoVisual(modoInicial);
+  document.querySelectorAll(".modo-visual-btn").forEach(btn => {
+    btn.addEventListener("click", () => aplicarModoVisual(btn.dataset.modoVisual));
+  });
+}
+
 function iniciarApp() {
   if (appInicializada) return;
   appInicializada = true;
+
+  inicializarControlModoVisual();
 
   const inputFecha = document.getElementById("fecha");
   if (inputFecha) {

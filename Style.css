@@ -11,6 +11,140 @@ body {
     padding: 20px;
 }
 
+/* =========================
+   MODOS VISUALES
+   ========================= */
+.app-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.app-heading h2 { margin-bottom: 0; }
+
+.modo-visual-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, .42);
+}
+
+.modo-visual-label {
+    padding: 0 4px 0 6px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.modo-visual-btn {
+    width: 30px;
+    height: 29px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 15px;
+    line-height: 1;
+}
+
+.modo-visual-btn:hover { background: rgba(125, 211, 252, .14); color: #e0f2fe; }
+.modo-visual-btn.is-active { background: #38bdf8; border-color: #7dd3fc; color: #082f49; box-shadow: 0 1px 8px rgba(56, 189, 248, .25); }
+
+/* Oscuro Noctis: azul noche profundo, con acentos fríos y legibles. */
+html[data-modo-visual="noctis"] body {
+    background: #101827 !important;
+    color: #e6edf7 !important;
+}
+html[data-modo-visual="noctis"] .formulario-global,
+html[data-modo-visual="noctis"] .page,
+html[data-modo-visual="noctis"] .skeleton-box { background: #192438 !important; }
+html[data-modo-visual="noctis"] .modo-visual-control { background: #111b2c; }
+
+/* Claro: conserva la jerarquía de las tarjetas sin usar fondos grisáceos pesados. */
+html[data-modo-visual="claro"] body {
+    background: #eef3f8 !important;
+    color: #172033 !important;
+}
+html[data-modo-visual="claro"] .formulario-global,
+html[data-modo-visual="claro"] .page,
+html[data-modo-visual="claro"] .skeleton-box {
+    background: #ffffff !important;
+    color: #172033 !important;
+    box-shadow: 0 8px 25px rgba(15, 23, 42, .07);
+}
+html[data-modo-visual="claro"] .modo-visual-control { background: #f5f8fc; border-color: #d5dfeb; }
+html[data-modo-visual="claro"] .modo-visual-label,
+html[data-modo-visual="claro"] .mlb-sync-status { color: #52637a; }
+html[data-modo-visual="claro"] input,
+html[data-modo-visual="claro"] select,
+html[data-modo-visual="claro"] textarea {
+    background-color: #f8fafc !important;
+    color: #172033 !important;
+    border: 1px solid #cbd5e1 !important;
+}
+html[data-modo-visual="claro"] [style*="background:#0f172a"],
+html[data-modo-visual="claro"] [style*="background: #0f172a"],
+html[data-modo-visual="claro"] [style*="background:#1e293b"],
+html[data-modo-visual="claro"] [style*="background: #1e293b"] { background: #f8fafc !important; }
+html[data-modo-visual="claro"] [style*="color:white"],
+html[data-modo-visual="claro"] [style*="color: white"],
+html[data-modo-visual="claro"] [style*="color:#ffffff"] { color: #172033 !important; }
+html[data-modo-visual="claro"] table,
+html[data-modo-visual="claro"] td,
+html[data-modo-visual="claro"] th { color: #172033; border-color: #dbe4ee; }
+
+/* Lectura: papel cálido, tipografía más descansada y menos ruido visual. */
+html[data-modo-visual="lectura"] body {
+    background: #eee8dc !important;
+    color: #302c26 !important;
+    line-height: 1.65;
+}
+html[data-modo-visual="lectura"] .container { max-width: 900px; }
+html[data-modo-visual="lectura"] .formulario-global,
+html[data-modo-visual="lectura"] .page,
+html[data-modo-visual="lectura"] .skeleton-box {
+    background: #fffdf7 !important;
+    color: #302c26 !important;
+    border: 1px solid #ded4c1;
+    box-shadow: 0 5px 20px rgba(74, 58, 36, .08);
+}
+html[data-modo-visual="lectura"] .page { padding: 26px; }
+html[data-modo-visual="lectura"] .page p,
+html[data-modo-visual="lectura"] .page td,
+html[data-modo-visual="lectura"] .page th { font-family: Georgia, "Times New Roman", serif; font-size: 15px; }
+html[data-modo-visual="lectura"] .modo-visual-control { background: #f6f0e5; border-color: #ded4c1; }
+html[data-modo-visual="lectura"] .modo-visual-label,
+html[data-modo-visual="lectura"] .mlb-sync-status { color: #706756; }
+html[data-modo-visual="lectura"] input,
+html[data-modo-visual="lectura"] select,
+html[data-modo-visual="lectura"] textarea {
+    background-color: #fffdf7 !important;
+    color: #302c26 !important;
+    border: 1px solid #cfc2aa !important;
+}
+html[data-modo-visual="lectura"] [style*="background:#0f172a"],
+html[data-modo-visual="lectura"] [style*="background: #0f172a"],
+html[data-modo-visual="lectura"] [style*="background:#1e293b"],
+html[data-modo-visual="lectura"] [style*="background: #1e293b"] { background: #fffaf0 !important; }
+html[data-modo-visual="lectura"] [style*="color:white"],
+html[data-modo-visual="lectura"] [style*="color: white"],
+html[data-modo-visual="lectura"] [style*="color:#ffffff"] { color: #302c26 !important; }
+html[data-modo-visual="lectura"] table,
+html[data-modo-visual="lectura"] td,
+html[data-modo-visual="lectura"] th { color: #302c26; border-color: #ded4c1; }
+
+@media (max-width: 560px) {
+    .app-heading { align-items: flex-start; flex-direction: column; }
+    .modo-visual-control { align-self: flex-end; }
+}
+
 .container {
     max-width: 1000px;
     margin: auto;

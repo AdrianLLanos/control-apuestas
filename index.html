@@ -27,6 +27,15 @@
     padding: 20px;
   }
 </style>
+<script>
+  (function () {
+    try {
+      document.documentElement.dataset.modoVisual = localStorage.getItem("apuestas.modoVisual") || "noctis";
+    } catch (_) {
+      document.documentElement.dataset.modoVisual = "noctis";
+    }
+  })();
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,7 +56,15 @@
 
   <!-- FORMULARIO -->
   <div class="formulario-global">
-    <h2>➕ Agregar Nueva Apuesta</h2>
+    <div class="app-heading">
+      <h2>➕ Agregar Nueva Apuesta</h2>
+      <div class="modo-visual-control" role="group" aria-label="Modo visual">
+        <span class="modo-visual-label">Vista</span>
+        <button type="button" class="modo-visual-btn" data-modo-visual="claro" title="Modo claro" aria-label="Modo claro">☀</button>
+        <button type="button" class="modo-visual-btn" data-modo-visual="noctis" title="Modo oscuro Noctis" aria-label="Modo oscuro Noctis">☾</button>
+        <button type="button" class="modo-visual-btn" data-modo-visual="lectura" title="Modo lectura" aria-label="Modo lectura">☷</button>
+      </div>
+    </div>
 
     <div class="top-controls">
       <div class="casa-select-group">
