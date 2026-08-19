@@ -10687,7 +10687,7 @@ function _render() {
                           ${!isLastSel ? `<div style="width:2px; background-color:#fbbf24; flex-grow:1; margin-top:2px; margin-bottom:-12px; opacity:0.75;"></div>` : ''}
                         </div>
                         <div style="flex-grow: 1; padding-left: 4px;">
-                          ${tituloVisible ? `<div style="font-size:11px; color:#fbbf24; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
+                          ${tituloVisible ? `<div class="bet-market-title" style="font-size:11px; color:#fbbf24; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
                           <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
                             <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
                           </div>
@@ -10730,7 +10730,7 @@ function _render() {
                 });
                 return `
                   <div style="display:flex; flex-direction:column; gap:1px; ${styleMod} margin-top:4px;">
-                    ${tituloVisible ? `<div style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
+                    ${tituloVisible ? `<div class="bet-market-title" style="font-size:11px; color:${themeColor}; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${formatTextWithMlbTeams(tituloVisible)}</div>` : ""}
                     <div class="bet-selection-line ${selectionLineClass}" style="font-size:13px; color:#ffffff; font-weight:600;">
                       <span class="bet-selection-value ${selectionTextClass}">${formattedJugada}</span>${estadoIcon}
                     </div>
@@ -10757,7 +10757,7 @@ function _render() {
             timelineItems.push({
               html: `
                 <div style="display:flex; flex-direction:column; gap:2px;">
-                  <div style="font-size:14px; color:#ffffff; font-weight:700; display:flex; align-items:center;">
+                  <div class="bet-event-title" style="font-size:14px; color:#ffffff; font-weight:700; display:flex; align-items:center;">
                     ${formattedEvText} ${matchCuotaText}
                   </div>
                   <div style="${containerStyle}">
@@ -10787,19 +10787,19 @@ function _render() {
 
           const eventoMostrado = limpiarEventoDuplicado(a.evento);
           const formattedEvento = formatTextWithCorners(eventoMostrado);
-          let tituloHtml = (!isSimpleBet && !isSimpleOptionBet && eventoMostrado) ? `<div style="color: #fff; font-size: 16px; font-weight: 600; margin-bottom: 8px;">${formattedEvento}</div>` : '';
+          let tituloHtml = (!isSimpleBet && !isSimpleOptionBet && eventoMostrado) ? `<div class="bet-main-title" style="color: #fff; font-size: 16px; font-weight: 600; margin-bottom: 8px;">${formattedEvento}</div>` : '';
           const resumenPatente = isPatente
             ? (() => {
               const detalle = calcularDetallePatente(a);
               const retornoMaximo = detalle.cuotaMaxima * (parseFloat(a.importe) || 0);
-              return `<div style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
+              return `<div class="bet-system-summary" style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
                 Patente: ${a.jugadas.length} selecciones &middot; ${detalle.totalCombinaciones} comb. &middot; $${detalle.importePorCombinacion.toFixed(2)} c/u &middot; Ganadoras: ${detalle.combinacionesGanadas} &middot; Max: $${retornoMaximo.toFixed(2)}
               </div>`;
             })()
             : isDobles
             ? (() => {
               const detalle = calcularDetalleDobles(a);
-              return `<div style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
+              return `<div class="bet-system-summary" style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
                 Dobles: ${a.jugadas.length} selecciones &middot; ${detalle.totalCombinaciones} comb. &middot; $${detalle.importePorCombinacion.toFixed(2)} c/u &middot; Ganadoras: ${detalle.combinacionesGanadas} &middot; Max: $${detalle.gananciaMaxima.toFixed(2)}
               </div>`;
             })()
@@ -10809,10 +10809,10 @@ function _render() {
               const breakdownKeys = Object.keys(detalle.tiersBreakdown || {});
               const breakdownText = breakdownKeys.map(k => {
                 const item = detalle.tiersBreakdown[k];
-                return `${item.nombre} (${item.numCombos}x)`;
+                return `${item.nombre} (<strong class="bet-system-number">${item.numCombos}x</strong>)`;
               }).join(", ") || `${a.jugadas.length} selecciones`;
-              return `<div style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
-                Sistema: ${a.jugadas.length} selecciones &middot; ${breakdownText} &middot; Max: $${detalle.gananciaMaxima.toFixed(2)}
+              return `<div class="bet-system-summary" style="font-size:12px; color:#cbd5e1; margin:-2px 0 8px 0;">
+                Sistema: <strong class="bet-system-number">${a.jugadas.length}</strong> selecciones &middot; ${breakdownText} &middot; Max: $<strong class="bet-system-number">${detalle.gananciaMaxima.toFixed(2)}</strong>
               </div>`;
             })()
             : "";

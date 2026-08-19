@@ -27,11 +27,10 @@ body {
 .modo-visual-control {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px;
-    border: 1px solid rgba(148, 163, 184, .25);
-    border-radius: 10px;
-    background: rgba(15, 23, 42, .42);
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .modo-visual-label {
@@ -42,20 +41,32 @@ body {
 }
 
 .modo-visual-btn {
-    width: 30px;
-    height: 29px;
+    width: 42px;
+    height: 42px;
     margin: 0;
     padding: 0;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    background: transparent;
-    color: #94a3b8;
-    font-size: 15px;
+    display: inline-grid;
+    place-items: center;
+    border: 2px solid #075861;
+    border-radius: 8px;
+    background: #002b30;
+    color: #d8f4f2;
     line-height: 1;
+    box-shadow: inset 0 0 0 1px rgba(18, 113, 121, .16);
 }
 
-.modo-visual-btn:hover { background: rgba(125, 211, 252, .14); color: #e0f2fe; }
-.modo-visual-btn.is-active { background: #38bdf8; border-color: #7dd3fc; color: #082f49; box-shadow: 0 1px 8px rgba(56, 189, 248, .25); }
+.modo-visual-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.modo-visual-btn:hover { background: #063b42; border-color: #0d7a84; color: #ffffff; }
+.modo-visual-btn.is-active { background: #07515a; border-color: #13a7aa; color: #ffffff; box-shadow: 0 0 0 3px rgba(20, 184, 166, .14); }
 
 /* Oscuro Noctis: azul noche profundo, con acentos fríos y legibles. */
 html[data-modo-visual="noctis"] body {
@@ -106,7 +117,7 @@ html[data-modo-visual="lectura"] body {
     color: #302c26 !important;
     line-height: 1.65;
 }
-html[data-modo-visual="lectura"] .container { max-width: 900px; }
+html[data-modo-visual="lectura"] .container { max-width: 1000px; }
 html[data-modo-visual="lectura"] .formulario-global,
 html[data-modo-visual="lectura"] .page,
 html[data-modo-visual="lectura"] .skeleton-box {
@@ -1896,4 +1907,244 @@ table select option[value="pendiente"],
     border-radius: 6px;
     margin-left: 6px;
 }
+
+/* Capa final: los formularios y tarjetas se crean dinámicamente y parte de
+   sus colores originales usa !important. Estas reglas mantienen cada modo
+   coherente incluso para las apuestas ya renderizadas. */
+html[data-modo-visual="noctis"] body { background: #001c20 !important; color: #e9fbfb !important; }
+html[data-modo-visual="noctis"] .formulario-global,
+html[data-modo-visual="noctis"] .page,
+html[data-modo-visual="noctis"] #tarjetaApuesta,
+html[data-modo-visual="noctis"] .apuesta-edit-card { background: #003035 !important; border-color: #0b5b62 !important; }
+html[data-modo-visual="noctis"] input,
+html[data-modo-visual="noctis"] select,
+html[data-modo-visual="noctis"] textarea,
+html[data-modo-visual="noctis"] .tarjeta-apuesta .jugada-ev-input,
+html[data-modo-visual="noctis"] .tarjeta-apuesta .jugada-jug-input,
+html[data-modo-visual="noctis"] .tarjeta-apuesta input[type="text"],
+html[data-modo-visual="noctis"] .evento-principal-input {
+    background: #06272d !important;
+    color: #efffff !important;
+    border-color: #16717a !important;
+}
+html[data-modo-visual="noctis"] .tarjeta-label,
+html[data-modo-visual="noctis"] .jugada-jug-input::placeholder { color: #8eb8ba !important; }
+html[data-modo-visual="noctis"] .page,
+html[data-modo-visual="noctis"] .page td,
+html[data-modo-visual="noctis"] .page th { color: #ddf5f4; border-color: #0b5b62; }
+html[data-modo-visual="noctis"] tr { border-color: #0b5b62; }
+html[data-modo-visual="noctis"] .bet-event-title {
+    color: #ffffff !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    letter-spacing: -.1px;
+    text-shadow: 0 1px 8px rgba(255, 255, 255, .12);
+}
+html[data-modo-visual="noctis"] .bet-event-title .mlb-versus { color: #a8c9cc !important; font-weight: 800; }
+html[data-modo-visual="noctis"] .bet-market-title {
+    color: #c084fc !important;
+    font-weight: 800 !important;
+    letter-spacing: .65px !important;
+}
+html[data-modo-visual="noctis"] .bet-selection-line,
+html[data-modo-visual="noctis"] .bet-selection-value,
+html[data-modo-visual="noctis"] .mlb-team-chip {
+    color: #f4ffff !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="noctis"] .auto-mlb-score {
+    color: #57c7ff !important;
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: .05px;
+}
+html[data-modo-visual="noctis"] .auto-mlb-score--status {
+    color: #48e79a !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="noctis"] .page [style*="color:#cbd5e1"],
+html[data-modo-visual="noctis"] .page [style*="color: #cbd5e1"] {
+    color: #b8dcdd !important;
+    font-weight: 700 !important;
+}
+
+html[data-modo-visual="claro"] #tarjetaApuesta,
+html[data-modo-visual="claro"] .apuesta-edit-card,
+html[data-modo-visual="claro"] .dobles-calc-panel,
+html[data-modo-visual="claro"] .sistema-calc-panel {
+    background: #f8fbff !important;
+    color: #14233a !important;
+    border-color: #c8d8e9 !important;
+}
+html[data-modo-visual="claro"] .tarjeta-apuesta .jugada-ev-input,
+html[data-modo-visual="claro"] .tarjeta-apuesta .jugada-jug-input,
+html[data-modo-visual="claro"] .tarjeta-apuesta input[type="text"],
+html[data-modo-visual="claro"] .evento-principal-input,
+html[data-modo-visual="claro"] .apuesta-edit-field input,
+html[data-modo-visual="claro"] .apuesta-edit-field select {
+    background: #ffffff !important;
+    color: #172b46 !important;
+    border-color: #b9cce0 !important;
+}
+html[data-modo-visual="claro"] .formulario-global h2,
+html[data-modo-visual="claro"] .page h2 {
+    color: #102a46 !important;
+    font-size: clamp(22px, 3vw, 29px);
+    font-weight: 800;
+    letter-spacing: -.45px;
+    text-shadow: 0 1px 0 #fff, 0 3px 12px rgba(37, 99, 235, .14);
+}
+html[data-modo-visual="claro"] .tarjeta-label,
+html[data-modo-visual="claro"] .apuesta-edit-field,
+html[data-modo-visual="claro"] .page p { color: #405875 !important; font-weight: 600; }
+html[data-modo-visual="claro"] .jugada-slot-num,
+html[data-modo-visual="claro"] .tarjeta-apuesta [style*="font-weight:700"],
+html[data-modo-visual="claro"] .page strong:not(.ganada):not(.perdida) {
+    color: #143b66 !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="claro"] .page td,
+html[data-modo-visual="claro"] .page th,
+html[data-modo-visual="claro"] .bet-selection-value,
+html[data-modo-visual="claro"] .mlb-team-chip { color: #172b46 !important; font-weight: 700; }
+html[data-modo-visual="claro"] .bet-event-title {
+    color: #0b2545 !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    letter-spacing: -.1px;
+    text-shadow: 0 1px 0 #fff;
+}
+html[data-modo-visual="claro"] .bet-event-title .mlb-versus { color: #5e7694 !important; font-weight: 800; }
+html[data-modo-visual="claro"] .bet-market-title {
+    color: #7c3aed !important;
+    font-weight: 800 !important;
+    letter-spacing: .65px !important;
+}
+html[data-modo-visual="claro"] .bet-selection-line,
+html[data-modo-visual="claro"] .bet-selection-value {
+    color: #102f52 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="claro"] .auto-mlb-score {
+    color: #075da8 !important;
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: .05px;
+}
+html[data-modo-visual="claro"] .auto-mlb-score--status {
+    color: #078a4a !important;
+    font-weight: 800 !important;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, .9);
+}
+html[data-modo-visual="claro"] tr { border-color: #d6e2ee; }
+
+html[data-modo-visual="lectura"] #tarjetaApuesta,
+html[data-modo-visual="lectura"] .apuesta-edit-card,
+html[data-modo-visual="lectura"] .dobles-calc-panel,
+html[data-modo-visual="lectura"] .sistema-calc-panel { background: #fffaf0 !important; color: #302c26 !important; border-color: #d8cdb9 !important; }
+html[data-modo-visual="lectura"] .tarjeta-apuesta .jugada-ev-input,
+html[data-modo-visual="lectura"] .tarjeta-apuesta .jugada-jug-input,
+html[data-modo-visual="lectura"] .tarjeta-apuesta input[type="text"],
+html[data-modo-visual="lectura"] .evento-principal-input { background: #fffefb !important; color: #302c26 !important; border-color: #cfc2aa !important; }
+html[data-modo-visual="lectura"] .bet-event-title {
+    color: #30200e !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    letter-spacing: -.1px;
+}
+html[data-modo-visual="lectura"] .bet-event-title .mlb-versus { color: #776858 !important; font-weight: 800; }
+html[data-modo-visual="lectura"] .bet-market-title {
+    color: #8247b6 !important;
+    font-weight: 800 !important;
+    letter-spacing: .65px !important;
+}
+html[data-modo-visual="lectura"] .bet-selection-line,
+html[data-modo-visual="lectura"] .bet-selection-value,
+html[data-modo-visual="lectura"] .mlb-team-chip {
+    color: #30200e !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="lectura"] .auto-mlb-score {
+    color: #0967a8 !important;
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: .05px;
+}
+html[data-modo-visual="lectura"] .auto-mlb-score--status {
+    color: #07844b !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="lectura"] .page [style*="color:#cbd5e1"],
+html[data-modo-visual="lectura"] .page [style*="color: #cbd5e1"] {
+    color: #625541 !important;
+    font-weight: 700 !important;
+}
+
+/* Claro cálido: tonos crema y avena, sin blanco puro ni reflejos agresivos. */
+html[data-modo-visual="claro"] body {
+    background: #eee9de !important;
+    color: #29313a !important;
+}
+html[data-modo-visual="claro"] .formulario-global,
+html[data-modo-visual="claro"] .page,
+html[data-modo-visual="claro"] .skeleton-box {
+    background: #f8f4eb !important;
+    color: #29313a !important;
+    box-shadow: 0 7px 22px rgba(86, 70, 45, .08);
+}
+html[data-modo-visual="claro"] #tarjetaApuesta,
+html[data-modo-visual="claro"] .apuesta-edit-card,
+html[data-modo-visual="claro"] .dobles-calc-panel,
+html[data-modo-visual="claro"] .sistema-calc-panel {
+    background: #f1eadc !important;
+    color: #29313a !important;
+    border-color: #d7cbb8 !important;
+}
+html[data-modo-visual="claro"] input,
+html[data-modo-visual="claro"] select,
+html[data-modo-visual="claro"] textarea,
+html[data-modo-visual="claro"] .tarjeta-apuesta .jugada-ev-input,
+html[data-modo-visual="claro"] .tarjeta-apuesta .jugada-jug-input,
+html[data-modo-visual="claro"] .tarjeta-apuesta input[type="text"],
+html[data-modo-visual="claro"] .evento-principal-input,
+html[data-modo-visual="claro"] .apuesta-edit-field input,
+html[data-modo-visual="claro"] .apuesta-edit-field select {
+    background: #faf6ed !important;
+    color: #263849 !important;
+    border-color: #cdbfa9 !important;
+}
+html[data-modo-visual="claro"] .formulario-global h2,
+html[data-modo-visual="claro"] .page h2 { text-shadow: 0 1px 0 #f8f4eb, 0 3px 12px rgba(112, 89, 48, .10); }
+html[data-modo-visual="claro"] .bet-event-title { text-shadow: 0 1px 0 #f8f4eb; }
+html[data-modo-visual="claro"] tr { border-color: #ddd3c2; }
+html[data-modo-visual="claro"] .bet-main-title {
+    color: #173b5f !important;
+    font-weight: 800 !important;
+    text-shadow: 0 1px 0 #f8f4eb;
+}
+html[data-modo-visual="claro"] .bet-system-summary {
+    color: #5a6f85 !important;
+    font-weight: 700 !important;
+}
+html[data-modo-visual="claro"] .sistema-row-numbers span,
+html[data-modo-visual="claro"] .dobles-row-numbers span,
+html[data-modo-visual="claro"] .patente-row-numbers span {
+    color: #58708a !important;
+    font-weight: 700 !important;
+}
+html[data-modo-visual="claro"] .sistema-row-numbers strong,
+html[data-modo-visual="claro"] .dobles-row-numbers strong,
+html[data-modo-visual="claro"] .patente-row-numbers strong {
+    color: #101820 !important;
+    font-weight: 800 !important;
+}
+html[data-modo-visual="claro"] .bet-system-number {
+    color: #101820 !important;
+    font-weight: 800 !important;
+}
+
+html[data-modo-visual] .modo-visual-control { background: transparent; border: 0; }
 
