@@ -2195,4 +2195,116 @@ html[data-modo-visual="tarde-noche"] .modo-visual-btn.is-active {
     color: #ffffff;
     box-shadow: 0 0 0 3px rgba(29, 161, 242, .20);
 }
+/* Líneas celestes sutiles, característica visual del antiguo Twitter Dim. */
+html[data-modo-visual="tarde-noche"] .formulario-global,
+html[data-modo-visual="tarde-noche"] .page,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta,
+html[data-modo-visual="tarde-noche"] .apuesta-edit-card {
+    border: 1px solid rgba(29, 161, 242, .40) !important;
+}
+html[data-modo-visual="tarde-noche"] input,
+html[data-modo-visual="tarde-noche"] select,
+html[data-modo-visual="tarde-noche"] textarea {
+    border-color: rgba(29, 161, 242, .32) !important;
+}
+html[data-modo-visual="tarde-noche"] input:focus,
+html[data-modo-visual="tarde-noche"] select:focus,
+html[data-modo-visual="tarde-noche"] textarea:focus {
+    outline: none;
+    border-color: #1da1f2 !important;
+    box-shadow: 0 0 0 2px rgba(29, 161, 242, .18);
+}
+html[data-modo-visual="tarde-noche"] .jugada-slot { border-left-color: #1da1f2; }
+html[data-modo-visual="tarde-noche"] .jugada-slot-num { color: #1da1f2; }
+html[data-modo-visual="tarde-noche"] .casa-delete-group,
+html[data-modo-visual="tarde-noche"] .casa-create-group {
+    border-left-color: rgba(29, 161, 242, .35);
+}
+/* Campos de la tarjeta de apuesta (reglas específicas que no heredan del input general). */
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta.simple,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta.sistema,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta.dobles,
+html[data-modo-visual="tarde-noche"] .tarjeta-apuesta.patente {
+    border-color: rgba(29, 161, 242, .55) !important;
+    box-shadow: 0 0 14px rgba(29, 161, 242, .08) !important;
+}
+html[data-modo-visual="tarde-noche"] .jugada-ev-input,
+html[data-modo-visual="tarde-noche"] .edit-jugada-ev-input,
+html[data-modo-visual="tarde-noche"] .evento-principal-input {
+    border-color: rgba(29, 161, 242, .58) !important;
+}
+html[data-modo-visual="tarde-noche"] .jugada-jug-input,
+html[data-modo-visual="tarde-noche"] .edit-jugada-jug-input,
+html[data-modo-visual="tarde-noche"] .jugadas-lista .evento-input {
+    border-color: rgba(29, 161, 242, .48) !important;
+}
+html[data-modo-visual="tarde-noche"] .top-controls input,
+html[data-modo-visual="tarde-noche"] .top-controls select,
+html[data-modo-visual="tarde-noche"] .casa-select-group input,
+html[data-modo-visual="tarde-noche"] .casa-select-group select,
+html[data-modo-visual="tarde-noche"] .casa-delete-group select,
+html[data-modo-visual="tarde-noche"] .casa-create-group input,
+html[data-modo-visual="tarde-noche"] .form-group input,
+html[data-modo-visual="tarde-noche"] .form-group select {
+    border: 1px solid rgba(29, 161, 242, .48) !important;
+}
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .jugada-ev-input,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .evento-principal-input,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta input[type="number"] {
+    background: #253341 !important;
+    border: 1px solid rgba(29, 161, 242, .68) !important;
+}
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .jugada-jug-input,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .jugadas-lista .evento-input {
+    background: #253341 !important;
+    border: 1px dashed rgba(29, 161, 242, .64) !important;
+}
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .jugada-ev-input:focus,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .jugada-jug-input:focus,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .evento-principal-input:focus,
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta input[type="number"]:focus {
+    border-color: #1da1f2 !important;
+}
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta > div:first-child {
+    border-bottom: 1px solid rgba(29, 161, 242, .42);
+    padding-bottom: 8px;
+}
+html[data-modo-visual="tarde-noche"] #tipoApuesta.tipo-select-badge {
+    background: #253341 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(29, 161, 242, .78) !important;
+    box-shadow: inset 0 0 0 1px rgba(29, 161, 242, .10);
+}
+html[data-modo-visual="tarde-noche"] #tarjetaApuesta .tarjeta-label {
+    color: #1da1f2 !important;
+}
+/* El estado seleccionado debe conservar su color, no el blanco del select nativo. */
+html[data-modo-visual="tarde-noche"] td.perdida select,
+html[data-modo-visual="tarde-noche"] .perdida .patente-state select,
+html[data-modo-visual="tarde-noche"] .perdida.dobles-state select,
+html[data-modo-visual="tarde-noche"] .perdida.sistema-state select {
+    color: #ff5a65 !important;
+    background-color: rgba(255, 59, 59, .12) !important;
+    border: 1px solid rgba(255, 90, 101, .45) !important;
+}
+html[data-modo-visual="tarde-noche"] td.ganada select,
+html[data-modo-visual="tarde-noche"] .ganada .patente-state select,
+html[data-modo-visual="tarde-noche"] .ganada.dobles-state select,
+html[data-modo-visual="tarde-noche"] .ganada.sistema-state select {
+    color: #35e58d !important;
+    background-color: rgba(53, 229, 141, .12) !important;
+    border: 1px solid rgba(53, 229, 141, .45) !important;
+}
+html[data-modo-visual="tarde-noche"] td.pendiente select,
+html[data-modo-visual="tarde-noche"] td.nula select,
+html[data-modo-visual="tarde-noche"] .pendiente .patente-state select,
+html[data-modo-visual="tarde-noche"] .nula .patente-state select,
+html[data-modo-visual="tarde-noche"] .pendiente.dobles-state select,
+html[data-modo-visual="tarde-noche"] .nula.dobles-state select,
+html[data-modo-visual="tarde-noche"] .pendiente.sistema-state select,
+html[data-modo-visual="tarde-noche"] .nula.sistema-state select {
+    background-color: rgba(29, 161, 242, .08) !important;
+    border: 1px solid rgba(29, 161, 242, .62) !important;
+}
 

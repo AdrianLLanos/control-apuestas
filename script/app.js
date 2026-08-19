@@ -898,6 +898,21 @@ function recalcularResultadoApuesta(apuesta) {
     return determinarResultadoSimpleOptionBet(apuesta);
   }
 
+  // Cada registro de "Crear apuesta simple" representa un partido independiente.
+  // Su resultado debe depender de sus selecciones aunque el estado de la jugada
+  // todavía no se haya actualizado durante la sincronización automática.
+  if (apuesta.tipoApuesta === "crear_apuesta_simple") {
+    const selecciones = (apuesta.jugadas || [])
+      .flatMap(jugada => getSelectionsFromJugada(jugada));
+    const estados = selecciones.map(sel => sel.estado || "pendiente");
+
+    if (estados.includes("perdida")) return "perdida";
+    if (estados.includes("pendiente")) return "pendiente";
+    if (estados.length > 0 && estados.every(estado => estado === "nula")) return "nula";
+    if (estados.includes("ganada")) return "ganada";
+    return "pendiente";
+  }
+
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   const hasPerdida = jugadas.some(j => j.estado === "perdida");
   const hasPendiente = jugadas.some(j => j.estado === "pendiente");
@@ -11266,9 +11281,39 @@ let appInicializada = false;
 
 const MODOS_VISUALES_VALIDOS = new Set(["claro", "noctis", "tarde-noche", "lectura"]);
 
+const SELECTOR_CAMPOS_TARDE_NOCHE = [
+  "#tarjetaApuesta .jugada-ev-input",
+  "#tarjetaApuesta .jugada-jug-input",
+  "#tarjetaApuesta .evento-principal-input",
+  "#tarjetaApuesta input[type='number']"
+].join(", ");
+
+function aplicarBordesTardeNoche(activo) {
+  document.querySelectorAll("[data-estilo-tarde-noche]").forEach(campo => {
+    if (!activo) {
+      campo.style.cssText = campo.dataset.estiloTardeNoche;
+      delete campo.dataset.estiloTardeNoche;
+    }
+  });
+
+  if (!activo) return;
+
+  document.querySelectorAll(SELECTOR_CAMPOS_TARDE_NOCHE).forEach(campo => {
+    if (!campo.dataset.estiloTardeNoche) {
+      campo.dataset.estiloTardeNoche = campo.style.cssText;
+    }
+    const esJugada = campo.matches(".jugada-jug-input");
+    campo.style.setProperty("background", "#253341", "important");
+    campo.style.setProperty("border", esJugada
+      ? "1px dashed rgba(29, 161, 242, .82)"
+      : "1px solid rgba(29, 161, 242, .88)", "important");
+  });
+}
+
 function aplicarModoVisual(modo = "noctis") {
   const modoSeguro = MODOS_VISUALES_VALIDOS.has(modo) ? modo : "noctis";
   document.documentElement.dataset.modoVisual = modoSeguro;
+  aplicarBordesTardeNoche(modoSeguro === "tarde-noche");
 
   try {
     localStorage.setItem("apuestas.modoVisual", modoSeguro);
@@ -11289,6 +11334,15 @@ function inicializarControlModoVisual() {
   document.querySelectorAll(".modo-visual-btn").forEach(btn => {
     btn.addEventListener("click", () => aplicarModoVisual(btn.dataset.modoVisual));
   });
+
+  const tarjeta = document.getElementById("tarjetaApuesta");
+  if (tarjeta) {
+    new MutationObserver(() => {
+      if (document.documentElement.dataset.modoVisual === "tarde-noche") {
+        aplicarBordesTardeNoche(true);
+      }
+    }).observe(tarjeta, { childList: true, subtree: true });
+  }
 }
 
 function iniciarApp() {
