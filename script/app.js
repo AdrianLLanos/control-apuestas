@@ -6020,7 +6020,10 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
       const esMercadoHits = autoMlb.mercado === "total_hits";
-      const pagoAnticipado = Boolean(evaluacion.pagoAnticipado || autoMlb.pagoAnticipado);
+      // No conservar una marca previa de pago anticipado para otras casas.
+      // Esta promoción es exclusiva de Mi Casino, incluso si la apuesta fue
+      // sincronizada anteriormente con metadatos antiguos.
+      const pagoAnticipado = esMiCasino && Boolean(evaluacion.pagoAnticipado || autoMlb.pagoAnticipado);
       const siguiente = {
         ...selMlb,
         estado: evaluacion.estado,
@@ -6488,7 +6491,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     }
   }
 
-  const pagoAnticipadoBadge = autoMlb.pagoAnticipado
+  const pagoAnticipadoBadge = autoMlb.pagoAnticipado && esApuestaDeMiCasino(options.apuesta || {})
     ? `<div class="pago-anticipado-badge">⚡ Ganado por Pago Anticipado</div>`
     : "";
 
@@ -10571,6 +10574,7 @@ function _render() {
                 ? formatHandicapJugada(detalleSeleccion.jugada)
                 : formatTextWithCorners(detalleSeleccion.jugada, forceGoalIcon, forceCornerIcon, forceCardIcon);
               const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                apuesta: a,
                 apuestaId: a.id,
                 matchIndex,
                 selIndex,
@@ -10683,6 +10687,7 @@ function _render() {
                     const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
                     const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
                     const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                      apuesta: a,
                       apuestaId: a.id,
                       matchIndex,
                       selIndex,
@@ -10734,6 +10739,7 @@ function _render() {
                 const selectionLineClass = isPatente ? 'patente-selection-line' : (isDobles ? 'dobles-selection-line' : (isSistema ? 'sistema-selection-line' : ''));
                 const selectionTextClass = isPatente ? 'patente-selection-text' : (isDobles ? 'dobles-selection-text' : (isSistema ? 'sistema-selection-text' : ''));
                 const autoMlbMarcadorHtml = getAutoMarcadorSeleccionHtml(selAutoRender, j, {
+                  apuesta: a,
                   apuestaId: a.id,
                   matchIndex,
                   selIndex,
