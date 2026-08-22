@@ -31,14 +31,16 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
   const mercadoOriginal = autoOriginal.mercado || "";
   const mantenerMercadoOriginal = Boolean(mercadoOriginal) && (
     mercadoDetectado === "total_carreras" &&
-    ["total_hits", "handicap", "ganador_partido", "ambos_equipos_anotan", "strikeouts_jugador"].includes(mercadoOriginal)
+    ["total_hits", "handicap", "ganador_partido", "ambos_equipos_anotan", "strikeouts_jugador", "bases_totales_jugador"].includes(mercadoOriginal)
   );
   const mercadoFinal = mantenerMercadoOriginal ? mercadoOriginal : (mercadoDetectado || mercadoOriginal);
 
   return {
     ...autoOriginal,
     mercado: mercadoFinal,
-    jugador: mercadoFinal === "strikeouts_jugador" ? (autoDetectado.jugador || autoOriginal.jugador) : undefined,
+    jugador: ["strikeouts_jugador", "bases_totales_jugador"].includes(mercadoFinal)
+      ? (autoDetectado.jugador || autoOriginal.jugador)
+      : undefined,
     equipos: equiposDetectados || equiposOriginales || autoOriginal.equipos || autoDetectado.equipos,
     seleccionEquipo: autoDetectado.seleccionEquipo || autoOriginal.seleccionEquipo,
     tipoTotal: autoDetectado.tipoTotal || autoOriginal.tipoTotal,

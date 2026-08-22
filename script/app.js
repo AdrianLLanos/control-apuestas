@@ -1851,6 +1851,37 @@ function esStrikeoutsMlb(texto = "") {
   return tienePalabraMercado(normalizado, ["strikeout", "strikeouts", "strike", "strikes", "ponche", "ponches", "so"]);
 }
 
+function esBasesTotalesJugadorMlb(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  return /\b(?:bases?\s+totales?|total(?:es)?\s+bases?)\b/.test(normalizado);
+}
+
+function normalizarNombreJugadorMlb(nombre = "") {
+  const normalizado = normalizarTextoMercado(nombre);
+  // Errores comunes al escribir a Shohei Ohtani. Se conserva el nombre
+  // oficial para que coincida con el boxscore de MLB.
+  if (/\b(?:othani|ohtani)\b/.test(normalizado)) return "Shohei Ohtani";
+  return capitalizarPalabrasMercado(nombre);
+}
+
+function extraerNombreJugadorBasesTotales(texto = "") {
+  let limpio = String(texto)
+    .replace(/\(incl\.?\s*extra\s*innings?\)/gi, "")
+    .replace(/incl\.?\s*extra\s*innings?/gi, "")
+    .replace(/\bbases?\s+totales?\s+(?:por|del)\s+jugador\b/gi, "")
+    .replace(/\bbases?\s+totales?\b/gi, "")
+    .replace(/\b(?:total(?:es)?\s+)?bases?\b/gi, "")
+    .replace(/\b(?:por|del)\s+jugador\b/gi, "")
+    .replace(/\b(mas|más|menos|over|under)\s*(?:de)?\b/gi, "")
+    .replace(/\b\d+(?:[.,]\d+)?\+?\b/g, "")
+    .replace(/\b(?:incl\.?|extra|innings?)\b/gi, "")
+    .replace(/[()]/g, "");
+
+  limpio = limpiarEspaciosMercado(limpio.replace(/^[-–—:]+|[-–—:]+$/g, ""));
+  if (!limpio || detectarEquiposMlb(limpio).length > 0) return "";
+  return normalizarNombreJugadorMlb(limpio);
+}
+
 function deduplicarNombreJugador(nombre = "") {
   const limpio = limpiarEspaciosMercado(nombre)
     .replace(/[+:]/g, "")
@@ -1949,6 +1980,15 @@ function formatearLineaStrikeoutsAuto(auto = {}) {
   }
   const tipoTotal = auto.tipoTotal === "under" ? "Menos de" : "Más de";
   return `${tipoTotal} ${String(linea).replace(",", ".")} strikes`;
+}
+
+function formatearLineaBasesTotalesAuto(auto = {}) {
+  const linea = Number(auto.linea);
+  if (Number.isNaN(linea)) return "";
+  if (auto.tipoTotal === "over" && (auto.lineaInclusiva || Number.isInteger(linea))) {
+    return `${String(linea).replace(",", ".")}+ bases`;
+  }
+  return `${auto.tipoTotal === "under" ? "Menos de" : "Más de"} ${String(linea).replace(",", ".")} bases`;
 }
 
 function limpiarEquipoGanador(texto = "", evento = "") {
@@ -2096,6 +2136,14 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     };
   }
 
+  if (autoMlb?.mercado === "bases_totales_jugador") {
+    const jugador = autoMlb.jugador || extraerNombreJugadorBasesTotales(textoCompleto);
+    return {
+      titulo: jugador ? `Bases Totales Por Jugador (${jugador}) (incl. extra innings)` : "Bases Totales Por Jugador (incl. extra innings)",
+      jugada: formatearLineaBasesTotalesAuto(autoMlb) || jugadaActual
+    };
+  }
+
   if (autoMlb?.mercado === "total_hits") {
     return {
       titulo: formatearTituloTotalHitsMlb(),
@@ -2157,6 +2205,15 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: jugador ? `Strikeouts del jugador (${jugador})` : "Strikeouts del jugador",
       jugada: extraerLineaStrikeouts(jugadaActual || textoCompleto)
+    };
+  }
+
+  if (esBasesTotalesJugadorMlb(textoCompleto)) {
+    const linea = extraerNumeroJugada(textoCompleto);
+    const jugador = extraerNombreJugadorBasesTotales(textoCompleto);
+    return {
+      titulo: jugador ? `Bases Totales Por Jugador (${jugador}) (incl. extra innings)` : "Bases Totales Por Jugador (incl. extra innings)",
+      jugada: formatearLineaBasesTotalesAuto({ tipoTotal: detectarLadoTotal(textoCompleto) || "over", linea, lineaInclusiva: Number.isInteger(linea) }) || jugadaActual
     };
   }
 
@@ -2436,7 +2493,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     }
   }
 
-  if (esHandicapMlbTexto(textoCompleto) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto)) {
+  if (!esBasesTotalesJugadorMlb(textoCompleto) && (esHandicapMlbTexto(textoCompleto) || /[+-]\s*\d+(?:[.,]\d+)?/.test(textoCompleto))) {
     const linea = extraerNumeroConSigno(textoCompleto);
     const equiposJugada = detectarEquiposMlb(textoCompleto);
     const seleccionEquipo = equiposJugada[0] || (equiposEvento[0] || null);
@@ -2490,6 +2547,30 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
       return {
         deporte: "mlb",
         mercado: "strikeouts_jugador",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        jugador,
+        tipoTotal,
+        linea,
+        lineaInclusiva
+      };
+    }
+  }
+
+  if (esBasesTotalesJugadorMlb(textoCompleto)) {
+    const plusMatch = textoCompleto.match(/(\d+(?:[.,]\d+)?)\s*\+/);
+    let linea = extraerNumeroJugada(textoCompleto);
+    let tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto) || "over";
+    let lineaInclusiva = tipoTotal === "over" && linea !== null && Number.isInteger(linea);
+    if (plusMatch) {
+      linea = parseFloat(plusMatch[1].replace(",", "."));
+      tipoTotal = "over";
+      lineaInclusiva = true;
+    }
+    const jugador = extraerNombreJugadorBasesTotales(textoCompleto);
+    if (linea !== null) {
+      return {
+        deporte: "mlb",
+        mercado: "bases_totales_jugador",
         equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
         jugador,
         tipoTotal,
@@ -4969,6 +5050,29 @@ function extraerStrikeoutsJugadorGame(game, nombreJugador = "") {
   return null;
 }
 
+function extraerBasesTotalesJugadorGame(game, nombreJugador = "") {
+  if (!game || !nombreJugador) return null;
+  const buscado = normalizarTextoMercado(nombreJugador);
+  const equipos = [game?.boxscore?.teams, game?.liveData?.boxscore?.teams, game?.teams, game?.lineups].filter(Boolean);
+
+  for (const teamsObj of equipos) {
+    for (const teamData of [teamsObj.home, teamsObj.away]) {
+      const jugadores = teamData?.players && typeof teamData.players === "object" ? Object.values(teamData.players) : [];
+      for (const jugador of jugadores) {
+        const fullName = jugador?.person?.fullName || jugador?.fullName || jugador?.name || "";
+        const nombre = normalizarTextoMercado(fullName);
+        if (!nombre || !(nombre === buscado || nombre.includes(buscado) || buscado.includes(nombre))) continue;
+        const batting = jugador?.stats?.batting || jugador?.batting || {};
+        const bases = batting.totalBases ?? batting.totalbases ?? batting.tb;
+        if (bases !== undefined && bases !== null && Number.isFinite(Number(bases))) {
+          return { fullName: jugador?.person?.fullName || fullName, basesTotales: Number(bases) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function cargarJuegosEspnMlbPorFecha(fecha) {
   const date = String(fecha).replace(/-/g, "");
   const timezone = getSportsTimezone();
@@ -5828,6 +5932,31 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
     };
   }
 
+  if (autoMlb.mercado === "bases_totales_jugador") {
+    const linea = Number(autoMlb.linea);
+    const stats = extraerBasesTotalesJugadorGame(game, autoMlb.jugador);
+    const basesTotales = stats?.basesTotales ?? Number(autoMlb.totalBases);
+    if (Number.isNaN(linea) || !Number.isFinite(basesTotales)) return null;
+    // En este mercado, una línea entera "Más de N" de Mi Casino equivale a
+    // N+: una base total ya gana la selección "Más de 1".
+    const lineaInclusiva = autoMlb.tipoTotal === "over" &&
+      (Boolean(autoMlb.lineaInclusiva) || Number.isInteger(linea));
+    const ganaOver = lineaInclusiva ? basesTotales >= linea : basesTotales > linea;
+
+    if (!finalizado) {
+      if (autoMlb.tipoTotal === "over" && ganaOver) return { estado: "ganada", marcador, basesTotales, jugador: stats?.fullName || autoMlb.jugador };
+      if (autoMlb.tipoTotal === "under" && basesTotales > linea) return { estado: "perdida", marcador, basesTotales, jugador: stats?.fullName || autoMlb.jugador };
+      return null;
+    }
+    if (basesTotales === linea && !lineaInclusiva) return { estado: "nula", marcador, basesTotales, jugador: stats?.fullName || autoMlb.jugador };
+    return {
+      estado: (autoMlb.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida",
+      marcador,
+      basesTotales,
+      jugador: stats?.fullName || autoMlb.jugador
+    };
+  }
+
   if (autoMlb.mercado === "strikeouts_jugador") {
     const linea = Number(autoMlb.linea);
     const stats = extraerStrikeoutsJugadorGame(game, autoMlb.jugador);
@@ -6084,10 +6213,15 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       }
 
       const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (evaluacion.strikes ?? autoMlb.totalStrikes);
-      const jugadorNombre = esMercadoStrikeouts ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync))) : undefined;
+      const jugadorNombre = esMercadoStrikeouts
+        ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync)))
+        : autoMlb.mercado === "bases_totales_jugador"
+          ? (evaluacion.jugador || autoMlb.jugador || extraerNombreJugadorBasesTotales(textoSelCompletoSync))
+          : undefined;
       const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
       const esMercadoHits = autoMlb.mercado === "total_hits";
+      const esMercadoBases = autoMlb.mercado === "bases_totales_jugador";
       // No conservar una marca previa de pago anticipado para otras casas.
       // Esta promoción es exclusiva de Mi Casino, incluso si la apuesta fue
       // sincronizada anteriormente con metadatos antiguos.
@@ -6107,6 +6241,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : undefined,
           totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
           totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
+          totalBases: esMercadoBases && evaluacion.basesTotales != null ? evaluacion.basesTotales : autoMlb.totalBases,
           totalStrikes: esMercadoStrikeouts && totalStrikes != null ? totalStrikes : autoMlb.totalStrikes,
           pagoAnticipado,
           fechaJuego: game.gameDate,
@@ -6524,9 +6659,11 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(autoMlb) : "";
   const totalCarreras = Number(autoMlb.totalCarreras);
   const totalHits = Number(autoMlb.totalHits);
+  const totalBases = Number(autoMlb.totalBases);
   const totalStrikes = Number(autoMlb.totalStrikes ?? autoMlb.strikes);
   const textoCompletoSel = `${selection.titulo || ""} ${selection.jugada || ""}`;
   const esStrikeouts = esStrikeoutsMlb(textoCompletoSel);
+  const esBasesTotales = autoMlb.mercado === "bases_totales_jugador";
   const jugadorStrikeouts = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompletoSel) || "Jugador";
 
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
@@ -6539,10 +6676,12 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     ? ""
     : esStrikeouts
     ? (autoMlb.marcadorStrikeouts || (!Number.isNaN(totalStrikes) ? `${jugadorStrikeouts}: ${totalStrikes} strikes` : `${jugadorStrikeouts}: ${totalStrikes || 0} strikes`))
+    : esBasesTotales
+    ? (!Number.isNaN(totalBases) ? `${autoMlb.jugador || "Jugador"}: ${totalBases} bases totales` : marcadorOrdenado)
     : autoMlb.mercado === "total_hits"
     ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
     : marcadorOrdenado;
-  const marcadorExtra = (autoMlb.mercado === "total_hits" || esStrikeouts) ? "" : carrerasHtml;
+  const marcadorExtra = (autoMlb.mercado === "total_hits" || esStrikeouts || esBasesTotales) ? "" : carrerasHtml;
   const marcadorHtml = marcadorVisible
     ? `<div class="auto-mlb-score">${escapeHtml(marcadorVisible)}${marcadorExtra}</div>`
     : "";
@@ -6585,6 +6724,7 @@ function autoTieneResultadoVisible(auto = {}) {
   return Boolean(auto?.marcador) ||
     auto?.totalCarreras !== undefined ||
     auto?.totalHits !== undefined ||
+    auto?.totalBases !== undefined ||
     auto?.totalGoles !== undefined ||
     auto?.totalCorners !== undefined ||
     auto?.totalTarjetas !== undefined;
