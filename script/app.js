@@ -6132,7 +6132,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         }
 
         const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (autoMlb.totalStrikes ?? autoMlb.strikes);
-        const jugadorNombre = esMercadoStrikeouts ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync))) : undefined;
+        const jugadorNombre = esMercadoStrikeouts ? (statsStrikeouts?.fullName || autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync)) : undefined;
         const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
 
         const marcadorTexto = marcador
@@ -6214,7 +6214,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
 
       const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (evaluacion.strikes ?? autoMlb.totalStrikes);
       const jugadorNombre = esMercadoStrikeouts
-        ? (autoMlb.jugador || (statsStrikeouts ? statsStrikeouts.fullName : extraerNombreJugadorStrikeouts(textoSelCompletoSync)))
+        ? (statsStrikeouts?.fullName || autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync))
         : autoMlb.mercado === "bases_totales_jugador"
           ? (evaluacion.jugador || autoMlb.jugador || extraerNombreJugadorBasesTotales(textoSelCompletoSync))
           : undefined;
@@ -6665,6 +6665,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const esStrikeouts = esStrikeoutsMlb(textoCompletoSel);
   const esBasesTotales = autoMlb.mercado === "bases_totales_jugador";
   const jugadorStrikeouts = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompletoSel) || "Jugador";
+  const jugadorBases = extraerNombreJugadorBasesTotales(textoCompletoSel) || autoMlb.jugador || "Jugador";
 
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
@@ -6679,7 +6680,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : esBasesTotales
     // Igual que los strikeouts, mostramos el progreso individual del jugador
     // (incluido 0), pero nunca lo sustituimos por el marcador del partido.
-    ? (Number.isFinite(totalBases) ? `${autoMlb.jugador || "Jugador"}: ${totalBases} bases totales` : "")
+    ? `${jugadorBases}: ${Number.isFinite(totalBases) ? totalBases : 0} bases totales`
     : autoMlb.mercado === "total_hits"
     ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
     : marcadorOrdenado;
