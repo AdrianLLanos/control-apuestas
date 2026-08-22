@@ -2344,6 +2344,25 @@ function detectarEquiposMlb(texto = "") {
   return [...new Set(encontrados)];
 }
 
+// Mantiene el orden en que el usuario escribió los equipos (en vez del orden
+// fijo de MLB_TEAMS), para que el marcador coincida con el evento mostrado.
+function detectarEquiposMlbEnOrdenTexto(texto = "") {
+  const normalizado = normalizarClaveMlb(texto);
+  if (!normalizado) return [];
+
+  return MLB_TEAMS
+    .map(team => {
+      const posiciones = [team.name, ...(team.aliases || [])]
+        .map(normalizarClaveMlb)
+        .filter(alias => alias && textoContieneAliasMlb(normalizado, alias))
+        .map(alias => normalizado.indexOf(alias));
+      return posiciones.length ? { nombre: team.name, posicion: Math.min(...posiciones) } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.posicion - b.posicion)
+    .map(item => item.nombre);
+}
+
 function detectarEquiposNfl(texto = "") {
   const normalizado = normalizarClaveMlb(texto);
   if (!normalizado) return [];
@@ -6444,7 +6463,9 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const autoMlb = selection?.autoMlb || {};
   const fechaJuego = autoMlb.fechaJuego || options.fallbackFechaJuego || "";
   const marcador = autoMlb.marcador;
-  const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, autoMlb.equipos);
+  const equiposDelEvento = detectarEquiposMlbEnOrdenTexto(options.evento || "");
+  const equiposParaMarcador = equiposDelEvento.length >= 2 ? equiposDelEvento : autoMlb.equipos;
+  const marcadorOrdenado = reordenarMarcadorTextoMlb(marcador, equiposParaMarcador);
   const estadoPrevio = debeMostrarHorarioJuego(fechaJuego, autoMlb.estadoJuego);
   const ocultarResultadoPorHorario = estadoPrevio;
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
