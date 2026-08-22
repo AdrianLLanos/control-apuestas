@@ -727,6 +727,11 @@ function extraerBusquedaNombreJugador(typed = "") {
 // Genera opciones dinámicas para ponches / strikeouts según la búsqueda del usuario
 function generarOpcionesStrikeoutsDinamicas(typed = "", competitors = []) {
   const nombreDetectado = extraerBusquedaNombreJugador(typed);
+  const lineaEscrita = String(typed).replace(",", ".").match(/\b(\d+(?:\.\d+)?)\s*\+?/);
+  const valorLinea = lineaEscrita ? Number(lineaEscrita[1]) : null;
+  const etiquetaLineaEscrita = Number.isFinite(valorLinea)
+    ? (Number.isInteger(valorLinea) ? `${valorLinea}+` : `Mas de ${valorLinea}`)
+    : "";
   const pitchersDelPartido = new Set();
   const otrosPitchers = new Set();
 
@@ -769,6 +774,14 @@ function generarOpcionesStrikeoutsDinamicas(typed = "", competitors = []) {
   const options = [];
 
   arrNombres.forEach(nombre => {
+    // La línea que el usuario escribe tiene prioridad: “Yamamoto 7 strikes”
+    // se completa como 7+, mientras que 7.5 se conserva como Más de 7.5.
+    if (etiquetaLineaEscrita) {
+      options.push(
+        `Strikeouts del jugador (${nombre}) ${etiquetaLineaEscrita}`,
+        `${nombre} ${etiquetaLineaEscrita} strikes`
+      );
+    }
     options.push(
       `Strikeouts del jugador (${nombre}) 4+`,
       `Strikeouts del jugador (${nombre}) 5+`,

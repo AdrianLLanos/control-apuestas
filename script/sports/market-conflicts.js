@@ -43,6 +43,10 @@ export function combinarAutoMlbConDetectado(autoOriginal = null, autoDetectado =
     seleccionEquipo: autoDetectado.seleccionEquipo || autoOriginal.seleccionEquipo,
     tipoTotal: autoDetectado.tipoTotal || autoOriginal.tipoTotal,
     linea: autoDetectado.linea ?? autoOriginal.linea,
+    // La detección actualizada debe poder corregir apuestas antiguas cuya
+    // línea de strikeouts no guardaba todavía si era inclusiva (por ejemplo,
+    // “Más de 8” = 8+ en Mi Casino).
+    lineaInclusiva: autoDetectado.lineaInclusiva ?? autoOriginal.lineaInclusiva,
     pagoAnticipado: autoOriginal.pagoAnticipado ?? autoDetectado.pagoAnticipado
   };
 }

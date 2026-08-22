@@ -1915,8 +1915,7 @@ function extraerLineaStrikeouts(texto = "") {
   const plusMatch = limpio.match(/(\d+(?:\.\d+)?)\s*\+/);
   if (plusMatch) {
     const num = parseFloat(plusMatch[1]);
-    const numDec = num > 0 ? (num - 0.5) : num;
-    return `Más de ${numDec} strikes`;
+    return `${num}+ strikes`;
   }
 
   const masDeMatch = limpio.match(/\b(?:más|mas|over)\s*(?:de)?\s*(\d+(?:\.\d+)?)/i);
@@ -1934,7 +1933,7 @@ function extraerLineaStrikeouts(texto = "") {
   const numMatch = limpio.match(/-?\d+(?:\.\d+)?/);
   if (numMatch) {
     const val = parseFloat(numMatch[0]);
-    return `Más de ${val} strikes`;
+    return Number.isInteger(val) ? `${val}+ strikes` : `Más de ${val} strikes`;
   }
 
   return capitalizarMercado(limpio);
@@ -1943,6 +1942,11 @@ function extraerLineaStrikeouts(texto = "") {
 function formatearLineaStrikeoutsAuto(auto = {}) {
   const linea = Number(auto.linea);
   if (Number.isNaN(linea)) return "";
+  // Mantener visible la convención de Mi Casino: una línea entera de
+  // strikeouts es inclusiva, por ejemplo 8+ y no “Más de 8”.
+  if (auto.tipoTotal === "over" && (auto.lineaInclusiva || Number.isInteger(linea))) {
+    return `${String(linea).replace(",", ".")}+ strikes`;
+  }
   const tipoTotal = auto.tipoTotal === "under" ? "Menos de" : "Más de";
   return `${tipoTotal} ${String(linea).replace(",", ".")} strikes`;
 }
@@ -2468,10 +2472,18 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     const plusMatch = textoCompleto.match(/(\d+(?:\.\d+)?)\s*\+/);
     let linea = extraerNumeroJugada(textoCompleto);
     let tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto) || "over";
+    // En Mi Casino las líneas enteras de strikeouts se publican como
+    // “Más de 8 strikes”, pero equivalen a 8+ (al menos 8), no a 9+.
+    // Las líneas con .5 mantienen la comparación estricta habitual.
+    let lineaInclusiva = !plusMatch &&
+      tipoTotal === "over" &&
+      linea !== null &&
+      Number.isInteger(linea);
     if (plusMatch) {
       const num = parseFloat(plusMatch[1]);
-      linea = num > 0 ? (num - 0.5) : num;
+      linea = num;
       tipoTotal = "over";
+      lineaInclusiva = true;
     }
     const jugador = extraerNombreJugadorStrikeouts(textoCompleto);
     if (linea !== null && tipoTotal) {
@@ -2481,7 +2493,8 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
         equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
         jugador,
         tipoTotal,
-        linea
+        linea,
+        lineaInclusiva
       };
     }
   }
@@ -5818,21 +5831,27 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
   if (autoMlb.mercado === "strikeouts_jugador") {
     const linea = Number(autoMlb.linea);
     const stats = extraerStrikeoutsJugadorGame(game, autoMlb.jugador);
-    const strikes = stats ? stats.strikeouts : null;
+    const strikesGuardados = Number(autoMlb.totalStrikes ?? autoMlb.strikes);
+    const strikes = stats ? stats.strikeouts : (Number.isFinite(strikesGuardados) ? strikesGuardados : null);
+    const pitcher = stats?.fullName || autoMlb.jugador;
     if (Number.isNaN(linea) || strikes === null) return null;
+    // Compatibilidad con apuestas guardadas antes de `lineaInclusiva`:
+    // los over enteros de strikeouts de Mi Casino siempre son N+.
+    const lineaInclusiva = autoMlb.tipoTotal === "over" &&
+      (Boolean(autoMlb.lineaInclusiva) || Number.isInteger(linea));
+    const ganaOver = lineaInclusiva ? strikes >= linea : strikes > linea;
 
     if (!finalizado) {
-      if (autoMlb.tipoTotal === "over" && strikes > linea) return { estado: "ganada", marcador, strikes, pitcher: stats.fullName };
-      if (autoMlb.tipoTotal === "under" && strikes > linea) return { estado: "perdida", marcador, strikes, pitcher: stats.fullName };
+      if (autoMlb.tipoTotal === "over" && ganaOver) return { estado: "ganada", marcador, strikes, pitcher };
+      if (autoMlb.tipoTotal === "under" && strikes > linea) return { estado: "perdida", marcador, strikes, pitcher };
       return null;
     }
-    if (strikes === linea) return { estado: "nula", marcador, strikes, pitcher: stats.fullName };
-    const ganaOver = strikes > linea;
+    if (strikes === linea && !lineaInclusiva) return { estado: "nula", marcador, strikes, pitcher };
     return {
       estado: (autoMlb.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida",
       marcador,
       strikes,
-      pitcher: stats.fullName
+      pitcher
     };
   }
 
@@ -5927,7 +5946,37 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           }
         };
       }
-      if (!game) return { ...selMlb, autoMlb };
+      if (!game) {
+        // Si la API ya no devuelve el partido, no dejar pendiente una línea de
+        // strikeouts que fue sincronizada previamente con estadísticas finales.
+        // Esto cubre, por ejemplo, Dylan Cease: 8 strikes con la línea 8+.
+        const linea = Number(autoMlb.linea);
+        const strikesGuardados = Number(autoMlb.totalStrikes ?? autoMlb.strikes);
+        const finalizadoGuardado = esEstadoJuegoFinalizado(autoMlb.estadoJuego);
+        const esStrikeout = autoMlb.mercado === "strikeouts_jugador";
+        const lineaInclusiva = autoMlb.tipoTotal === "over" &&
+          (Boolean(autoMlb.lineaInclusiva) || Number.isInteger(linea));
+        const hayDatosFinales = esStrikeout && finalizadoGuardado &&
+          Number.isFinite(linea) && Number.isFinite(strikesGuardados);
+
+        if (hayDatosFinales) {
+          const ganoOver = lineaInclusiva ? strikesGuardados >= linea : strikesGuardados > linea;
+          const estado = strikesGuardados === linea && !lineaInclusiva
+            ? "nula"
+            : ((autoMlb.tipoTotal === "over" ? ganoOver : !ganoOver) ? "ganada" : "perdida");
+          if ((sel.estado || "pendiente") !== estado) huboCambio = true;
+          return {
+            ...selMlb,
+            estado,
+            autoMlb: {
+              ...autoMlb,
+              lineaInclusiva,
+              marcadorStrikeouts: autoMlb.marcadorStrikeouts || `${autoMlb.jugador || "Jugador"}: ${strikesGuardados} strikes`
+            }
+          };
+        }
+        return { ...selMlb, autoMlb };
+      }
 
       const esMiCasino = esApuestaDeMiCasino(apuesta);
       const evaluacion = evaluarAutoMlb(autoMlb, game, { esMiCasino });
@@ -9390,7 +9439,7 @@ function startAutoSyncFutbol() {
 let _autoSyncMlbIntervalId = null;
 let _autoSyncMlbEnCurso = false;
 let _ultimoAutoSyncMlb = 0;
-let _syncMlbActivado = false; // Solo inicia cuando el usuario presiona el botón manualmente
+let _syncMlbActivado = false;
 let _autoSyncMlbListenersRegistrados = false;
 
 async function ejecutarAutoSyncMlb(force = false) {
@@ -11388,6 +11437,9 @@ function iniciarApp() {
   iniciarMonitorVersionDeploy();
   escucharCasas();
   escucharApuestas();
+  // Al recargar, continuar liquidando las apuestas MLB pendientes sin exigir
+  // otra pulsación manual del botón de sincronización.
+  startAutoSyncMlb();
   document.getElementById("btnAgregar").onclick = agregarApuesta;
   document.getElementById("btnBankroll").onclick = guardarBankroll;
   document.getElementById("btnEliminarCasa").onclick = eliminarCasaSeleccionada;
