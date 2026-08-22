@@ -6677,7 +6677,9 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : esStrikeouts
     ? (autoMlb.marcadorStrikeouts || (!Number.isNaN(totalStrikes) ? `${jugadorStrikeouts}: ${totalStrikes} strikes` : `${jugadorStrikeouts}: ${totalStrikes || 0} strikes`))
     : esBasesTotales
-    ? (!Number.isNaN(totalBases) ? `${autoMlb.jugador || "Jugador"}: ${totalBases} bases totales` : marcadorOrdenado)
+    // Para bases totales no mostramos el marcador del partido ni un "0 bases":
+    // esta línea solo debe aparecer cuando el jugador ya consiguió al menos una base.
+    ? (Number.isFinite(totalBases) && totalBases >= 1 ? `${autoMlb.jugador || "Jugador"}: ${totalBases} bases totales` : "")
     : autoMlb.mercado === "total_hits"
     ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
     : marcadorOrdenado;
