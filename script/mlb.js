@@ -323,9 +323,13 @@ export function formatTextWithMlbTeams(texto) {
     const aliasStart = match.index + prefix.length;
     const aliasEnd = aliasStart + alias.length;
     const entry = LOGO_ALIAS_LOOKUP.get(normalizeLookupKey(alias));
+    // Los códigos de países de tres letras solo se tratan como tales cuando
+    // se escriben en mayúsculas. Así "Por" en "Por Jugador" no se convierte
+    // erróneamente en la bandera de Portugal (POR).
+    const esCodigoPaisEnTexto = entry?.type === "country" && alias.length <= 3 && alias !== alias.toUpperCase();
 
     html += formatPlainTextWithMlbSeparators(texto.slice(lastIndex, aliasStart));
-    html += entry ? crearLogoHtml(entry) : escapeHtml(alias);
+    html += entry && !esCodigoPaisEnTexto ? crearLogoHtml(entry) : escapeHtml(alias);
     lastIndex = aliasEnd;
   }
 
