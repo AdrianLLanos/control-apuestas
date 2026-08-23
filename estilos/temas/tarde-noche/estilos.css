@@ -34,3 +34,8 @@ html[data-modo-visual="tarde-noche"] .apuesta-edit-detail-label {
 html[data-modo-visual="tarde-noche"] .auto-mlb-score {
     color: #00b7ff !important;
 }
+
+/* El horario de los partidos conserva el verde de estado, incluso en este tema. */
+html[data-modo-visual="tarde-noche"] .auto-mlb-score--status {
+    color: #86efac !important;
+}
