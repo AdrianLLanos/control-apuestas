@@ -5801,7 +5801,7 @@ function formatHitsMlbSegunEvento(evento = "", marcador) {
 function formatStrikeoutsTotalesMlbSegunEvento(evento = "", marcador, detalle) {
   if (!marcador || !detalle) return "";
   const crearTexto = (equipoA, strikesA, equipoB, strikesB) =>
-    `${equipoA}: ${strikesA} strikes - ${equipoB}: ${strikesB} strikes · Total strikes: ${detalle.total}`;
+    `${equipoA}: ${strikesA} - ${equipoB}: ${strikesB} · Total: ${detalle.total}`;
   const ordenEvento = getOrdenMarcadorMlbSegunEvento(evento, marcador);
   if (ordenEvento) {
     const primeroEsHome = equiposMlbCoinciden(ordenEvento.equipoA, marcador.homeTeam);
@@ -6847,8 +6847,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     ? equiposDelEvento.slice(0, 2)
     : (autoMlb.equipos || []).slice(0, 2);
   const marcadorStrikeoutsTotalesInicial = equiposStrikeoutsTotales.length >= 2
-    ? `${equiposStrikeoutsTotales[0]}: 0 strikes - ${equiposStrikeoutsTotales[1]}: 0 strikes · Total strikes: 0`
-    : `Total strikes: ${Number.isFinite(totalStrikes) ? totalStrikes : 0}`;
+    ? `${equiposStrikeoutsTotales[0]}: 0 - ${equiposStrikeoutsTotales[1]}: 0 · Total: 0`
+    : `Total: ${Number.isFinite(totalStrikes) ? totalStrikes : 0}`;
 
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
