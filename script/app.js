@@ -5963,7 +5963,7 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
 
     const ganador = homeWon ? marcador.homeTeam : marcador.awayTeam;
     return {
-      estado: normalizarClaveMlb(ganador) === normalizarClaveMlb(autoMlb.seleccionEquipo) ? "ganada" : "perdida",
+      estado: equiposMlbCoinciden(ganador, autoMlb.seleccionEquipo) ? "ganada" : "perdida",
       marcador,
       pagoAnticipado: false
     };
