@@ -6843,6 +6843,12 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const esBasesTotales = autoMlb.mercado === "bases_totales_jugador";
   const jugadorStrikeouts = normalizarNombreJugadorMlb(autoMlb.jugador) || extraerNombreJugadorStrikeouts(textoCompletoSel) || "Jugador";
   const jugadorBases = extraerNombreJugadorBasesTotales(textoCompletoSel) || autoMlb.jugador || "Jugador";
+  const equiposStrikeoutsTotales = equiposDelEvento.length >= 2
+    ? equiposDelEvento.slice(0, 2)
+    : (autoMlb.equipos || []).slice(0, 2);
+  const marcadorStrikeoutsTotalesInicial = equiposStrikeoutsTotales.length >= 2
+    ? `${equiposStrikeoutsTotales[0]}: 0 strikes - ${equiposStrikeoutsTotales[1]}: 0 strikes · Total strikes: 0`
+    : `Total strikes: ${Number.isFinite(totalStrikes) ? totalStrikes : 0}`;
 
   const carrerasLabel = autoMlb.seleccionEquipo ? `Carreras de ${autoMlb.seleccionEquipo}` : "Carreras";
   const carrerasHtml = autoMlb.mercado === "total_carreras" && !Number.isNaN(totalCarreras)
@@ -6853,7 +6859,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const marcadorVisible = ocultarResultadoPorHorario
     ? ""
     : esStrikeoutsTotales
-    ? (autoMlb.marcadorStrikeoutsTotales || `Total strikes: ${Number.isFinite(totalStrikes) ? totalStrikes : 0}`)
+    ? (autoMlb.marcadorStrikeoutsTotales || marcadorStrikeoutsTotalesInicial)
     : esStrikeouts
     ? (autoMlb.marcadorStrikeouts || (!Number.isNaN(totalStrikes) ? `${jugadorStrikeouts}: ${totalStrikes} strikes` : `${jugadorStrikeouts}: ${totalStrikes || 0} strikes`))
     : esBasesTotales
