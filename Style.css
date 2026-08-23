@@ -392,6 +392,54 @@ button {
     letter-spacing: 0.2px;
 }
 
+.mlb-strikeouts-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    margin: 2px 0 3px;
+    padding: 3px 7px;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.10);
+    color: #fcd34d;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.mlb-strikeouts-hint--total {
+    border-color: rgba(34, 211, 238, 0.38);
+    background: rgba(34, 211, 238, 0.10);
+    color: #67e8f9;
+}
+
+.quick-strikeouts-panel {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid rgba(34, 211, 238, .28);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, .72), rgba(8, 47, 73, .34));
+}
+.quick-strikeouts-panel.is-open { display: block; }
+.quick-market-group { margin:10px 0 5px; color:#cbd5e1; font-size:11px; }
+.quick-market-lines { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+.quick-market-lines button { border:1px solid #334155; border-radius:7px; padding:5px 8px; background:#172033; color:#dbeafe; font-size:11px; cursor:pointer; }
+.quick-market-lines button:hover { border-color:#22d3ee; color:#67e8f9; }
+.quick-strikeouts-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; color:#67e8f9; font-size:13px; font-weight:800; }
+.quick-strikeouts-heading small { color:#94a3b8; font-size:10px; font-weight:600; }
+.quick-strikeouts-event { display:flex; align-items:center; gap:6px; margin:9px 0; }
+.quick-strikeouts-event input { min-width:0; flex:1; padding:6px 8px; font-size:12px; }
+.quick-strikeouts-event span { color:#64748b; font-size:11px; font-weight:800; }
+.quick-strikeouts-side { display:flex; gap:5px; margin:0 0 8px; }
+.quick-strikeouts-side button { border:1px solid #334155; border-radius:999px; padding:4px 9px; background:#172033; color:#94a3b8; font-size:11px; font-weight:800; cursor:pointer; }
+.quick-strikeouts-side button.is-active { border-color:#22d3ee; background:rgba(34,211,238,.16); color:#67e8f9; }
+.quick-strikeouts-lines { display:flex; flex-wrap:wrap; gap:6px; }
+.quick-strikeouts-line { width:39px; height:39px; border:1px solid rgba(34,211,238,.4); border-radius:50%; background:#0f172a; color:#bae6fd; font-size:11px; font-weight:800; cursor:pointer; transition:transform .15s, background .15s; }
+.quick-strikeouts-line:hover { transform:translateY(-1px) scale(1.06); background:#0e7490; color:#fff; }
+.quick-strikeouts-note { margin:9px 0 0; color:#94a3b8; font-size:10px; }
+
 .football-time-rule {
     margin-top: 8px;
     padding-top: 5px;

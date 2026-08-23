@@ -1865,6 +1865,20 @@ function esStrikeoutsMlb(texto = "") {
   return tienePalabraMercado(normalizado, ["strikeout", "strikeouts", "strike", "strikes", "ponche", "ponches", "so"]);
 }
 
+function esStrikeoutsTotalesMlb(texto = "") {
+  const normalizado = normalizarTextoMercado(texto);
+  const esTotalExplicito = /\b(strikeouts?|strikes?|ponches?)\s+(por\s+)?lanzadores?\b/.test(normalizado) ||
+    /\btotal(?:es)?\s+(?:de\s+)?(?:strikeouts?|strikes?|ponches?)\b/.test(normalizado);
+  if (esTotalExplicito) return true;
+
+  // Las líneas altas sin pitcher (por ejemplo, "Más de 17.5 strikes")
+  // corresponden al total de lanzadores de ambos equipos. Un nombre o la
+  // frase "del jugador" conserva el mercado individual.
+  if (/\b(del\s+jugador|pitcher)\b/.test(normalizado) || extraerNombreJugadorStrikeouts(texto)) return false;
+  const linea = String(texto).replace(",", ".").match(/\b(\d+(?:\.\d+)?)/);
+  return Boolean(linea && Number(linea[1]) >= 12 && esStrikeoutsMlb(texto));
+}
+
 function esBasesTotalesJugadorMlb(texto = "") {
   const normalizado = normalizarTextoMercado(texto);
   return /\b(?:bases?\s+totales?|total(?:es)?\s+bases?)\b/.test(normalizado);
@@ -1925,6 +1939,9 @@ function deduplicarNombreJugador(nombre = "") {
 
 function extraerNombreJugadorStrikeouts(texto = "") {
   let limpio = String(texto)
+    // El autocompletado añade el equipo tras el separador para poder mostrar
+    // su logo, pero ese texto no forma parte del nombre del pitcher.
+    .replace(/\s*[·|]\s*[^·|]+$/, "")
     .replace(/\(incl\.?\s*extra\s*innings?\)/gi, "")
     .replace(/incl\.?\s*extra\s*innings?/gi, "")
     .replace(/\bstrikeouts?\s+del\s+jugador\s+al\s+menos\b/gi, "")
@@ -2144,8 +2161,9 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
 
   if (autoMlb?.mercado === "strikeouts_jugador" && esStrikeoutsMlb(textoCompleto)) {
     const jugador = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompleto);
+    const equipoJugador = autoMlb.equipoJugador || "";
     return {
-      titulo: jugador ? `Strikeouts del jugador (${jugador})` : "Strikeouts del jugador",
+      titulo: jugador ? `Strikeouts del jugador (${jugador})${equipoJugador ? ` · ${equipoJugador}` : ""}` : "Strikeouts del jugador",
       jugada: formatearLineaStrikeoutsAuto(autoMlb) || extraerLineaStrikeouts(jugadaActual || textoCompleto)
     };
   }
@@ -2155,6 +2173,13 @@ function detectarDetalleSeleccionCrear(seleccion = {}) {
     return {
       titulo: jugador ? `Bases Totales Por Jugador (${jugador}) (incl. extra innings)` : "Bases Totales Por Jugador (incl. extra innings)",
       jugada: formatearLineaBasesTotalesAuto(autoMlb) || jugadaActual
+    };
+  }
+
+  if (autoMlb?.mercado === "total_strikeouts") {
+    return {
+      titulo: "Strikeouts totales por lanzadores (incl. extra innings)",
+      jugada: formatearLineaTotalAuto(autoMlb) || jugadaActual
     };
   }
 
@@ -2539,6 +2564,27 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
     }
   }
 
+  if (esStrikeoutsTotalesMlb(textoCompleto)) {
+    return {
+      titulo: "Strikeouts totales por lanzadores (incl. extra innings)",
+      jugada: extraerLineaTotal(jugadaActual || textoCompleto, ["strike", "strikes", "strikeout", "strikeouts", "ponche", "ponches"])
+    };
+  }
+
+  if (esStrikeoutsTotalesMlb(textoCompleto)) {
+    const linea = extraerNumeroJugada(textoCompleto);
+    const tipoTotal = detectarLadoTotal(jugada) || detectarLadoTotal(textoCompleto);
+    if (linea !== null && tipoTotal) {
+      return {
+        deporte: "mlb",
+        mercado: "total_strikeouts",
+        equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
+        tipoTotal,
+        linea
+      };
+    }
+  }
+
   if (esStrikeoutsMlb(textoCompleto)) {
     const plusMatch = textoCompleto.match(/(\d+(?:\.\d+)?)\s*\+/);
     let linea = extraerNumeroJugada(textoCompleto);
@@ -2557,6 +2603,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
       lineaInclusiva = true;
     }
     const jugador = extraerNombreJugadorStrikeouts(textoCompleto);
+    const equipoJugador = detectarEquiposMlb(jugada || textoCompleto)[0] || "";
     if (linea !== null && tipoTotal) {
       return {
         deporte: "mlb",
@@ -2587,6 +2634,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
         mercado: "bases_totales_jugador",
         equipos: equiposEvento.length >= 2 ? equiposEvento.slice(0, 2) : equiposTexto.slice(0, 2),
         jugador,
+        equipoJugador,
         tipoTotal,
         linea,
         lineaInclusiva
@@ -4663,9 +4711,8 @@ function getPausaMedioTiempoHastaFutbol(estadoJuego = "", pausaActual = null) {
 }
 
 function getEstadoFinalizadoHtml(auto = {}) {
-  return esEstadoJuegoFinalizado(auto?.estadoJuego)
-    ? `<div class="auto-mlb-score auto-mlb-score--final">Finalizado</div>`
-    : "";
+  // El resultado ya se comunica con el icono de la selección (✓ o ×).
+  return "";
 }
 
 function tieneEstadoJuegoEspecial(auto = {}) {
@@ -5071,6 +5118,19 @@ function extraerStrikeoutsJugadorGame(game, nombreJugador = "") {
     if (resAway) return resAway;
   }
 
+  return null;
+}
+
+function extraerStrikeoutsTotalesGame(game) {
+  const equipos = [game?.boxscore?.teams, game?.liveData?.boxscore?.teams, game?.teams].filter(Boolean);
+  for (const teams of equipos) {
+    const total = [teams.home, teams.away].reduce((suma, equipo) => {
+      const pitching = equipo?.teamStats?.pitching || equipo?.stats?.pitching || {};
+      const strikes = pitching.strikeOuts ?? pitching.strikeouts ?? pitching.so ?? pitching.k;
+      return suma + (Number.isFinite(Number(strikes)) ? Number(strikes) : 0);
+    }, 0);
+    if (total > 0 || teams.home?.teamStats || teams.away?.teamStats) return total;
+  }
   return null;
 }
 
@@ -5981,6 +6041,20 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
     };
   }
 
+  if (autoMlb.mercado === "total_strikeouts") {
+    const linea = Number(autoMlb.linea);
+    const strikes = extraerStrikeoutsTotalesGame(game);
+    if (Number.isNaN(linea) || strikes === null) return null;
+    if (!finalizado) {
+      if (autoMlb.tipoTotal === "over" && strikes > linea) return { estado: "ganada", marcador, strikes };
+      if (autoMlb.tipoTotal === "under" && strikes > linea) return { estado: "perdida", marcador, strikes };
+      return null;
+    }
+    if (strikes === linea) return { estado: "nula", marcador, strikes };
+    const ganaOver = strikes > linea;
+    return { estado: (autoMlb.tipoTotal === "over" ? ganaOver : !ganaOver) ? "ganada" : "perdida", marcador, strikes };
+  }
+
   if (autoMlb.mercado === "strikeouts_jugador") {
     const linea = Number(autoMlb.linea);
     const stats = extraerStrikeoutsJugadorGame(game, autoMlb.jugador);
@@ -6157,7 +6231,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
         
         const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
-        const esMercadoStrikeouts = esStrikeoutsMlb(textoSelCompletoSync);
+        const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || (!esStrikeoutsTotalesMlb(textoSelCompletoSync) && esStrikeoutsMlb(textoSelCompletoSync));
         const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
         const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado);
 
@@ -6228,7 +6302,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
             marcadorStrikeouts: esMercadoStrikeouts ? (marcadorStrikeoutsTexto || autoMlb.marcadorStrikeouts) : undefined,
             totalCarreras: autoMlb.mercado === "total_carreras" && !juegoNoIniciado ? totalObjetivo : undefined,
             totalHits: esMercadoHits && !juegoNoIniciado ? totalObjetivo : undefined,
-            totalStrikes: esMercadoStrikeouts && !juegoNoIniciado && totalStrikes != null ? totalStrikes : undefined,
+            totalStrikes: (esMercadoStrikeouts || autoMlb.mercado === "total_strikeouts") && !juegoNoIniciado && totalStrikes != null ? totalStrikes : undefined,
             fechaJuego: game.gameDate
           }
         };
@@ -6238,7 +6312,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
       
       const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
-      const esMercadoStrikeouts = esStrikeoutsMlb(textoSelCompletoSync);
+      const esMercadoStrikeouts = autoMlb.mercado === "strikeouts_jugador" || (!esStrikeoutsTotalesMlb(textoSelCompletoSync) && esStrikeoutsMlb(textoSelCompletoSync));
       const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
       const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado);
 
@@ -6283,7 +6357,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
           totalCarreras: autoMlb.mercado === "total_carreras" ? totalObjetivo : autoMlb.totalCarreras,
           totalHits: esMercadoHits ? totalObjetivo : autoMlb.totalHits,
           totalBases: esMercadoBases && evaluacion.basesTotales != null ? evaluacion.basesTotales : autoMlb.totalBases,
-          totalStrikes: esMercadoStrikeouts && totalStrikes != null ? totalStrikes : autoMlb.totalStrikes,
+          totalStrikes: (esMercadoStrikeouts || autoMlb.mercado === "total_strikeouts") && totalStrikes != null ? totalStrikes : autoMlb.totalStrikes,
           pagoAnticipado,
           fechaJuego: game.gameDate,
           sincronizadoEn: Date.now()
@@ -6319,11 +6393,13 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
     }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
-      const totalAuto = selections.find(sel => ["total_carreras", "total_hits"].includes(sel.autoMlb?.mercado))?.autoMlb;
+      const totalAuto = selections.find(sel => ["total_carreras", "total_hits", "total_strikeouts"].includes(sel.autoMlb?.mercado))?.autoMlb;
       const game = totalAuto ? buscarJuegoMlb(juegosFecha, totalAuto.equipos, fechaBet, totalAuto.gamePk, totalAuto.horaJuego || totalAuto.hora || apuesta.hora, totalAuto.gameNumber) : null;
       const marcador = game ? getMarcadorMlb(game) : null;
       const finalizado = game ? juegoMlbFinalizado(game) : false;
-      const totalObjetivo = getTotalObjetivoAutoMlb(totalAuto, marcador);
+      const totalObjetivo = totalAuto?.mercado === "total_strikeouts"
+        ? extraerStrikeoutsTotalesGame(game)
+        : getTotalObjetivoAutoMlb(totalAuto, marcador);
       const totalIrreversible = marcador && totalAuto && (
         finalizado ||
         (totalAuto.tipoTotal === "over" && totalObjetivo > Number(totalAuto.linea)) ||
@@ -6696,14 +6772,14 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const estadoEspecialHtml = getEstadoEspecialApuestaHtml(autoMlb);
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
-  const showFinalStatus = options.showFinalStatus !== false;
+  const showFinalStatus = false;
   // Si la selección ya fue liquidada, su resultado definitivo es suficiente
-  // para mostrar "Finalizado", incluso con un estado externo antiguo.
+  // El cierre del partido se indica únicamente con el icono de resultado.
   const resultadoSeleccionFinal = ["ganada", "perdida", "nula"].includes(selection?.estado);
   const finalizadoPorResultadoGuardado = resultadoSeleccionFinal;
   const estadoFinalizadoHtml = showFinalStatus
     ? (getEstadoFinalizadoHtml(autoMlb) || (finalizadoPorResultadoGuardado
-      ? `<div class="auto-mlb-score auto-mlb-score--final">Finalizado</div>`
+      ? ""
       : ""))
     : "";
   const totalCarreras = Number(autoMlb.totalCarreras);
@@ -6711,7 +6787,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const totalBases = Number(autoMlb.totalBases);
   const totalStrikes = Number(autoMlb.totalStrikes ?? autoMlb.strikes);
   const textoCompletoSel = `${selection.titulo || ""} ${selection.jugada || ""}`;
-  const esStrikeouts = esStrikeoutsMlb(textoCompletoSel);
+  const esStrikeouts = autoMlb.mercado === "strikeouts_jugador" || (autoMlb.mercado !== "total_strikeouts" && esStrikeoutsMlb(textoCompletoSel));
+  const esStrikeoutsTotales = autoMlb.mercado === "total_strikeouts";
   const esBasesTotales = autoMlb.mercado === "bases_totales_jugador";
   const jugadorStrikeouts = autoMlb.jugador || extraerNombreJugadorStrikeouts(textoCompletoSel) || "Jugador";
   const jugadorBases = extraerNombreJugadorBasesTotales(textoCompletoSel) || autoMlb.jugador || "Jugador";
@@ -6724,6 +6801,8 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
 
   const marcadorVisible = ocultarResultadoPorHorario
     ? ""
+    : esStrikeoutsTotales
+    ? `Strikeouts totales: ${Number.isFinite(totalStrikes) ? totalStrikes : 0}`
     : esStrikeouts
     ? (autoMlb.marcadorStrikeouts || (!Number.isNaN(totalStrikes) ? `${jugadorStrikeouts}: ${totalStrikes} strikes` : `${jugadorStrikeouts}: ${totalStrikes || 0} strikes`))
     : esBasesTotales
@@ -6733,7 +6812,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
     : autoMlb.mercado === "total_hits"
     ? (autoMlb.marcadorHits || (!Number.isNaN(totalHits) ? `${hitsLabel}: ${totalHits}` : marcadorOrdenado))
     : marcadorOrdenado;
-  const marcadorExtra = (autoMlb.mercado === "total_hits" || esStrikeouts || esBasesTotales) ? "" : carrerasHtml;
+  const marcadorExtra = (autoMlb.mercado === "total_hits" || esStrikeouts || esStrikeoutsTotales || esBasesTotales) ? "" : carrerasHtml;
   const marcadorHtml = marcadorVisible
     ? `<div class="auto-mlb-score">${escapeHtml(marcadorVisible)}${marcadorExtra}</div>`
     : "";
@@ -6760,7 +6839,7 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   if (!marcador && selection?.estado === "nula" && autoMlb.estadoJuego && /postpon|pospuest|cancel|retras|delay|suspend/i.test(autoMlb.estadoJuego)) {
     return `${getEstadoJuegoLegacyHtml(autoMlb.estadoJuego)}${pagoAnticipadoBadge}`;
   }
-  return marcadorHtml ? `${marcadorHtml}${pagoAnticipadoBadge}${estadoFinalizadoHtml}` : `${horaHtml}${pagoAnticipadoBadge}`;
+  return marcadorHtml ? `${marcadorHtml}${pagoAnticipadoBadge}` : `${horaHtml}${pagoAnticipadoBadge}`;
 }
 
 function autoMlbTieneMetaVisible(autoMlb = {}) {
@@ -11369,7 +11448,6 @@ function _render() {
               const totalVal = a.jugadas?.[0]?.resultadoTotal;
               const hasTotal = totalVal !== undefined && totalVal !== null && totalVal !== "";
               const estadoTexto = hasTotal ? a.resultado : "pendiente";
-              const winInfo = getSimpleOptionWinInfo(a);
               const estadoIconHtml = estadoTexto === "ganada"
                 ? `<span class="simple-option-status-icon" aria-hidden="true">&#10003;</span>`
                 : estadoTexto === "perdida"
@@ -11381,13 +11459,7 @@ function _render() {
                     onchange="window.actualizarResultadoTotalSimpleOption('${a.id}', this.value)"
                     onkeydown="if(event.key === 'Enter') this.blur()"
                     class="simple-option-total-input">
-                  <span class="simple-option-status simple-option-status--${estadoTexto} simple-option-status--${winInfo.type}">
-                    ${estadoIconHtml}
-                    <span class="simple-option-status-copy">
-                      <span>${winInfo.label}</span>
-                      <strong>${formatEstadoOptionBet(estadoTexto)}</strong>
-                    </span>
-                  </span>
+                  ${estadoIconHtml}
                 </div>
               `;
             })()
@@ -11404,24 +11476,8 @@ function _render() {
                 <option value="nula" ${a.resultado === 'nula' ? 'selected' : ''}>nula</option>
               </select>
             `;
-          const simpleOptionWinInfo = a.tipoApuesta === "simple_option_bet"
-            ? getSimpleOptionWinInfo(a)
-            : null;
-          const simpleOptionNoticeRow = simpleOptionWinInfo?.message
-            ? `
-              <tr class="simple-option-notice-row">
-                <td class="simple-option-notice-spacer"></td>
-                <td colspan="6">
-                  <div class="simple-option-notice simple-option-notice--${simpleOptionWinInfo.type}">
-                    <span class="simple-option-notice-icon ${simpleOptionWinInfo.type === "lost" ? "simple-option-notice-icon--lost" : ""}" aria-hidden="true">${simpleOptionWinInfo.type === "lost" ? "&#10005;" : "&#10003;"}</span>
-                    <span>${simpleOptionWinInfo.message}</span>
-                  </div>
-                </td>
-              </tr>
-            `
-            : "";
           filas += `
-          <tr data-apuesta-row="${a.id}" class="${simpleOptionNoticeRow ? "simple-option-main-row" : ""}">
+          <tr data-apuesta-row="${a.id}">
             <td>${renderFechaYHoraCeldaHtml(a, fechaFormateada)}</td>
             <td>${celdaEvento}</td>
             <td data-cuota-cell="${a.id}">${formatDecimal(a.cuota)}</td>
@@ -11435,7 +11491,6 @@ function _render() {
               <button onclick="window.eliminar('${a.id}')" title="Eliminar">🗑️</button>
             </td>
           </tr>
-          ${simpleOptionNoticeRow}
         `;
         }
       }
@@ -12531,3 +12586,201 @@ window.actualizarResultadoTotalSimpleOption = actualizarResultadoTotalSimpleOpti
 window.eliminarDia = eliminarDia;
 window.guardarAjusteFinal = guardarAjusteFinal;
 window.setEditingFinal = setEditingFinal;
+
+// Selector rápido: las líneas elegidas se convierten en una selección SIMPLE
+// ya preparada; el usuario únicamente completa su cuota e importe.
+(() => {
+  const panel = document.getElementById("selectorStrikeoutsTotales");
+  const lines = document.getElementById("quickStrikeoutsLines");
+  if (!panel || !lines) return;
+  const listaEquipos = document.createElement("datalist");
+  listaEquipos.id = "quickSportsTeamsList";
+  document.body.appendChild(listaEquipos);
+  const inputsEquipos = [...panel.querySelectorAll(".quick-mlb-team-input")];
+  const actualizarListaEquipos = input => {
+    const deporte = document.getElementById("deporte")?.value;
+    const grupos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? COUNTRY_FLAG_ENTRIES : [];
+    const consulta = normalizarClaveMlb(input?.value || "");
+    const oficiales = grupos.filter(equipo => [equipo.name, ...(equipo.aliases || [])]
+      .some(alias => !consulta || normalizarClaveMlb(alias).includes(consulta)))
+      .map(equipo => equipo.name);
+    listaEquipos.replaceChildren(...[...new Set(oficiales)].slice(0, 50).map(nombre => {
+      const option = document.createElement("option"); option.value = nombre; return option;
+    }));
+  };
+  inputsEquipos.forEach(input => {
+    input.setAttribute("list", "quickSportsTeamsList");
+    input.addEventListener("focus", () => actualizarListaEquipos(input));
+    input.addEventListener("input", () => actualizarListaEquipos(input));
+  });
+  document.getElementById("deporte")?.addEventListener("change", () => actualizarListaEquipos(inputsEquipos[0]));
+  let lado = "over";
+
+  for (let valor = 1; valor <= 20; valor += 0.5) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "quick-strikeouts-line";
+    btn.textContent = Number.isInteger(valor) ? String(valor) : valor.toFixed(1);
+    btn.title = `Agregar ${lado === "over" ? "Más de" : "Menos de"} ${btn.textContent} strikeouts totales`;
+    btn.addEventListener("click", () => {
+      const equipoA = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
+      const equipoB = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
+      if (!equipoA || !equipoB) {
+        mostrarModalValidacion(["Indica los dos equipos antes de elegir una línea de strikeouts."]);
+        return;
+      }
+      const tipoApuesta = document.getElementById("tipoApuesta")?.value || "simple";
+      const destinos = {
+        simple: { container: "eventosSimpleContainer", slot: "simple-slot", crear: crearSlotSimple },
+        combinada: { container: "eventosContainer", slot: "jugada-slot", crear: crearSlotCombinada },
+        sistema: { container: "eventosSistemaContainer", slot: "sistema-slot", crear: crearSlotSistema },
+        patente: { container: "eventosPatenteContainer", slot: "patente-slot", crear: crearSlotPatente },
+        dobles: { container: "eventosDoblesContainer", slot: "dobles-slot", crear: crearSlotDobles },
+        crear_apuesta: { container: "eventosCrearContainer", slot: "crear-slot", crear: crearSlotCrearApuesta },
+        crear_apuesta_simple: { container: "eventosCrearSimpleContainer", slot: "crear-simple-slot", crear: crearSlotCrearApuestaSimple },
+        simple_option_bet: { container: "eventosSimpleOptionContainer", slot: "simple-option-slot", crear: crearSlotSimpleOption }
+      };
+      const destino = destinos[tipoApuesta] || destinos.simple;
+      const container = document.getElementById(destino.container);
+      let slot = [...(container?.querySelectorAll(`.${destino.slot}`) || [])]
+        .find(item => !item.querySelector(".jugada-ev-input")?.value && !item.querySelector(".jugada-jug-input")?.value);
+      const agruparPorPartido = ["sistema", "crear_apuesta", "crear_apuesta_simple"].includes(tipoApuesta);
+      if (agruparPorPartido) {
+        const evento = `${equipoA} vs ${equipoB}`.toLowerCase();
+        slot = [...(container?.querySelectorAll(`.${destino.slot}`) || [])]
+          .find(item => item.querySelector(".jugada-ev-input")?.value.trim().toLowerCase() === evento) || slot;
+      }
+      if (!slot) {
+        slot = destino.crear((container?.querySelectorAll(`.${destino.slot}`).length || 0) + 1);
+        container?.appendChild(slot);
+      }
+      const linea = Number.isInteger(valor) ? String(valor) : valor.toFixed(1);
+      slot.querySelector(".jugada-ev-input").value = `${equipoA} vs ${equipoB}`;
+      let jugadaInput = slot.querySelector(".jugada-jug-input");
+      if (agruparPorPartido && jugadaInput?.value) {
+        const agregar = tipoApuesta === "sistema" ? window.agregarSeleccionAlSlotSistema
+          : tipoApuesta === "crear_apuesta" ? window.agregarSeleccionAlSlot
+          : window.agregarSeleccionAlSlotCrearSimple;
+        agregar(slot.querySelector(".btn-agregar-sel-slot"));
+        jugadaInput = slot.querySelector(".selections-container .selection-row:last-child .jugada-jug-input");
+      }
+      jugadaInput.value = `Strikeouts por lanzadores ${lado === "over" ? "Mas de" : "Menos de"} ${linea} (incl. extra innings)`;
+      const deporte = document.getElementById("deporte");
+      if (deporte) deporte.value = "mlb";
+      habilitarAutocompleteMlb(slot);
+      (slot.querySelector(".jugada-cuota-input") || slot.querySelector(".jugada-opti-odds-input"))?.focus();
+      if (tipoApuesta === "dobles") calcularTotalesDoblesForm();
+      if (tipoApuesta === "sistema") calcularTotalesSistemaForm();
+      // Algunos constructores limpian sus inputs en el siguiente frame para
+      // evitar el autofill del navegador. Reaplicamos la selección después.
+      requestAnimationFrame(() => {
+        slot.querySelector(".jugada-ev-input").value = `${equipoA} vs ${equipoB}`;
+        jugadaInput.value = `Strikeouts por lanzadores ${lado === "over" ? "Mas de" : "Menos de"} ${linea} (incl. extra innings)`;
+        (slot.querySelector(".jugada-cuota-input") || slot.querySelector(".jugada-opti-odds-input"))?.focus();
+        if (tipoApuesta === "dobles") calcularTotalesDoblesForm();
+        if (tipoApuesta === "sistema") calcularTotalesSistemaForm();
+      });
+      btn.classList.add("is-selected");
+      setTimeout(() => btn.classList.remove("is-selected"), 500);
+    });
+    lines.appendChild(btn);
+  }
+
+})();
+
+// Muestra los mercados solo después de que el usuario elige el tipo de apuesta.
+function actualizarVisibilidadMercadosMlb() {
+  const deporte = document.getElementById("deporte")?.value;
+  const tipo = document.getElementById("tipoApuesta")?.value;
+  document.getElementById("selectorStrikeoutsTotales")?.classList.toggle(
+    "is-open",
+    deporte === "mlb" && tipo !== "simple_option_bet"
+  );
+}
+document.getElementById("tipoApuesta")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
+document.getElementById("deporte")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
+
+(() => {
+  const add = (label, build) => {
+    const btn = document.createElement("button"); btn.type = "button"; btn.textContent = label;
+    btn.addEventListener("click", () => {
+      const a = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
+      const b = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
+      if (!a || !b) return mostrarModalValidacion(["Indica los dos equipos antes de elegir un mercado."]);
+      const type = document.getElementById("tipoApuesta")?.value || "simple";
+      const map = {
+        simple:["eventosSimpleContainer","simple-slot",crearSlotSimple], combinada:["eventosContainer","jugada-slot",crearSlotCombinada], sistema:["eventosSistemaContainer","sistema-slot",crearSlotSistema], patente:["eventosPatenteContainer","patente-slot",crearSlotPatente], dobles:["eventosDoblesContainer","dobles-slot",crearSlotDobles], crear_apuesta:["eventosCrearContainer","crear-slot",crearSlotCrearApuesta], crear_apuesta_simple:["eventosCrearSimpleContainer","crear-simple-slot",crearSlotCrearApuestaSimple], simple_option_bet:["eventosSimpleOptionContainer","simple-option-slot",crearSlotSimpleOption]
+      }[type] || ["eventosSimpleContainer","simple-slot",crearSlotSimple];
+      const cont = document.getElementById(map[0]);
+      let slot = [...cont.querySelectorAll(`.${map[1]}`)].find(x => !x.querySelector(".jugada-ev-input")?.value && !x.querySelector(".jugada-jug-input")?.value);
+      const agruparPorPartido = ["sistema", "crear_apuesta", "crear_apuesta_simple"].includes(type);
+      if (agruparPorPartido) {
+        const evento = `${a} vs ${b}`.toLowerCase();
+        slot = [...cont.querySelectorAll(`.${map[1]}`)].find(x => x.querySelector(".jugada-ev-input")?.value.trim().toLowerCase() === evento) || slot;
+      }
+      if (!slot) { slot = map[2](cont.querySelectorAll(`.${map[1]}`).length + 1); cont.appendChild(slot); }
+      requestAnimationFrame(() => {
+        slot.querySelector(".jugada-ev-input").value = `${a} vs ${b}`;
+        let jugada = slot.querySelector(".jugada-jug-input");
+        if (agruparPorPartido && jugada?.value) {
+          const agregar = type === "sistema" ? window.agregarSeleccionAlSlotSistema
+            : type === "crear_apuesta" ? window.agregarSeleccionAlSlot
+            : window.agregarSeleccionAlSlotCrearSimple;
+          agregar(slot.querySelector(".btn-agregar-sel-slot"));
+          jugada = slot.querySelector(".selections-container .selection-row:last-child .jugada-jug-input");
+        }
+        jugada.value = build(a,b);
+        (slot.querySelector(".jugada-cuota-input") || slot.querySelector(".jugada-opti-odds-input"))?.focus();
+      });
+      document.getElementById("deporte").value = "mlb";
+    });
+    return btn;
+  };
+  const money = document.getElementById("quickMoneylineLines"), totals = document.getElementById("quickTotalRunsLines"), handicap = document.getElementById("quickHandicapLines");
+  if (!money || !totals || !handicap) return;
+  const ganaLocal = add("Gana local", a => `Gana ${a}`);
+  const ganaVisitante = add("Gana visitante", (_,b) => `Gana ${b}`);
+  money.append(ganaLocal, ganaVisitante);
+  const actualizarNombresGanador = () => {
+    const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
+    const visitante = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
+    ganaLocal.textContent = local ? `Gana ${local}` : "Gana local";
+    ganaVisitante.textContent = visitante ? `Gana ${visitante}` : "Gana visitante";
+  };
+  const completarNombreEquipo = input => {
+    const valor = input?.value.trim();
+    if (!valor) return;
+    const clave = normalizarClaveMlb(valor);
+    const deporte = document.getElementById("deporte")?.value;
+    const equipos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? COUNTRY_FLAG_ENTRIES : [];
+    const equipo = equipos.find(team => [team.name, ...(team.aliases || [])]
+      .some(alias => normalizarClaveMlb(alias) === clave));
+    if (equipo) input.value = equipo.name;
+    actualizarNombresGanador();
+  };
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", actualizarNombresGanador);
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("input", actualizarNombresGanador);
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("change", event => completarNombreEquipo(event.currentTarget));
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("change", event => completarNombreEquipo(event.currentTarget));
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("blur", event => completarNombreEquipo(event.currentTarget));
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("blur", event => completarNombreEquipo(event.currentTarget));
+  [5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10].forEach(n => { totals.append(add(`Más ${n}`, () => `Mas de ${n} carreras`), add(`Menos ${n}`, () => `Menos de ${n} carreras`)); });
+  const handicapBotones = [];
+  [1,1.5,2,2.5,3,3.5,4,4.5,-1,-1.5,-2,-2.5,-3,-3.5,-4,-4.5].forEach(n => {
+    const lineaLocal = `${n > 0 ? '+' : ''}${n}`;
+    const lineaVisita = `${n > 0 ? '-' : '+'}${Math.abs(n)}`;
+    const local = add(`Local ${lineaLocal}`, a => `Handicap ${a} ${lineaLocal}`);
+    const visita = add(`Visita ${lineaVisita}`, (_,b) => `Handicap ${b} ${lineaVisita}`);
+    handicapBotones.push({ btn: local, lado: "local", linea: lineaLocal }, { btn: visita, lado: "visita", linea: lineaVisita });
+    handicap.append(local, visita);
+  });
+  const actualizarNombresHandicap = () => {
+    const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim() || "Local";
+    const visita = document.getElementById("quickStrikeoutsEquipoB")?.value.trim() || "Visita";
+    handicapBotones.forEach(item => { item.btn.textContent = `${item.lado === "local" ? local : visita} ${item.linea}`; });
+  };
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", actualizarNombresHandicap);
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("input", actualizarNombresHandicap);
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("change", actualizarNombresHandicap);
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("change", actualizarNombresHandicap);
+})();

@@ -717,6 +717,84 @@ export const MLB_TOP_PITCHERS = [
   "Zac Gallen"
 ];
 
+const pitcherSearchCache = new Map();
+const pitcherSearchTimers = new WeakMap();
+
+async function buscarPitchersEnMlb(query = "") {
+  const texto = String(query).trim();
+  if (texto.length < 3) return [];
+  const key = normalizeLookupKey(texto);
+  if (pitcherSearchCache.has(key)) return pitcherSearchCache.get(key);
+
+  const pending = fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(texto)}`)
+    .then(res => res.ok ? res.json() : { people: [] })
+    .then(async data => {
+      const pitchers = (data.people || []).filter(person =>
+        person?.active && person?.primaryPosition?.code === "1"
+      ).slice(0, 6);
+      if (!pitchers.length) return [];
+
+      const ids = pitchers.map(person => person.id).filter(Boolean).join(",");
+      const detail = await fetch(`https://statsapi.mlb.com/api/v1/people/${ids}?hydrate=currentTeam`)
+        .then(res => res.ok ? res.json() : { people: [] })
+        .catch(() => ({ people: [] }));
+      const teamsById = new Map((detail.people || []).map(person => [person.id, person.currentTeam?.name || ""]));
+      return pitchers.map(person => ({
+        nombre: person.fullName,
+        equipo: teamsById.get(person.id) || ""
+      })).filter(person => person.equipo);
+    })
+    .catch(() => []);
+  pitcherSearchCache.set(key, pending);
+  return pending;
+}
+
+function buscarPitchersParaAutocomplete(input) {
+  const typed = input.value || "";
+  const nombre = extraerBusquedaNombreJugador(typed);
+  if (nombre.length < 3) return;
+  clearTimeout(pitcherSearchTimers.get(input));
+  pitcherSearchTimers.set(input, setTimeout(async () => {
+    const pitchers = await buscarPitchersEnMlb(nombre);
+    if (!pitchers.length || input.value !== typed) return;
+    const datalist = document.getElementById("mlbPlaysList");
+    if (!datalist) return;
+    const linea = String(typed).replace(",", ".").match(/\b(\d+(?:\.\d+)?)\s*\+?/);
+    const etiqueta = linea ? (Number.isInteger(Number(linea[1])) ? `${linea[1]}+` : `Mas de ${linea[1]}`) : "4+";
+    const opciones = pitchers.flatMap(({ nombre: pitcher, equipo }) => [
+      `Strikeouts del jugador (${pitcher}) ${etiqueta} · ${equipo}`,
+      `${pitcher} ${etiqueta} strikes · ${equipo}`
+    ]);
+    datalist.innerHTML = opciones.map(option => `<option value="${escapeHtml(option)}"></option>`).join("");
+  }, 280));
+}
+
+function actualizarAvisoStrikeouts(input) {
+  const texto = String(input.value || "");
+  const normalizado = normalizeLookupKey(texto);
+  let aviso = input.parentElement?.querySelector(".mlb-strikeouts-hint");
+  if (!/\b(strike|strikes|strikeout|strikeouts|ponche|ponches)\b/i.test(texto)) {
+    aviso?.remove();
+    return;
+  }
+
+  const linea = texto.replace(",", ".").match(/\b(\d+(?:\.\d+)?)/);
+  const esTotalExplicito = /\b(lanzador|lanzadores|total|totales)\b/.test(normalizado);
+  const pareceJugador = /\b(jugador|pitcher)\b/i.test(texto) ||
+    /\b[A-Za-zÁÉÍÓÚÑáéíóúñ]+\s+\d+(?:\.\d+)?\s*\+?\s*(?:strikes?|strikeouts?|ponches?)\b/i.test(texto);
+  const esTotal = esTotalExplicito || (Number(linea?.[1]) >= 12 && !pareceJugador);
+
+  if (!aviso) {
+    aviso = document.createElement("div");
+    aviso.className = "mlb-strikeouts-hint";
+    input.insertAdjacentElement("afterend", aviso);
+  }
+  aviso.classList.toggle("mlb-strikeouts-hint--total", esTotal);
+  aviso.innerHTML = esTotal
+    ? `<span aria-hidden="true">Σ</span> Total de lanzadores: suma ambos equipos`
+    : `<span aria-hidden="true">⚾</span> Por jugador: usa el nombre y una línea como 4+`;
+}
+
 // Extrae posibles nombres de jugador del texto escrito al buscar ponches
 function extraerBusquedaNombreJugador(typed = "") {
   const limpio = String(typed)
@@ -1016,10 +1094,23 @@ function prepararAutocompleteJugada(input) {
   let opciones = [];
 
   const esBusquedaStrikeouts = /\b(strike|strikes|strikeout|strikeouts|ponche|ponches|so)\b/i.test(typedLower);
+  const lineaStrikeouts = String(typed).replace(",", ".").match(/\b(\d+(?:\.\d+)?)/);
+  const esLineaAltaSinPitcher = Number(lineaStrikeouts?.[1]) >= 12 &&
+    !/\b(jugador|pitcher)\b/i.test(typed) &&
+    !/\b[A-Za-zÁÉÍÓÚÑáéíóúñ]+\s+\d+(?:\.\d+)?\s*\+?\s*(?:strikes?|strikeouts?|ponches?)\b/i.test(typed);
+  const esBusquedaStrikeoutsTotales = esBusquedaStrikeouts &&
+    (/\b(lanzador(?:es)?|total(?:es)?)\b/i.test(typedLower) || esLineaAltaSinPitcher);
   const esBusquedaHandicap = /\b(handicap|hándicap|handi|hcap|runline|spread)\b/i.test(typedLower);
   const esBusquedaCarreras = /\b(carrera|carreras|run|runs)\b/i.test(typedLower);
 
-  if (esBusquedaStrikeouts) {
+  if (esBusquedaStrikeoutsTotales) {
+    const linea = String(typed).replace(",", ".").match(/\b(\d+(?:\.\d+)?)/);
+    const valor = linea ? linea[1] : "14.5";
+    opciones = [
+      `Strikeouts por lanzadores Mas de ${valor} (incl. extra innings)`,
+      `Strikeouts por lanzadores Menos de ${valor} (incl. extra innings)`
+    ];
+  } else if (esBusquedaStrikeouts) {
     const competitors = extraerCompetidoresDesdeEvento(eventText);
     const opcionesStrikeouts = generarOpcionesStrikeoutsDinamicas(typed, competitors);
     opciones = opcionesStrikeouts.filter(o => matchOpcionConPalabras(o, typedLower));
@@ -1067,13 +1158,16 @@ export function habilitarAutocompleteMlb(root = document) {
   crearMlbTeamsDatalist();
   crearMlbPlaysDatalist();
 
-  root.querySelectorAll(".jugada-ev-input, .edit-jugada-ev-input, .evento-principal-input, [id^='edit-evento-']")
+  root.querySelectorAll(".jugada-ev-input, .edit-jugada-ev-input, .evento-principal-input, .quick-mlb-team-input, [id^='edit-evento-']")
     .forEach(input => {
       input.setAttribute("list", "mlbTeamsList");
       if (input.dataset.eventAutocompleteReady !== "1") {
         const actualizar = () => prepararAutocompleteEvento(input);
         input.addEventListener("focus", actualizar);
         input.addEventListener("input", actualizar);
+        input.addEventListener("input", () => buscarPitchersParaAutocomplete(input));
+        input.addEventListener("input", () => actualizarAvisoStrikeouts(input));
+        input.addEventListener("change", () => actualizarAvisoStrikeouts(input));
         input.addEventListener("keydown", actualizar);
         input.dataset.eventAutocompleteReady = "1";
       }

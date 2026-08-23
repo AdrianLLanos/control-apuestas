@@ -122,6 +122,24 @@
       </select>
     </div>
 
+    <section id="selectorStrikeoutsTotales" class="quick-strikeouts-panel" aria-label="Mercados MLB rápidos">
+      <div class="quick-strikeouts-heading">
+        <span>⚾ Mercados MLB</span>
+        <small>Elige una línea y se añade a tu apuesta</small>
+      </div>
+      <div class="quick-strikeouts-event">
+        <input id="quickStrikeoutsEquipoA" class="quick-mlb-team-input" type="text" placeholder="Equipo local" autocomplete="off">
+        <span>vs</span>
+        <input id="quickStrikeoutsEquipoB" class="quick-mlb-team-input" type="text" placeholder="Equipo visitante" autocomplete="off">
+      </div>
+      <div class="quick-market-group"><strong>Ganador</strong><div id="quickMoneylineLines" class="quick-market-lines"></div></div>
+      <div class="quick-market-group"><strong>Totales (incl. extra innings)</strong><div id="quickTotalRunsLines" class="quick-market-lines"></div></div>
+      <div class="quick-market-group"><strong>Hándicap (incl. extra innings)</strong><div id="quickHandicapLines" class="quick-market-lines"></div></div>
+      <div class="quick-market-group"><strong>Strikeouts totales</strong></div>
+      <div id="quickStrikeoutsLines" class="quick-strikeouts-lines"></div>
+      <p class="quick-strikeouts-note">Después de elegir, completa la cuota e importe de esa selección.</p>
+    </section>
+
     <!-- Tarjeta principal -->
     <div id="tarjetaApuesta" class="tarjeta-apuesta" style="margin-top:12px;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
