@@ -5135,6 +5135,21 @@ function extraerStrikeoutsJugadorGame(game, nombreJugador = "") {
   return null;
 }
 
+function combinarJuegoMlbConBoxscoreDirecto(game, boxscore) {
+  if (!game || !boxscore) return game;
+  const homeRuns = boxscore?.teams?.home?.teamStats?.batting?.runs;
+  const awayRuns = boxscore?.teams?.away?.teamStats?.batting?.runs;
+  return {
+    ...game,
+    boxscore,
+    teams: {
+      ...game.teams,
+      home: { ...game?.teams?.home, score: homeRuns ?? game?.teams?.home?.score },
+      away: { ...game?.teams?.away, score: awayRuns ?? game?.teams?.away?.score }
+    }
+  };
+}
+
 function extraerStrikeoutsTotalesGame(game) {
   const detalle = extraerStrikeoutsPorEquipoGame(game);
   return detalle ? detalle.total : null;
@@ -5817,8 +5832,8 @@ function getMarcadorMlb(game) {
   const away = Number(game?.teams?.away?.score ?? game?.linescore?.teams?.away?.runs);
   if (Number.isNaN(home) || Number.isNaN(away)) return null;
 
-  const homeHits = Number(game?.linescore?.teams?.home?.hits ?? game?.teams?.home?.hits);
-  const awayHits = Number(game?.linescore?.teams?.away?.hits ?? game?.teams?.away?.hits);
+  const homeHits = Number(game?.boxscore?.teams?.home?.teamStats?.batting?.hits ?? game?.linescore?.teams?.home?.hits ?? game?.teams?.home?.hits);
+  const awayHits = Number(game?.boxscore?.teams?.away?.teamStats?.batting?.hits ?? game?.linescore?.teams?.away?.hits ?? game?.teams?.away?.hits);
   const tieneHits = !Number.isNaN(homeHits) && !Number.isNaN(awayHits);
 
   return {
@@ -6260,31 +6275,54 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       }
 
       const esMiCasino = esApuestaDeMiCasino(apuesta);
+      // Hits y strikeouts se liquidan con el boxscore directo del partido,
+      // no con el resumen del calendario que puede llegar con retraso.
+      const textoSelParaBoxscore = `${sel.titulo || ""} ${sel.jugada || ""}`;
+      const requiereBoxscoreDirecto = autoMlb.deporte === "mlb" ||
+        esStrikeoutsMlb(textoSelParaBoxscore);
+      const boxscoreParaEvaluar = requiereBoxscoreDirecto && game?.gamePk
+        ? await obtenerBoxscoreMlbDirecto(game.gamePk)
+        : null;
+      const gameParaEvaluar = boxscoreParaEvaluar
+        ? combinarJuegoMlbConBoxscoreDirecto(game, boxscoreParaEvaluar)
+        : game;
+      game = gameParaEvaluar;
       const evaluacion = evaluarAutoMlb(autoMlb, game, { esMiCasino });
       if (!evaluacion) {
         const juegoNoIniciado = juegoMlbNoIniciado(game);
-        const marcador = juegoNoIniciado ? null : getMarcadorMlb(game);
+        let marcador = juegoNoIniciado ? null : getMarcadorMlb(game);
         const estadoJuego = game?.status?.detailedState || game?.status?.abstractGameState || "";
-        const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
+        let totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
         
         const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
         const esMercadoStrikeoutsTotales = autoMlb.mercado === "total_strikeouts" || esStrikeoutsTotalesMlb(textoSelCompletoSync);
         const esMercadoStrikeouts = !esMercadoStrikeoutsTotales && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(textoSelCompletoSync));
+        const esMercadoHits = autoMlb.mercado === "total_hits";
         const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
         const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeoutsTotales ? "total_strikeouts" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado));
+        const boxscoreDirecto = game?.gamePk && (esMercadoHits || esMercadoStrikeouts || esMercadoStrikeoutsTotales)
+          ? await obtenerBoxscoreMlbDirecto(game.gamePk)
+          : null;
+        if (boxscoreDirecto && esMercadoHits) {
+          marcador = juegoNoIniciado ? null : getMarcadorMlb({ ...game, boxscore: boxscoreDirecto });
+          totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcador);
+        }
 
         let statsStrikeouts = esMercadoStrikeouts
           ? extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync))
           : null;
 
-        if (!statsStrikeouts && game?.gamePk && esMercadoStrikeouts) {
-          const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
-          if (directBox) {
-            statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
+        if (!statsStrikeouts && boxscoreDirecto && esMercadoStrikeouts) {
+          if (boxscoreDirecto) {
+            statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: boxscoreDirecto }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
           }
         }
 
-        const detalleStrikeoutsTotales = esMercadoStrikeoutsTotales ? extraerStrikeoutsPorEquipoGame(game) : null;
+        let detalleStrikeoutsTotales = esMercadoStrikeoutsTotales ? extraerStrikeoutsPorEquipoGame(game) : null;
+        if (esMercadoStrikeoutsTotales && boxscoreDirecto) {
+          const detalleDirecto = extraerStrikeoutsPorEquipoGame({ boxscore: boxscoreDirecto });
+          if (detalleDirecto) detalleStrikeoutsTotales = detalleDirecto;
+        }
         const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (detalleStrikeoutsTotales?.total ?? autoMlb.totalStrikes ?? autoMlb.strikes);
         const jugadorNombre = esMercadoStrikeouts ? (statsStrikeouts?.fullName || autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync)) : undefined;
         const marcadorStrikeoutsTexto = (esMercadoStrikeouts && (statsStrikeouts || totalStrikes != null)) ? `${jugadorNombre || 'Jugador'}: ${totalStrikes ?? 0} strikes` : null;
@@ -6298,8 +6336,6 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         const marcadorHitsTexto = marcador
           ? formatHitsMlbSegunEvento(ev, marcador)
           : null;
-        const esMercadoHits = autoMlb.mercado === "total_hits";
-
         const estadoAnterior = sel.estado || "pendiente";
         const fueMarcadoReembolsoPrevio = estadoAnterior === "nula" ||
           esEstadoJuegoReembolso(autoMlb.estadoJuego) ||
@@ -6352,27 +6388,38 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         };
       }
 
-      const totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
-      const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, evaluacion.marcador);
+      let totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, evaluacion.marcador);
       
       const textoSelCompletoSync = `${sel.titulo || ''} ${sel.jugada || ''}`;
       const esMercadoStrikeoutsTotales = autoMlb.mercado === "total_strikeouts" || esStrikeoutsTotalesMlb(textoSelCompletoSync);
       const esMercadoStrikeouts = !esMercadoStrikeoutsTotales && (autoMlb.mercado === "strikeouts_jugador" || esStrikeoutsMlb(textoSelCompletoSync));
+      const esMercadoHits = autoMlb.mercado === "total_hits";
       const esMercadoHandicap = esHandicapMlbTexto(textoSelCompletoSync);
       const mercadoSync = esMercadoHandicap ? "handicap" : (esMercadoStrikeoutsTotales ? "total_strikeouts" : (esMercadoStrikeouts ? "strikeouts_jugador" : autoMlb.mercado));
+      const boxscoreDirecto = game?.gamePk && (esMercadoHits || esMercadoStrikeouts || esMercadoStrikeoutsTotales)
+        ? await obtenerBoxscoreMlbDirecto(game.gamePk)
+        : null;
+      const marcadorParaHits = esMercadoHits && boxscoreDirecto
+        ? getMarcadorMlb({ ...game, boxscore: boxscoreDirecto })
+        : evaluacion.marcador;
+      if (esMercadoHits) totalObjetivo = getTotalObjetivoAutoMlb(autoMlb, marcadorParaHits);
+      const marcadorHitsTexto = formatHitsMlbSegunEvento(ev, marcadorParaHits);
 
       let statsStrikeouts = esMercadoStrikeouts
         ? (evaluacion.strikes != null ? { fullName: evaluacion.pitcher, strikeouts: evaluacion.strikes } : extraerStrikeoutsJugadorGame(game, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync)))
         : null;
 
-      if (!statsStrikeouts && game?.gamePk && esMercadoStrikeouts) {
-        const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
-        if (directBox) {
-          statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: directBox }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
+      if (!statsStrikeouts && boxscoreDirecto && esMercadoStrikeouts) {
+        if (boxscoreDirecto) {
+          statsStrikeouts = extraerStrikeoutsJugadorGame({ boxscore: boxscoreDirecto }, autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync));
         }
       }
 
-      const detalleStrikeoutsTotales = esMercadoStrikeoutsTotales ? extraerStrikeoutsPorEquipoGame(game) : null;
+      let detalleStrikeoutsTotales = esMercadoStrikeoutsTotales ? extraerStrikeoutsPorEquipoGame(game) : null;
+      if (esMercadoStrikeoutsTotales && boxscoreDirecto) {
+        const detalleDirecto = extraerStrikeoutsPorEquipoGame({ boxscore: boxscoreDirecto });
+        if (detalleDirecto) detalleStrikeoutsTotales = detalleDirecto;
+      }
       const totalStrikes = statsStrikeouts ? statsStrikeouts.strikeouts : (evaluacion.strikes ?? detalleStrikeoutsTotales?.total ?? autoMlb.totalStrikes);
       const jugadorNombre = esMercadoStrikeouts
         ? (statsStrikeouts?.fullName || autoMlb.jugador || extraerNombreJugadorStrikeouts(textoSelCompletoSync))
@@ -6384,7 +6431,6 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
         ? formatStrikeoutsTotalesMlbSegunEvento(ev, evaluacion.marcador, detalleStrikeoutsTotales)
         : null;
 
-      const esMercadoHits = autoMlb.mercado === "total_hits";
       const esMercadoBases = autoMlb.mercado === "bases_totales_jugador";
       // No conservar una marca previa de pago anticipado para otras casas.
       // Esta promoción es exclusiva de Mi Casino, incluso si la apuesta fue
