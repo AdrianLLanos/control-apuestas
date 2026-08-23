@@ -5791,8 +5791,8 @@ function getMarcadorMlb(game) {
     homeHits: tieneHits ? homeHits : null,
     awayHits: tieneHits ? awayHits : null,
     totalHits: tieneHits ? homeHits + awayHits : null,
-    homeTeam: game?.teams?.home?.team?.name || "",
-    awayTeam: game?.teams?.away?.team?.name || ""
+    homeTeam: detectarEquiposMlb(game?.teams?.home?.team?.name || "")[0] || game?.teams?.home?.team?.name || "",
+    awayTeam: detectarEquiposMlb(game?.teams?.away?.team?.name || "")[0] || game?.teams?.away?.team?.name || ""
   };
 }
 
