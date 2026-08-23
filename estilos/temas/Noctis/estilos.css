@@ -1,0 +1,24 @@
+/* Ajustes exclusivos del modo Noctis. */
+html[data-modo-visual="noctis"] .page .bet-system-summary,
+html[data-modo-visual="noctis"] .page .sistema-row-numbers span,
+html[data-modo-visual="noctis"] .page .dobles-row-numbers span,
+html[data-modo-visual="noctis"] .page .patente-row-numbers span {
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    text-shadow: 0 0 7px rgba(255, 255, 255, 0.20);
+}
+
+html[data-modo-visual="noctis"] .page .bet-main-title,
+html[data-modo-visual="noctis"] .page .bet-system-number,
+html[data-modo-visual="noctis"] .page .sistema-row-numbers strong,
+html[data-modo-visual="noctis"] .page .dobles-row-numbers strong,
+html[data-modo-visual="noctis"] .page .patente-row-numbers strong {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    text-shadow: 0 0 7px rgba(255, 255, 255, 0.20);
+}
+
+html[data-modo-visual="noctis"] .auto-mlb-score {
+    color: #00b7ff !important;
+}

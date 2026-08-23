@@ -113,6 +113,14 @@ let casaFormularioId = CASA_DEFAULT_ID;
 let filtroCasaId = CASA_TODAS_ID;
 let casasSnapshotRecibido = false;
 let apuestasSnapshotRecibido = false;
+let guardandoApuesta = false;
+
+// Durante el arranque llegan dos snapshots independientes. Renderizar cuando
+// solo uno está listo sustituía el skeleton por una vista parcial y enseguida
+// volvía a construirla, provocando pequeños saltos visibles.
+function cargaInicialListaParaRender() {
+  return casasSnapshotRecibido && apuestasSnapshotRecibido;
+}
 
 function normalizarCasa(casa = {}) {
   return {
@@ -413,6 +421,10 @@ function escucharCasas() {
     renderSnapshotProgramado();
   }, (error) => {
     console.error("Error escuchando casas en tiempo real:", error);
+    // Permitir que el historial se muestre con la casa predeterminada aun si
+    // este listener falla durante el arranque.
+    casasSnapshotRecibido = true;
+    renderSnapshotProgramado();
     mostrarModalValidacion(["No se pudo sincronizar las casas de apuestas en tiempo real: " + error.message]);
   });
 }
@@ -1366,6 +1378,8 @@ function autocorregirApuestasCargadas(lista = []) {
 }
 
 function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) {
+  if (!cargaInicialListaParaRender()) return;
+
   apuestas.sort(compararApuestasOrdenTabla);
 
   const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
@@ -3792,6 +3806,10 @@ window.resetearFormularioCreacion = resetearFormularioCreacion;
    AGREGAR APUESTA
    ========================= */
 async function agregarApuesta() {
+  // Evita que un doble clic (o un segundo toque en móvil) cree dos documentos
+  // idénticos mientras el primer guardado todavía está en curso.
+  if (guardandoApuesta) return;
+
   const fecha = document.getElementById("fecha").value;
   const hora = document.getElementById("hora")?.value || "";
   const tipoApuesta = document.getElementById("tipoApuesta").value;
@@ -4118,6 +4136,9 @@ async function agregarApuesta() {
   // NOTE: paginaActual se calcula DESPUÉS de setear filtroCasaId para usar el filtro correcto
 
   const ordenBase = Date.now();
+  const btnAgregar = document.getElementById("btnAgregar");
+  guardandoApuesta = true;
+  if (btnAgregar) btnAgregar.disabled = true;
 
   try {
     if (tipoApuesta === "simple") {
@@ -4347,6 +4368,9 @@ async function agregarApuesta() {
     console.error("Error al agregar la apuesta:", e);
     mostrarModalValidacion(["Error al guardar la apuesta en la base de datos: " + e.message]);
     return;
+  } finally {
+    guardandoApuesta = false;
+    if (btnAgregar) btnAgregar.disabled = false;
   }
 
   // Siempre apunta el filtro a la casa de la apuesta recién guardada
@@ -4623,7 +4647,7 @@ function getEstadoJuegoTraducido(estadoJuego = "") {
 
 function esEstadoJuegoFinalizado(estadoJuego = "") {
   const normalizado = normalizarEstadoExternoTexto(estadoJuego);
-  return /\b(final|finalizado|partido terminado|tiempo completo|game over|match finished|full time|finished|ended|ft|aet|pen)\b/.test(normalizado);
+  return /\b(final|finalizado|partido terminado|tiempo completo|game over|match finished|full time|finished|completed|complete|ended|ft|aet|pen)\b/.test(normalizado);
 }
 
 function esEstadoFutbolMedioTiempo(estadoJuego = "") {
@@ -6041,8 +6065,25 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       ) {
         huboCambioMetadata = true;
       }
-      const game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
+      let game = buscarJuegoMlb(juegosFecha, autoMlb.equipos, fechaBet, autoMlb.gamePk, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
       const espnGame = buscarJuegoEspnMlb(juegosEspnFecha, autoMlb.equipos, fechaBet, autoMlb.espnId, autoMlb.horaJuego || autoMlb.hora || apuesta.hora, autoMlb.gameNumber);
+
+      // El resumen del calendario no siempre incluye la línea del bateador,
+      // especialmente cuando terminó el juego. Sin ese dato la interfaz
+      // mostraba 0 como valor visual, pero la selección quedaba pendiente.
+      // Completamos el juego con el boxscore detallado antes de liquidar las
+      // bases totales del jugador; así un 0 real se marca correctamente como
+      // perdida en una apuesta de "Más de 1 base".
+      if (
+        game &&
+        autoMlb.mercado === "bases_totales_jugador" &&
+        !extraerBasesTotalesJugadorGame(game, autoMlb.jugador) &&
+        game.gamePk
+      ) {
+        const directBox = await obtenerBoxscoreMlbDirecto(game.gamePk);
+        if (directBox) game = { ...game, boxscore: directBox };
+      }
+
       const estadoEspecialMlb = getEstadoEspecialMlb(game);
       const estadoEspecialEspn = getEstadoEspecialEspn(espnGame, "espn_mlb_scoreboard");
       const estadoEspecial = (game && !estadoEspecialMlb)
@@ -6656,7 +6697,15 @@ function getAutoMlbMarcadorHtml(selection = {}, options = {}) {
   const showAutoMeta = options.showAutoMeta !== false;
   const suppressSchedule = options.suppressSchedule === true;
   const showFinalStatus = options.showFinalStatus !== false;
-  const estadoFinalizadoHtml = showFinalStatus ? getEstadoFinalizadoHtml(autoMlb) : "";
+  // Si la selección ya fue liquidada, su resultado definitivo es suficiente
+  // para mostrar "Finalizado", incluso con un estado externo antiguo.
+  const resultadoSeleccionFinal = ["ganada", "perdida", "nula"].includes(selection?.estado);
+  const finalizadoPorResultadoGuardado = resultadoSeleccionFinal;
+  const estadoFinalizadoHtml = showFinalStatus
+    ? (getEstadoFinalizadoHtml(autoMlb) || (finalizadoPorResultadoGuardado
+      ? `<div class="auto-mlb-score auto-mlb-score--final">Finalizado</div>`
+      : ""))
+    : "";
   const totalCarreras = Number(autoMlb.totalCarreras);
   const totalHits = Number(autoMlb.totalHits);
   const totalBases = Number(autoMlb.totalBases);
@@ -10380,6 +10429,7 @@ function render() {
 
 let renderSnapshotPendiente = false;
 function renderSnapshotProgramado() {
+  if (!cargaInicialListaParaRender()) return;
   if (usuarioEstaEditandoFormulario()) return;
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
@@ -10801,7 +10851,7 @@ function _render() {
                 html: `
                   <div data-selection-wrap="${a.id}-${matchIndex}-${selIndex}" style="display:flex; flex-direction:column; gap:1px; ${styleMod}">
                     ${slotHeaderHtml}
-                    ${detalleSeleccion.titulo ? `<div style="font-size:12px; color:#a3a3a3; font-weight:600;">${formattedTitulo}</div>` : ""}
+                    ${detalleSeleccion.titulo ? `<div class="bet-market-title-spacing" style="font-size:12px; color:#a3a3a3; font-weight:600;">${formattedTitulo}</div>` : ""}
                     <div class="bet-selection-line" style="font-size:13px; color:#ffffff; font-weight:600;">
                       <span class="bet-selection-value">${formattedJugada}</span>${estadoIcon}
                     </div>
@@ -10882,7 +10932,7 @@ function _render() {
                     const isLastSel = selIndex === selections.length - 1;
                     const jEstado = getEstadoSeleccionRender(sel, j, evText);
                     const iconHtml = getEstadoSeleccionIconHtml(jEstado);
-                    const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+                    const estadoIcon = (!iconHtml || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
                     const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
                     let styleMod = "";
@@ -10934,7 +10984,7 @@ function _render() {
               : selections.map((sel, selIndex) => {
                 const jEstado = getEstadoSeleccionRender(sel, j, evText);
                 const iconHtml = getEstadoSeleccionIconHtml(jEstado);
-                const estadoIcon = (!iconHtml || isSimpleBet || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
+                const estadoIcon = (!iconHtml || isSimpleOptionBet) ? "" : `<span onclick="window.toggleEstadoSeleccion('${a.id}', ${matchIndex}, ${selIndex})" style="margin-left:8px; display:inline-flex; vertical-align:middle;">${iconHtml}</span>`;
 
                 const tieneEstadoEspecial = tieneEstadoJuegoEspecial(sel.autoMlb) || tieneEstadoJuegoEspecial(sel.autoFutbol);
                 let styleMod = "";
@@ -11212,7 +11262,7 @@ function _render() {
               <div class="apuesta-edit-card ${a.tipoApuesta}" id="edit-tarjeta-${a.id}">
                 <div class="apuesta-edit-header">
                   ${tipoApuestaEdit}
-                  <span style="font-size:13px; color:#64748b;">Detalle de la apuesta</span>
+                  <span class="apuesta-edit-detail-label" style="font-size:13px; color:#64748b;">Detalle de la apuesta</span>
                 </div>
                 <input type="text" id="edit-evento-${a.id}" value="${eventoEscapado}"
                   placeholder="Evento Principal (Ej: Combinada MLB)"

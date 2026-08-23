@@ -675,6 +675,13 @@ table td:nth-child(6) {
     gap: 8px;
 }
 
+/* Evita que los iconos de resultado rocen el título del mercado anterior. */
+.bet-market-title,
+.bet-market-title-spacing {
+    margin-bottom: 8px;
+    line-height: 1.2;
+}
+
 .bet-selection-value {
     display: inline-flex;
     align-items: center;

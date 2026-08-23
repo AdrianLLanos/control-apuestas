@@ -1,0 +1,36 @@
+/*
+ * Ajustes de color exclusivos del tema Tarde-noche (Twitter Dim).
+ * Se carga después de los estilos de cada tipo de apuesta para evitar
+ * que afecte a los demás modos visuales.
+ */
+html[data-modo-visual="tarde-noche"] .page .bet-system-summary {
+    color: #1da1f2 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
+
+html[data-modo-visual="tarde-noche"] .bet-system-number,
+html[data-modo-visual="tarde-noche"] .sistema-row-numbers strong,
+html[data-modo-visual="tarde-noche"] .dobles-row-numbers strong,
+html[data-modo-visual="tarde-noche"] .patente-row-numbers strong {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+}
+
+html[data-modo-visual="tarde-noche"] .sistema-row-numbers,
+html[data-modo-visual="tarde-noche"] .dobles-row-numbers,
+html[data-modo-visual="tarde-noche"] .patente-row-numbers {
+    font-size: 14px !important;
+}
+
+html[data-modo-visual="tarde-noche"] .sistema-row-numbers span,
+html[data-modo-visual="tarde-noche"] .dobles-row-numbers span,
+html[data-modo-visual="tarde-noche"] .patente-row-numbers span,
+html[data-modo-visual="tarde-noche"] .apuesta-edit-detail-label {
+    color: #1da1f2 !important;
+    font-weight: 500 !important;
+}
+
+html[data-modo-visual="tarde-noche"] .auto-mlb-score {
+    color: #00b7ff !important;
+}
