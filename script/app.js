@@ -12695,6 +12695,8 @@ window.setEditingFinal = setEditingFinal;
 (() => {
   const panel = document.getElementById("selectorStrikeoutsTotales");
   const lines = document.getElementById("quickStrikeoutsLines");
+  const selectorDobleJornada = document.getElementById("quickDoubleheaderPicker");
+  const selectJuegoDobleJornada = document.getElementById("quickDoubleheaderGame");
   if (!panel || !lines) return;
   const listaEquipos = document.createElement("datalist");
   listaEquipos.id = "quickSportsTeamsList";
@@ -12717,6 +12719,47 @@ window.setEditingFinal = setEditingFinal;
     input.addEventListener("input", () => actualizarListaEquipos(input));
   });
   document.getElementById("deporte")?.addEventListener("change", () => actualizarListaEquipos(inputsEquipos[0]));
+  let juegosDobleJornada = [];
+  let consultaDobleJornada = 0;
+  const actualizarDobleJornadaRapida = async () => {
+    const equipoA = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
+    const equipoB = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
+    const fecha = document.getElementById("fecha")?.value;
+    const consultaActual = ++consultaDobleJornada;
+    juegosDobleJornada = [];
+    if (selectorDobleJornada) {
+      selectorDobleJornada.hidden = true;
+      delete selectorDobleJornada.dataset.games;
+    }
+    if (!equipoA || !equipoB || !fecha) return;
+
+    const info = await detectarDobleJornadaMlb(`${equipoA} vs ${equipoB}`, fecha);
+    if (consultaActual !== consultaDobleJornada || !info?.esDobleJornada) return;
+    juegosDobleJornada = info.juegos || [];
+    if (!selectJuegoDobleJornada || !selectorDobleJornada || juegosDobleJornada.length < 2) return;
+    selectorDobleJornada.dataset.games = JSON.stringify(juegosDobleJornada);
+    selectJuegoDobleJornada.replaceChildren(
+      new Option("-- Elige Juego 1 o Juego 2 --", ""),
+      ...juegosDobleJornada.map((juego, indice) => new Option(
+        `Juego ${juego.gameNumber} · ${juego.hora ? `${juego.hora} hs` : "Horario por confirmar"}`,
+        String(indice)
+      ))
+    );
+    selectorDobleJornada.hidden = false;
+  };
+  inputsEquipos.forEach(input => {
+    input.addEventListener("input", () => {
+      ++consultaDobleJornada;
+      juegosDobleJornada = [];
+      if (selectorDobleJornada) {
+        selectorDobleJornada.hidden = true;
+        delete selectorDobleJornada.dataset.games;
+      }
+    });
+    input.addEventListener("change", actualizarDobleJornadaRapida);
+    input.addEventListener("blur", actualizarDobleJornadaRapida);
+  });
+  document.getElementById("fecha")?.addEventListener("change", actualizarDobleJornadaRapida);
   let lado = "over";
   const botonesLado = [...panel.querySelectorAll("[data-strikeouts-side]")];
   const actualizarLado = nuevoLado => {
@@ -12739,11 +12782,16 @@ window.setEditingFinal = setEditingFinal;
     btn.className = "quick-strikeouts-line";
     btn.textContent = Number.isInteger(valor) ? String(valor) : valor.toFixed(1);
     btn.title = `Agregar ${lado === "over" ? "Más de" : "Menos de"} ${btn.textContent} strikeouts totales`;
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const equipoA = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
       const equipoB = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
       if (!equipoA || !equipoB) {
         mostrarModalValidacion(["Indica los dos equipos antes de elegir una línea de strikeouts."]);
+        return;
+      }
+      // Si ambos equipos juegan dos veces, no registramos una línea ambigua.
+      if (selectorDobleJornada && selectorDobleJornada.hidden === false && !selectJuegoDobleJornada?.value) {
+        mostrarModalValidacion(["Elige Juego 1 o Juego 2 de la doble jornada antes de seleccionar una línea."]);
         return;
       }
       const tipoApuesta = document.getElementById("tipoApuesta")?.value || "simple";
@@ -12771,6 +12819,11 @@ window.setEditingFinal = setEditingFinal;
         slot = destino.crear((container?.querySelectorAll(`.${destino.slot}`).length || 0) + 1);
         container?.appendChild(slot);
       }
+      const indiceJuego = Number(selectJuegoDobleJornada?.value);
+      const juegoElegido = Number.isInteger(indiceJuego) && selectJuegoDobleJornada?.value !== ""
+        ? juegosDobleJornada[indiceJuego]
+        : null;
+      if (juegoElegido) slot.dataset.selectedGame = JSON.stringify(juegoElegido);
       const linea = Number.isInteger(valor) ? String(valor) : valor.toFixed(1);
       slot.querySelector(".jugada-ev-input").value = `${equipoA} vs ${equipoB}`;
       let jugadaInput = slot.querySelector(".jugada-jug-input");
@@ -12824,6 +12877,11 @@ document.getElementById("deporte")?.addEventListener("change", actualizarVisibil
       const a = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
       const b = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
       if (!a || !b) return mostrarModalValidacion(["Indica los dos equipos antes de elegir un mercado."]);
+      const selectorDoble = document.getElementById("quickDoubleheaderPicker");
+      const selectJuegoDoble = document.getElementById("quickDoubleheaderGame");
+      if (selectorDoble && !selectorDoble.hidden && !selectJuegoDoble?.value) {
+        return mostrarModalValidacion(["Elige Juego 1 o Juego 2 de la doble jornada antes de seleccionar un mercado."]);
+      }
       const type = document.getElementById("tipoApuesta")?.value || "simple";
       const map = {
         simple:["eventosSimpleContainer","simple-slot",crearSlotSimple], combinada:["eventosContainer","jugada-slot",crearSlotCombinada], sistema:["eventosSistemaContainer","sistema-slot",crearSlotSistema], patente:["eventosPatenteContainer","patente-slot",crearSlotPatente], dobles:["eventosDoblesContainer","dobles-slot",crearSlotDobles], crear_apuesta:["eventosCrearContainer","crear-slot",crearSlotCrearApuesta], crear_apuesta_simple:["eventosCrearSimpleContainer","crear-simple-slot",crearSlotCrearApuestaSimple], simple_option_bet:["eventosSimpleOptionContainer","simple-option-slot",crearSlotSimpleOption]
@@ -12836,6 +12894,11 @@ document.getElementById("deporte")?.addEventListener("change", actualizarVisibil
         slot = [...cont.querySelectorAll(`.${map[1]}`)].find(x => x.querySelector(".jugada-ev-input")?.value.trim().toLowerCase() === evento) || slot;
       }
       if (!slot) { slot = map[2](cont.querySelectorAll(`.${map[1]}`).length + 1); cont.appendChild(slot); }
+      const indiceJuego = Number(selectJuegoDoble?.value);
+      let juegosDoble = [];
+      try { juegosDoble = JSON.parse(selectorDoble?.dataset.games || "[]"); } catch (e) {}
+      const juegoElegido = Number.isInteger(indiceJuego) && selectJuegoDoble?.value !== "" ? juegosDoble[indiceJuego] : null;
+      if (juegoElegido) slot.dataset.selectedGame = JSON.stringify(juegoElegido);
       requestAnimationFrame(() => {
         slot.querySelector(".jugada-ev-input").value = `${a} vs ${b}`;
         let jugada = slot.querySelector(".jugada-jug-input");
