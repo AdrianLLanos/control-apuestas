@@ -12718,6 +12718,20 @@ window.setEditingFinal = setEditingFinal;
   });
   document.getElementById("deporte")?.addEventListener("change", () => actualizarListaEquipos(inputsEquipos[0]));
   let lado = "over";
+  const botonesLado = [...panel.querySelectorAll("[data-strikeouts-side]")];
+  const actualizarLado = nuevoLado => {
+    lado = nuevoLado;
+    botonesLado.forEach(boton => {
+      const activo = boton.dataset.strikeoutsSide === lado;
+      boton.classList.toggle("is-active", activo);
+      boton.setAttribute("aria-pressed", String(activo));
+    });
+    [...lines.querySelectorAll(".quick-strikeouts-line")].forEach(boton => {
+      boton.title = `Agregar ${lado === "over" ? "Más de" : "Menos de"} ${boton.textContent} strikeouts totales`;
+    });
+  };
+  botonesLado.forEach(boton => boton.addEventListener("click", () => actualizarLado(boton.dataset.strikeoutsSide)));
+  actualizarLado(lado);
 
   for (let valor = 1; valor <= 20; valor += 0.5) {
     const btn = document.createElement("button");
