@@ -9772,17 +9772,26 @@ async function sincronizarResultadosNfl(silencioso = false) {
   try {
     const juegosPorFecha = new Map();
     const fechas = [...new Set(candidatas.flatMap(apuesta => getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal())) )];
+    let juegosCargados = 0;
+    let juegosDesdeCdn = 0;
+    let erroresCarga = 0;
     for (const fecha of fechas) {
       try {
-        juegosPorFecha.set(fecha, await cargarJuegosEspnNflPorFecha(fecha));
+        const juegosFecha = await cargarJuegosEspnNflPorFecha(fecha);
+        juegosPorFecha.set(fecha, juegosFecha);
+        juegosCargados += juegosFecha.length;
+        juegosDesdeCdn += juegosFecha.filter(juego => juego.fuenteResultado === "espn_nfl_cdn").length;
       } catch (error) {
         console.warn("No se pudo cargar ESPN NFL:", fecha, error);
         juegosPorFecha.set(fecha, []);
+        erroresCarga++;
       }
     }
 
     let actualizadas = 0;
     let revisadas = 0;
+    let coincidencias = 0;
+    let boxscoresCargados = 0;
     for (const apuesta of candidatas) {
       revisadas++;
       const fechasApuesta = getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal());
@@ -9790,6 +9799,8 @@ async function sincronizarResultadosNfl(silencioso = false) {
       const equipos = detectarEquiposNfl(`${apuesta.evento || ""} ${(apuesta.jugadas || []).map(jugada => jugada?.ev || jugada?.evento || "").join(" ")}`);
       const juegoMarcador = buscarJuegoEspnFutbol(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
       const boxscore = juegoMarcador ? await cargarBoxscoreEspnNfl(juegoMarcador.id) : null;
+      if (juegoMarcador) coincidencias++;
+      if (boxscore) boxscoresCargados++;
       const juegoConBoxscore = boxscore
         ? combinarJuegoEspnNflConBoxscore(juegoMarcador, boxscore)
         : juegoMarcador;
@@ -9814,7 +9825,12 @@ async function sincronizarResultadosNfl(silencioso = false) {
     }
 
     if (!silencioso) {
-      setNflSyncStatus(`NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas con ESPN.`, actualizadas ? "success" : "");
+      const fuenteCdn = juegosDesdeCdn ? ` CDN: ${juegosDesdeCdn}.` : "";
+      const errores = erroresCarga ? ` Errores de carga: ${erroresCarga}.` : "";
+      setNflSyncStatus(
+        `NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas. Eventos: ${juegosCargados}.${fuenteCdn} Coincidencias: ${coincidencias}. Boxscores: ${boxscoresCargados}.${errores}`,
+        actualizadas ? "success" : ""
+      );
       render();
     }
   } catch (error) {
