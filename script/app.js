@@ -1546,6 +1546,14 @@ function programarSyncInicialVisible() {
       programarSyncSilenciosa("mlb", hayMlbUrgente ? 1200 : 16000, hayMlbUrgente);
     }
   }
+
+  if (_syncNflActivado) {
+    const hayNflEnVivo = apuestasVisibles.some(apuestaNflNecesitaSyncLiveRapida);
+    const hayNfl = apuestasVisibles.some(apuesta => apuestaPareceNfl(apuesta));
+    if (hayNfl) {
+      programarSyncSilenciosa("nfl", hayNflEnVivo ? 1200 : 16000, hayNflEnVivo);
+    }
+  }
 }
 
 /* =========================
@@ -4448,6 +4456,8 @@ async function agregarApuesta() {
       programarSyncSilenciosa("mlb", 1200, true);
     } else if (deporte === "futbol" && _syncFutbolActivado) {
       programarSyncSilenciosa("futbol", 1200, true);
+    } else if (deporte === "nfl" && _syncNflActivado) {
+      programarSyncSilenciosa("nfl", 1200, true);
     }
   }
 }
@@ -7249,18 +7259,22 @@ function esAutoFutbolObjeto(autoFutbol = null) {
 }
 
 function apuestaTieneAutoFutbol(apuesta) {
+  if (apuesta?.deporte === "nfl") return false;
   if (apuesta?.deporte === "futbol") return true;
   return (apuesta?.jugadas || []).some(j =>
-    esAutoFutbolObjeto(j?.autoFutbol) ||
-    (j?.selections || []).some(sel => esAutoFutbolObjeto(sel?.autoFutbol))
+    (esAutoFutbolObjeto(j?.autoFutbol) && j.autoFutbol?.deporte !== "nfl") ||
+    (j?.selections || []).some(sel =>
+      esAutoFutbolObjeto(sel?.autoFutbol) && sel.autoFutbol?.deporte !== "nfl"
+    )
   );
 }
 
 function apuestaPareceFutbol(apuesta) {
+  if (apuesta?.deporte === "nfl") return false;
   if (apuestaTieneAutoFutbol(apuesta)) return true;
   return (apuesta?.jugadas || []).some(j => {
     const ev = typeof j === "object" && j ? (j.ev || j.evento || apuesta.evento || "") : apuesta.evento || "";
-    return extraerEquiposEventoFutbol(ev).length >= 2;
+    return detectarEquiposNfl(ev).length < 2 && extraerEquiposEventoFutbol(ev).length >= 2;
   });
 }
 
@@ -9622,11 +9636,14 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 
 
 const NFL_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
+const NFL_LIVE_SYNC_INTERVAL_MS = 15 * 1000;
+const NFL_BOXSCORE_CACHE_MS = 12 * 1000;
 let _autoSyncNflIntervalId = null;
 let _autoSyncNflEnCurso = false;
 let _ultimoAutoSyncNfl = 0;
 let _syncNflActivado = false;
 let _autoSyncNflListenersRegistrados = false;
+const nflBoxscoreCache = new Map();
 
 function setNflSyncStatus(message = "", type = "") {
   const el = document.getElementById("nflSyncStatus");
@@ -9649,8 +9666,57 @@ async function cargarJuegosEspnNflPorFecha(fecha) {
   }));
 }
 
+async function cargarBoxscoreEspnNfl(eventId) {
+  if (!eventId) return null;
+  const cached = nflBoxscoreCache.get(eventId);
+  if (cached && Date.now() - cached.createdAt < NFL_BOXSCORE_CACHE_MS) return cached.data;
+
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${encodeURIComponent(eventId)}&lang=es&region=mx`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`ESPN summary respondio ${response.status}`);
+    const data = await response.json();
+    nflBoxscoreCache.set(eventId, { createdAt: Date.now(), data });
+    return data;
+  } catch (error) {
+    console.warn("No se pudo cargar boxscore ESPN NFL:", eventId, error);
+    return null;
+  }
+}
+
+function combinarJuegoEspnNflConBoxscore(evento = {}, boxscore = null) {
+  const header = boxscore?.header || {};
+  const competencia = header?.competitions?.[0] || null;
+  if (!competencia) return evento;
+
+  return {
+    ...evento,
+    name: header?.shortName || header?.competitions?.[0]?.shortName || evento.name,
+    shortName: header?.shortName || evento.shortName,
+    date: competencia.date || header.date || evento.date,
+    status: competencia.status || header.status || evento.status,
+    competitions: header.competitions,
+    boxscore: boxscore.boxscore || null,
+    fuenteResultado: "espn_nfl_boxscore"
+  };
+}
+
 function apuestaPareceNfl(apuesta = {}) {
   return apuesta?.deporte === "nfl" || detectarEquiposNfl(`${apuesta?.evento || ""} ${(apuesta?.jugadas || []).map(j => j?.ev || j?.evento || "").join(" ")}`).length >= 2;
+}
+
+function apuestaNflNecesitaSyncLiveRapida(apuesta = {}) {
+  if (!apuestaPareceNfl(apuesta) || apuestaSyncCerrada(apuesta)) return false;
+  return (apuesta.jugadas || []).some(jugada => {
+    const autos = [
+      jugada?.autoFutbol,
+      ...(jugada?.selections || []).map(selection => selection?.autoFutbol)
+    ].filter(Boolean);
+    return autos.some(auto =>
+      !debeMostrarHorarioJuego(auto.fechaJuego, auto.estadoJuego) &&
+      !esEstadoJuegoReembolso(auto.estadoJuego)
+    );
+  });
 }
 
 async function sincronizarResultadosNfl(silencioso = false) {
@@ -9690,17 +9756,29 @@ async function sincronizarResultadosNfl(silencioso = false) {
       revisadas++;
       const fechasApuesta = getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal());
       const juegos = fechasApuesta.flatMap(fecha => juegosPorFecha.get(fecha) || []);
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegos);
+      const equipos = detectarEquiposNfl(`${apuesta.evento || ""} ${(apuesta.jugadas || []).map(jugada => jugada?.ev || jugada?.evento || "").join(" ")}`);
+      const juegoMarcador = buscarJuegoEspnFutbol(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
+      const boxscore = juegoMarcador ? await cargarBoxscoreEspnNfl(juegoMarcador.id) : null;
+      const juegoConBoxscore = boxscore
+        ? combinarJuegoEspnNflConBoxscore(juegoMarcador, boxscore)
+        : juegoMarcador;
+      const juegosParaEvaluar = juegoConBoxscore
+        ? juegos.map(juego => juego.id === juegoConBoxscore.id ? juegoConBoxscore : juego)
+        : juegos;
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar);
       if (!updateData) continue;
 
       updateData.deporte = "nfl";
       updateData.autoSync = crearAutoSyncPayload(apuesta, updateData.resultado || apuesta.resultado, {
-        proveedor: "espn_nfl_scoreboard",
+        proveedor: boxscore ? "espn_nfl_boxscore" : "espn_nfl_scoreboard_fallback",
         ultimaRevision: Date.now()
       });
       if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
-      aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
+      if (!silencioso || (actualizadaLocal && apuestaPerteneceFiltroActual(apuesta))) {
+        renderSnapshotProgramado();
+      }
       actualizadas++;
     }
 
@@ -9718,7 +9796,9 @@ async function sincronizarResultadosNfl(silencioso = false) {
 
 async function ejecutarAutoSyncNfl(force = false) {
   if (!paginaEstaVisible() || !_syncNflActivado || _autoSyncNflEnCurso) return;
-  if (!force && Date.now() - _ultimoAutoSyncNfl < NFL_AUTO_SYNC_INTERVAL_MS) return;
+  const syncLiveRapida = getApuestasSyncScope(true).some(apuestaNflNecesitaSyncLiveRapida);
+  const intervaloMinimo = syncLiveRapida ? NFL_LIVE_SYNC_INTERVAL_MS : NFL_AUTO_SYNC_INTERVAL_MS;
+  if (!force && Date.now() - _ultimoAutoSyncNfl < intervaloMinimo) return;
   _autoSyncNflEnCurso = true;
   _ultimoAutoSyncNfl = Date.now();
   try {
@@ -9727,6 +9807,9 @@ async function ejecutarAutoSyncNfl(force = false) {
     console.warn("Auto-sync NFL - error general:", error.message);
   } finally {
     _autoSyncNflEnCurso = false;
+    if (syncLiveRapida && paginaEstaVisible()) {
+      programarSyncSilenciosa("nfl", NFL_LIVE_SYNC_INTERVAL_MS);
+    }
   }
 }
 
@@ -9916,7 +9999,8 @@ function getAutoFutbolMarcadorHtml(selection = {}, options = {}) {
     debeMostrarHorarioJuego,
     formatFechaJuego,
     getEstadoJuegoLegacyHtml,
-    isSyncFutbolActivado: () => _syncFutbolActivado
+    isSyncDeporteActivado: (autoFutbol = {}) =>
+      autoFutbol?.deporte === "nfl" ? _syncNflActivado : _syncFutbolActivado
   });
 }
 
@@ -10211,6 +10295,8 @@ async function guardarEdicion(id) {
         programarSyncSilenciosa("mlb", 1200, true);
       } else if (nuevoDeporte === "futbol" && _syncFutbolActivado) {
         programarSyncSilenciosa("futbol", 1200, true);
+      } else if (nuevoDeporte === "nfl" && _syncNflActivado) {
+        programarSyncSilenciosa("nfl", 1200, true);
       }
     }
 
