@@ -1509,9 +1509,7 @@ function apuestaMlbNecesitaSyncLiveRapida(apuesta = {}) {
   if (fecha !== obtenerFechaActualLocal()) return false;
   if (!apuestaPareceMlb(apuesta)) return false;
   if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
-  if (apuestaSyncCerrada(apuesta)) return false;
-  if (!apuestaResultadoPendiente(apuesta)) return false;
-  if (apuestaYaFinalizadaYResuelta(apuesta, "autoMlb")) return false;
+  if (!apuestaMlbTienePartidoActivo(apuesta)) return false;
   return apuestaTieneMarcadorMlb(apuesta) || apuestaMlbYaDebeSincronizar(apuesta);
 }
 
@@ -4934,6 +4932,37 @@ function apuestaYaFinalizadaYResuelta(apuesta = {}, key = "") {
   return (apuesta.resultado || "pendiente") !== "pendiente" && apuestaTieneAutoFinalizado(apuesta, key);
 }
 
+// Una apuesta combinada/sistema puede quedar globalmente perdida antes de que
+// terminen sus otros partidos. Esos partidos deben continuar actualizando su
+// marcador, aunque ya no puedan cambiar el resultado global de la apuesta.
+function apuestaMlbTienePartidoActivo(apuesta = {}) {
+  return (apuesta.jugadas || []).some(jugada => {
+    const autos = [
+      jugada?.autoMlb,
+      ...(jugada?.selections || []).map(seleccion => seleccion?.autoMlb)
+    ].filter(Boolean);
+
+    return autos.some(auto =>
+      !esEstadoJuegoFinalizado(auto.estadoJuego) &&
+      !esEstadoJuegoReembolso(auto.estadoJuego)
+    );
+  });
+}
+
+function apuestaFutbolTienePartidoActivo(apuesta = {}) {
+  return (apuesta.jugadas || []).some(jugada => {
+    const autos = [
+      jugada?.autoFutbol,
+      ...(jugada?.selections || []).map(seleccion => seleccion?.autoFutbol)
+    ].filter(Boolean);
+
+    return autos.some(auto =>
+      !esEstadoJuegoFinalizado(auto.estadoJuego) &&
+      !esEstadoJuegoReembolso(auto.estadoJuego)
+    );
+  });
+}
+
 function apuestaFutbolPausadaPorMedioTiempo(apuesta = {}) {
   if (FOOTBALL_HALFTIME_PAUSE_MS <= 0) return false;
   return (apuesta.jugadas || []).some(jugada =>
@@ -6718,7 +6747,8 @@ async function sincronizarResultadosMlb(silencioso = false) {
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (apuestaYaFinalizadaYResuelta(a, "autoMlb")) return false;
+    const tienePartidoActivo = apuestaMlbTienePartidoActivo(a);
+    if (apuestaYaFinalizadaYResuelta(a, "autoMlb") && !tienePartidoActivo) return false;
 
     const esResultadoPendiente = apuestaResultadoPendiente(a);
     const fuePospuesto = (a.jugadas || []).some(j =>
@@ -6730,8 +6760,8 @@ async function sincronizarResultadosMlb(silencioso = false) {
       )
     ) || (a.resultado === "nula" && (apuestaTieneMarcadorMlb(a) || apuestaPareceMlb(a)));
 
-    if (apuestaSyncCerrada(a) && !fuePospuesto) return false;
-    if (!esResultadoPendiente && !fuePospuesto) return false;
+    if (apuestaSyncCerrada(a) && !fuePospuesto && !tienePartidoActivo) return false;
+    if (!esResultadoPendiente && !fuePospuesto && !tienePartidoActivo) return false;
 
     const fechaApuesta = a.fecha || a.dia;
     const esApuestaHoy = fechaApuesta === hoy;
@@ -7115,7 +7145,8 @@ const MLB_LIVE_SYNC_INTERVAL_MS = 90 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
 const FOOTBALL_SPECIAL_STATUS_RETRY_MS = 30 * 60 * 1000;
 const FOOTBALL_REGULATION_CLOSE_GRACE_MS = 115 * 60 * 1000;
-const FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS = 60 * 1000;
+const FOOTBALL_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
+const FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS = 90 * 1000;
 const FOOTBALL_MARKET_TIME_SCOPE = "90_minutos_mas_adicional";
 const apiSportsFootballCache = new Map();
 
@@ -9428,9 +9459,10 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (silencioso && apuestaSyncCerrada(a)) return false;
-    if (silencioso && !apuestaResultadoPendiente(a)) return false;
-    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol")) return false;
+    const tienePartidoActivo = apuestaFutbolTienePartidoActivo(a);
+    if (silencioso && apuestaSyncCerrada(a) && !tienePartidoActivo) return false;
+    if (silencioso && !apuestaResultadoPendiente(a) && !tienePartidoActivo) return false;
+    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !tienePartidoActivo) return false;
     if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
     if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
     const fechaApuesta = a.fecha || a.dia;
@@ -9785,26 +9817,17 @@ function buscarJuegoEspnNfl(juegos = [], equipos = [], fechaBet = "", targetHora
 }
 
 function apuestaNflNecesitaSyncLiveRapida(apuesta = {}) {
-  if (!apuestaPareceNfl(apuesta) || apuestaSyncCerrada(apuesta)) return false;
-  return (apuesta.jugadas || []).some(jugada => {
-    const autos = [
-      jugada?.autoFutbol,
-      ...(jugada?.selections || []).map(selection => selection?.autoFutbol)
-    ].filter(Boolean);
-    return autos.some(auto =>
-      !debeMostrarHorarioJuego(auto.fechaJuego, auto.estadoJuego) &&
-      !esEstadoJuegoReembolso(auto.estadoJuego)
-    );
-  });
+  return apuestaPareceNfl(apuesta) && apuestaFutbolTienePartidoActivo(apuesta);
 }
 
 async function sincronizarResultadosNfl(silencioso = false) {
   const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
-  const candidatas = apuestasSync.filter(apuesta =>
-    apuestaPareceNfl(apuesta) &&
-    Array.isArray(apuesta.jugadas) && apuesta.jugadas.length > 0 &&
-    (!silencioso || (apuestaResultadoPendiente(apuesta) && !apuestaSyncCerrada(apuesta)))
-  );
+  const candidatas = apuestasSync.filter(apuesta => {
+    if (!apuestaPareceNfl(apuesta)) return false;
+    if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
+    if (!silencioso) return true;
+    return apuestaResultadoPendiente(apuesta) || !apuestaSyncCerrada(apuesta) || apuestaFutbolTienePartidoActivo(apuesta);
+  });
 
   if (candidatas.length === 0) {
     if (!silencioso) setNflSyncStatus("No hay apuestas NFL pendientes para sincronizar.");
@@ -9962,7 +9985,7 @@ async function ejecutarAutoSyncFutbol(force = false) {
     return;
   }
   if (_autoSyncFutbolEnCurso) return;
-  const intervaloMinimo = syncStatsRapida ? FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS : AUTO_SYNC_INTERVAL_MS;
+  const intervaloMinimo = syncStatsRapida ? FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS : FOOTBALL_AUTO_SYNC_INTERVAL_MS;
   if (!force && Date.now() - _ultimoAutoSyncFutbol < intervaloMinimo) return;
 
   _autoSyncFutbolEnCurso = true;
@@ -9981,11 +10004,11 @@ async function ejecutarAutoSyncFutbol(force = false) {
 
 let _autoSyncFutbolListenersRegistrados = false;
 function startAutoSyncFutbol() {
-  if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
   _syncFutbolActivado = true;
+  if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
   _autoSyncFutbolIntervalId = setInterval(() => {
     if (_syncFutbolActivado) programarSyncSilenciosa("futbol", 0);
-  }, AUTO_SYNC_INTERVAL_MS);
+  }, FOOTBALL_AUTO_SYNC_INTERVAL_MS);
 
   if (!_autoSyncFutbolListenersRegistrados) {
     _autoSyncFutbolListenersRegistrados = true;
@@ -10044,8 +10067,8 @@ async function ejecutarAutoSyncMlb(force = false) {
 }
 
 function startAutoSyncMlb() {
-  if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
   _syncMlbActivado = true;
+  if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
   _autoSyncMlbIntervalId = setInterval(() => {
     if (_syncMlbActivado) programarSyncSilenciosa("mlb", 0);
   }, MLB_AUTO_SYNC_INTERVAL_MS);
