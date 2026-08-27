@@ -9847,24 +9847,36 @@ async function sincronizarResultadosNfl(silencioso = false) {
       revisadas++;
       const fechasApuesta = getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal());
       const juegos = fechasApuesta.flatMap(fecha => juegosPorFecha.get(fecha) || []);
-      const equipos = getEquiposNflApuesta(apuesta);
-      if (equipos.length) equiposDetectados.push(equipos.join(" vs "));
-      const juegoMarcador = buscarJuegoEspnNfl(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
-      const boxscore = juegoMarcador ? await cargarBoxscoreEspnNfl(juegoMarcador.id) : null;
-      if (juegoMarcador) coincidencias++;
-      if (boxscore) boxscoresCargados++;
-      const juegoConBoxscore = boxscore
-        ? combinarJuegoEspnNflConBoxscore(juegoMarcador, boxscore)
-        : juegoMarcador;
-      const juegosParaEvaluar = juegoConBoxscore
-        ? juegos.map(juego => juego.id === juegoConBoxscore.id ? juegoConBoxscore : juego)
-        : juegos;
+      const juegosConBoxscore = new Map();
+      for (const jugada of apuesta.jugadas || []) {
+        const eventoJugada = typeof jugada === "object" && jugada
+          ? (jugada.ev || jugada.evento || apuesta.evento || "")
+          : apuesta.evento || "";
+        const equipos = getEquiposNflApuesta({
+          ...apuesta,
+          evento: eventoJugada,
+          jugadas: [typeof jugada === "object" && jugada ? { ...jugada, ev: eventoJugada } : jugada]
+        });
+        if (equipos.length) equiposDetectados.push(equipos.join(" vs "));
+        const juegoMarcador = buscarJuegoEspnNfl(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
+        if (!juegoMarcador || juegosConBoxscore.has(juegoMarcador.id)) continue;
+        coincidencias++;
+        const boxscore = await cargarBoxscoreEspnNfl(juegoMarcador.id);
+        if (boxscore) boxscoresCargados++;
+        juegosConBoxscore.set(
+          juegoMarcador.id,
+          boxscore ? combinarJuegoEspnNflConBoxscore(juegoMarcador, boxscore) : juegoMarcador
+        );
+      }
+      const juegosParaEvaluar = juegos.map(juego => juegosConBoxscore.get(juego.id) || juego);
+      const boxscoreApuestaCargado = [...juegosConBoxscore.values()]
+        .some(juego => juego.fuenteResultado === "espn_nfl_boxscore");
       const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar);
       if (!updateData) continue;
 
       updateData.deporte = "nfl";
       updateData.autoSync = crearAutoSyncPayload(apuesta, updateData.resultado || apuesta.resultado, {
-        proveedor: boxscore ? "espn_nfl_boxscore" : "espn_nfl_scoreboard_fallback",
+        proveedor: boxscoreApuestaCargado ? "espn_nfl_boxscore" : "espn_nfl_scoreboard_fallback",
         ultimaRevision: Date.now()
       });
       if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
