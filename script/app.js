@@ -6807,20 +6807,22 @@ async function sincronizarResultadosMlb(silencioso = false) {
         : aplicarHorarioMlbApuesta(apuesta, juegosApuesta, juegosEspnApuesta);
       if (!updateData) continue;
 
-      if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
+      // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
+      marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      const afectaVistaActual = actualizadaLocal && apuestaPerteneceFiltroActual(apuesta);
-      if (!silencioso || afectaVistaActual) {
-        renderSnapshotProgramado();
+      const apuestaActualizada = actualizadaLocal
+        ? apuestas.find(item => item.id === apuesta.id)
+        : null;
+      const afectaVistaActual = Boolean(apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada));
+      // La sincronización no debe reconstruir el historial: además de mover la
+      // página, un snapshot intermedio puede mostrar metadatos transitorios.
+      if (afectaVistaActual) {
+        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
       }
       if (silencioso && afectaVistaActual) actualizacionesVisibles++;
       actualizadas++;
       if (!debeSincronizarResultado) horariosActualizados++;
-    }
-
-    if (silencioso && actualizacionesVisibles > 0) {
-      renderSnapshotProgramado();
     }
 
     if (!silencioso) {
@@ -6837,10 +6839,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
   } finally {
     _syncMlbEnCurso = false;
     if (!silencioso && btn) btn.disabled = false;
-    if (!silencioso) {
-      render();
-      if (_syncMlbActivado) programarSyncSilenciosa("mlb", 1500, true);
-    }
+    if (!silencioso && _syncMlbActivado) programarSyncSilenciosa("mlb", 1500, true);
   }
 }
 
@@ -9518,12 +9517,17 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     let actualizacionesVisibles = 0;
     const aplicarUpdateFutbol = async (apuesta, updateData) => {
       if (!updateData) return false;
-      if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
+      // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
+      marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      const afectaVistaActual = actualizadaLocal && apuestaPerteneceFiltroActual(apuesta);
-      if (!silencioso || afectaVistaActual) {
-        renderSnapshotProgramado();
+      const apuestaActualizada = actualizadaLocal
+        ? apuestas.find(item => item.id === apuesta.id)
+        : null;
+      const afectaVistaActual = Boolean(apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada));
+      // Aplicar solamente los resultados que cambiaron, sin reemplazar el DOM.
+      if (afectaVistaActual) {
+        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
       }
       if (silencioso && afectaVistaActual) actualizacionesVisibles++;
       if (idsHorario.has(apuesta.id)) idsHorariosActualizados.add(apuesta.id);
@@ -9608,9 +9612,6 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const actualizadas = actualizadasApi + actualizadasEspn;
     const revisadas = revisadasApi + revisadasEspn;
     const horariosActualizados = idsHorariosActualizados.size;
-    if (silencioso && actualizacionesVisibles > 0) {
-      renderSnapshotProgramado();
-    }
 
     if (!silencioso) {
       const detalleOmitidas = fechasOmitidasPorPlan > 0
@@ -9632,10 +9633,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
   } finally {
     if (!silencioso && btn) btn.disabled = false;
-    if (!silencioso) {
-      render();
-      if (_syncFutbolActivado) programarSyncSilenciosa("futbol", 1500, true);
-    }
+    if (!silencioso && _syncFutbolActivado) programarSyncSilenciosa("futbol", 1500, true);
   }
 }
 
@@ -9879,11 +9877,15 @@ async function sincronizarResultadosNfl(silencioso = false) {
         proveedor: boxscoreApuestaCargado ? "espn_nfl_boxscore" : "espn_nfl_scoreboard_fallback",
         ultimaRevision: Date.now()
       });
-      if (silencioso) marcarRenderSilenciosoApuesta(apuesta.id);
+      // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
+      marcarRenderSilenciosoApuesta(apuesta.id);
       await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
-      if (!silencioso || (actualizadaLocal && apuestaPerteneceFiltroActual(apuesta))) {
-        renderSnapshotProgramado();
+      const apuestaActualizada = actualizadaLocal
+        ? apuestas.find(item => item.id === apuesta.id)
+        : null;
+      if (apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada)) {
+        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
       }
       actualizadas++;
     }
@@ -9896,7 +9898,6 @@ async function sincronizarResultadosNfl(silencioso = false) {
         `NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas. Eventos: ${juegosCargados}.${fuenteCdn} Coincidencias: ${coincidencias}. Boxscores: ${boxscoresCargados}.${equiposInfo}${errores}`,
         actualizadas ? "success" : ""
       );
-      render();
     }
   } catch (error) {
     console.error("Error sincronizando NFL:", error);
@@ -10601,6 +10602,9 @@ function esCrearApuestaTipo(tipo) {
 }
 
 function getReglaTiempoFutbolHtml(apuesta = {}) {
+  // Una apuesta NFL puede conservar metadatos de fútbol mientras llega el
+  // snapshot definitivo. Nunca debe mostrar esta regla en ese intervalo.
+  if (apuestaPareceNfl(apuesta)) return "";
   const tieneFutbol = apuestaTieneAutoFutbol(apuesta) ||
     apuesta?.deporte === "futbol" ||
     (!apuestaPareceMlb(apuesta) && apuestaPareceFutbol(apuesta));
