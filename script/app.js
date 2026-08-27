@@ -2850,7 +2850,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     const tipoTotal = detectarLadoTotal(textoCompleto);
     if (linea !== null && tipoTotal) {
       return {
-        deporte: "futbol",
+        deporte: deporteDetectado,
         mercado: "total_corners",
         equipos,
         ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
@@ -2865,7 +2865,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     const tipoTotal = detectarLadoTotal(textoCompleto);
     if (linea !== null && tipoTotal) {
       return {
-        deporte: "futbol",
+        deporte: deporteDetectado,
         mercado: "total_tarjetas",
         equipos,
         ...(seleccionEquipoTotal ? { seleccionEquipo: seleccionEquipoTotal } : {}),
@@ -2880,7 +2880,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
     const seleccionEquipo = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
     if (linea !== null && seleccionEquipo) {
       return {
-        deporte: "futbol",
+        deporte: deporteDetectado,
         mercado: "handicap",
         equipos,
         seleccionEquipo,
@@ -2924,7 +2924,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
 
   if (tienePalabraMercado(normalizado, ["ambos", "marcan", "anotan"])) {
     return {
-      deporte: "futbol",
+      deporte: deporteDetectado,
       mercado: "ambos_marcan",
       equipos,
       seleccion: detectarSiNo(textoCompleto) || "si"
@@ -2934,7 +2934,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
   const dobleOportunidad = detectarDobleOportunidadFutbol(textoCompleto, evento);
   if (dobleOportunidad) {
     return {
-      deporte: "futbol",
+      deporte: deporteDetectado,
       mercado: "doble_oportunidad",
       equipos,
       ...dobleOportunidad
@@ -2943,7 +2943,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
 
   if (/\b(empate|draw|x)\b/.test(normalizado)) {
     return {
-      deporte: "futbol",
+      deporte: deporteDetectado,
       mercado: "ganador_partido",
       equipos,
       seleccion: "empate"
@@ -2957,7 +2957,7 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
   const seleccionEquipo = equipos.find(equipo => textoContieneEquipoFutbol(textoCompleto, equipo));
   if (seleccionEquipo && !/\b(handicap|handi|hcap|corner|corners|tarjeta|tarjetas|over|under|mas|menos|total|goles?)\b/.test(normalizado)) {
     return {
-      deporte: "futbol",
+      deporte: deporteDetectado,
       mercado: "ganador_partido",
       equipos,
       seleccionEquipo
@@ -2981,7 +2981,10 @@ function combinarAutoFutbolConDetectado(autoOriginal = null, autoDetectado = nul
     "tipoTotal",
     "linea"
   ];
-  const combinado = { ...autoOriginal };
+  const combinado = {
+    ...autoOriginal,
+    deporte: autoDetectado.deporte || autoOriginal.deporte
+  };
   camposDetectados.forEach(campo => {
     if (autoDetectado[campo] !== undefined) {
       combinado[campo] = autoDetectado[campo];
@@ -9319,8 +9322,8 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     } else if (equipos.length >= 2) {
       const autoConFecha = selections.find(sel => sel?.autoFutbol?.fechaJuego)?.autoFutbol;
       jugadaActualizada.autoFutbol = autoConFecha
-        ? { deporte: "futbol", equipos, fechaJuego: autoConFecha.fechaJuego, estadoJuego: autoConFecha.estadoJuego || "", marcadorTiempo: autoConFecha.marcadorTiempo }
-        : { deporte: "futbol", equipos };
+        ? { deporte: autoConFecha.deporte || "futbol", equipos, fechaJuego: autoConFecha.fechaJuego, estadoJuego: autoConFecha.estadoJuego || "", marcadorTiempo: autoConFecha.marcadorTiempo }
+        : { deporte: detectarEquiposNfl(ev).length >= 2 ? "nfl" : "futbol", equipos };
     }
 
     if (apuesta.tipoApuesta === "simple_option_bet") {
