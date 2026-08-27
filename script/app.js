@@ -9742,11 +9742,16 @@ function apuestaPareceNfl(apuesta = {}) {
 function getEquiposNflApuesta(apuesta = {}) {
   const textos = [apuesta.evento || ""];
   (apuesta.jugadas || []).forEach(jugada => {
-    if (typeof jugada !== "object" || !jugada) return;
-    textos.push(jugada.ev || jugada.evento || "");
-    (jugada.selections || []).forEach(selection => {
+    if (typeof jugada !== "object" || !jugada) {
+      textos.push(jugada || "");
+      return;
+    }
+    textos.push(getJugadaEvento(apuesta, jugada), jugada.ev || jugada.evento || "", jugada.jug || jugada.jugada || "");
+    getSelectionsFromJugada(jugada).forEach(selection => {
       textos.push(selection?.titulo || "", selection?.jugada || selection?.jugadaOriginal || "");
+      (selection?.autoFutbol?.equipos || []).forEach(equipo => textos.push(equipo));
     });
+    (jugada.autoFutbol?.equipos || []).forEach(equipo => textos.push(equipo));
   });
   return detectarEquiposNfl(textos.join(" "));
 }
@@ -9772,7 +9777,11 @@ function buscarJuegoEspnNfl(juegos = [], equipos = [], fechaBet = "", targetHora
     const nombres = getCompetidoresFutbol(juego)
       .flatMap(competidor => [competidor.name, competidor.shortName, competidor.abbreviation])
       .filter(Boolean);
-    return equipos.slice(0, 2).every(equipo => nombres.some(nombre => equiposNflCoinciden(equipo, nombre)));
+    const equiposDelNombreEvento = detectarEquiposNfl(`${juego.name || ""} ${juego.shortName || ""}`);
+    return equipos.slice(0, 2).every(equipo =>
+      nombres.some(nombre => equiposNflCoinciden(equipo, nombre)) ||
+      equiposDelNombreEvento.some(nombre => equiposNflCoinciden(equipo, nombre))
+    );
   });
   return seleccionarMejorJuegoPorHora(candidatos, targetHora);
 }
@@ -9833,11 +9842,13 @@ async function sincronizarResultadosNfl(silencioso = false) {
     let revisadas = 0;
     let coincidencias = 0;
     let boxscoresCargados = 0;
+    const equiposDetectados = [];
     for (const apuesta of candidatas) {
       revisadas++;
       const fechasApuesta = getFechasCercanas(apuesta.fecha || apuesta.dia || obtenerFechaActualLocal());
       const juegos = fechasApuesta.flatMap(fecha => juegosPorFecha.get(fecha) || []);
       const equipos = getEquiposNflApuesta(apuesta);
+      if (equipos.length) equiposDetectados.push(equipos.join(" vs "));
       const juegoMarcador = buscarJuegoEspnNfl(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
       const boxscore = juegoMarcador ? await cargarBoxscoreEspnNfl(juegoMarcador.id) : null;
       if (juegoMarcador) coincidencias++;
@@ -9868,8 +9879,9 @@ async function sincronizarResultadosNfl(silencioso = false) {
     if (!silencioso) {
       const fuenteCdn = juegosDesdeCdn ? ` CDN: ${juegosDesdeCdn}.` : "";
       const errores = erroresCarga ? ` Errores de carga: ${erroresCarga}.` : "";
+      const equiposInfo = equiposDetectados.length ? ` Equipos: ${[...new Set(equiposDetectados)].join(" | ")}.` : " Equipos NFL no detectados.";
       setNflSyncStatus(
-        `NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas. Eventos: ${juegosCargados}.${fuenteCdn} Coincidencias: ${coincidencias}. Boxscores: ${boxscoresCargados}.${errores}`,
+        `NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas. Eventos: ${juegosCargados}.${fuenteCdn} Coincidencias: ${coincidencias}. Boxscores: ${boxscoresCargados}.${equiposInfo}${errores}`,
         actualizadas ? "success" : ""
       );
       render();
