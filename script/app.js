@@ -9640,7 +9640,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 
 
 const NFL_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
-const NFL_LIVE_SYNC_INTERVAL_MS = 15 * 1000;
+const NFL_LIVE_SYNC_INTERVAL_MS = 90 * 1000;
 const NFL_BOXSCORE_CACHE_MS = 12 * 1000;
 let _autoSyncNflIntervalId = null;
 let _autoSyncNflEnCurso = false;
