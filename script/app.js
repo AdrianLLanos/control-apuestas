@@ -9659,14 +9659,31 @@ async function cargarJuegosEspnNflPorFecha(fecha) {
   if (!fecha) return [];
   const date = String(fecha).replace(/-/g, "");
   const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${encodeURIComponent(date)}&limit=100&lang=es&region=mx&tz=${encodeURIComponent(getSportsTimezone())}`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`ESPN respondio ${response.status}`);
-  const data = await response.json();
-  return (data.events || []).map(event => ({
-    ...event,
-    leagueLabel: data?.leagues?.[0]?.name || "NFL",
-    leagueSlug: "nfl"
-  }));
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`ESPN respondio ${response.status}`);
+    const data = await response.json();
+    const events = data.events || [];
+    if (events.length > 0) {
+      return events.map(event => ({
+        ...event,
+        leagueLabel: data?.leagues?.[0]?.name || "NFL",
+        leagueSlug: "nfl"
+      }));
+    }
+  } catch (error) {
+    console.warn("No se pudo cargar scoreboard ESPN NFL; se usará CDN:", error);
+  }
+
+  // ESPN puede bloquear site.api según la red o la región. El CDN alimenta
+  // el marcador oficial de ESPN y expone el mismo evento con competidores.
+  const cdnResponse = await fetch("https://cdn.espn.com/core/nfl/scoreboard?xhr=1");
+  if (!cdnResponse.ok) throw new Error(`ESPN CDN respondio ${cdnResponse.status}`);
+  const cdnData = await cdnResponse.json();
+  const events = cdnData?.content?.sbData?.events || [];
+  return events
+    .filter(event => !fecha || obtenerFechaLocalEvent(event) === fecha)
+    .map(event => ({ ...event, leagueLabel: "NFL", leagueSlug: "nfl", fuenteResultado: "espn_nfl_cdn" }));
 }
 
 async function cargarBoxscoreEspnNfl(eventId) {
@@ -9682,8 +9699,19 @@ async function cargarBoxscoreEspnNfl(eventId) {
     nflBoxscoreCache.set(eventId, { createdAt: Date.now(), data });
     return data;
   } catch (error) {
-    console.warn("No se pudo cargar boxscore ESPN NFL:", eventId, error);
-    return null;
+    console.warn("No se pudo cargar summary ESPN NFL; se usará CDN:", eventId, error);
+    try {
+      const cdnUrl = `https://cdn.espn.com/core/nfl/game?xhr=1&gameId=${encodeURIComponent(eventId)}`;
+      const cdnResponse = await fetch(cdnUrl);
+      if (!cdnResponse.ok) throw new Error(`ESPN CDN game respondio ${cdnResponse.status}`);
+      const cdnData = await cdnResponse.json();
+      const data = cdnData?.gamepackageJSON || null;
+      if (data) nflBoxscoreCache.set(eventId, { createdAt: Date.now(), data });
+      return data;
+    } catch (cdnError) {
+      console.warn("No se pudo cargar boxscore CDN ESPN NFL:", eventId, cdnError);
+      return null;
+    }
   }
 }
 
