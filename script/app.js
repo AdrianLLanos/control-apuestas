@@ -4949,6 +4949,21 @@ function apuestaMlbTienePartidoActivo(apuesta = {}) {
   });
 }
 
+// Los marcadores en vivo no pueden depender de la caché del navegador o del
+// CDN: varios proveedores conservan la misma URL durante todo el partido.
+function agregarTokenAntiCache(url = "") {
+  const separador = String(url).includes("?") ? "&" : "?";
+  return `${url}${separador}_live=${Date.now()}`;
+}
+
+function fetchMarcadorEnVivo(url, options = {}) {
+  return fetch(agregarTokenAntiCache(url), {
+    ...options,
+    cache: "no-store",
+    headers: options.headers || {}
+  });
+}
+
 function apuestaFutbolTienePartidoActivo(apuesta = {}) {
   return (apuesta.jugadas || []).some(jugada => {
     const autos = [
@@ -5069,7 +5084,7 @@ function seleccionarMejorJuegoPorHora(pool = [], targetHora = "") {
 async function cargarJuegosMlbPorFecha(fecha) {
   const timezone = getSportsTimezone();
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore,boxscore&timeZone=${encodeURIComponent(timezone)}`;
-  const response = await fetch(url);
+  const response = await fetchMarcadorEnVivo(url);
   if (!response.ok) {
     throw new Error(`MLB API respondio ${response.status}`);
   }
@@ -5241,7 +5256,7 @@ async function cargarJuegosEspnMlbPorFecha(fecha) {
   const date = String(fecha).replace(/-/g, "");
   const timezone = getSportsTimezone();
   const url = `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx&tz=${encodeURIComponent(timezone)}`;
-  const response = await fetch(url);
+  const response = await fetchMarcadorEnVivo(url);
   if (!response.ok) return [];
 
   const data = await response.json();
@@ -7606,7 +7621,11 @@ async function cargarJuegosFutbolPorFecha(fecha, options = {}) {
   assertApiSportsFootballQuotaDisponible();
 
   const url = `${API_SPORTS_FOOTBALL_BASE_URL}/fixtures?date=${encodeURIComponent(fecha)}&timezone=${encodeURIComponent(timezone)}`;
-  const response = await fetch(url, {
+  const response = cacheMs === 0 ? await fetchMarcadorEnVivo(url, {
+    headers: {
+      "x-apisports-key": API_SPORTS_FOOTBALL_KEY
+    }
+  }) : await fetch(url, {
     headers: {
       "x-apisports-key": API_SPORTS_FOOTBALL_KEY
     }
@@ -7652,7 +7671,7 @@ async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
     const batch = FOOTBALL_LEAGUES.slice(i, i + batchSize);
     const results = await Promise.allSettled(batch.map(async league => {
       const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${encodeURIComponent(date)}&limit=300&lang=es&region=mx&tz=${encodeURIComponent(timezone)}`;
-      const response = await fetch(url);
+      const response = cacheMs === 0 ? await fetchMarcadorEnVivo(url) : await fetch(url);
       if (!response.ok) return [];
 
       const data = await response.json();
@@ -9693,7 +9712,7 @@ async function cargarJuegosEspnNflPorFecha(fecha) {
   const date = String(fecha).replace(/-/g, "");
   const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${encodeURIComponent(date)}&limit=100&lang=es&region=mx&tz=${encodeURIComponent(getSportsTimezone())}`;
   try {
-    const response = await fetch(url);
+    const response = await fetchMarcadorEnVivo(url);
     if (!response.ok) throw new Error(`ESPN respondio ${response.status}`);
     const data = await response.json();
     const events = data.events || [];
@@ -9710,7 +9729,7 @@ async function cargarJuegosEspnNflPorFecha(fecha) {
 
   // ESPN puede bloquear site.api según la red o la región. El CDN alimenta
   // el marcador oficial de ESPN y expone el mismo evento con competidores.
-  const cdnResponse = await fetch("https://cdn.espn.com/core/nfl/scoreboard?xhr=1");
+  const cdnResponse = await fetchMarcadorEnVivo("https://cdn.espn.com/core/nfl/scoreboard?xhr=1");
   if (!cdnResponse.ok) throw new Error(`ESPN CDN respondio ${cdnResponse.status}`);
   const cdnData = await cdnResponse.json();
   const events = cdnData?.content?.sbData?.events || [];
@@ -9726,7 +9745,7 @@ async function cargarBoxscoreEspnNfl(eventId) {
 
   const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${encodeURIComponent(eventId)}&lang=es&region=mx`;
   try {
-    const response = await fetch(url);
+    const response = await fetchMarcadorEnVivo(url);
     if (!response.ok) throw new Error(`ESPN summary respondio ${response.status}`);
     const data = await response.json();
     nflBoxscoreCache.set(eventId, { createdAt: Date.now(), data });
@@ -9735,7 +9754,7 @@ async function cargarBoxscoreEspnNfl(eventId) {
     console.warn("No se pudo cargar summary ESPN NFL; se usará CDN:", eventId, error);
     try {
       const cdnUrl = `https://cdn.espn.com/core/nfl/game?xhr=1&gameId=${encodeURIComponent(eventId)}`;
-      const cdnResponse = await fetch(cdnUrl);
+      const cdnResponse = await fetchMarcadorEnVivo(cdnUrl);
       if (!cdnResponse.ok) throw new Error(`ESPN CDN game respondio ${cdnResponse.status}`);
       const cdnData = await cdnResponse.json();
       const data = cdnData?.gamepackageJSON || null;
@@ -9753,13 +9772,20 @@ function combinarJuegoEspnNflConBoxscore(evento = {}, boxscore = null) {
   const competencia = header?.competitions?.[0] || null;
   if (!competencia) return evento;
 
+  // El scoreboard es la fuente de marcador en vivo. El summary/boxscore puede
+  // propagarse con retraso; reemplazar sus competidores por los del summary
+  // hacía que la interfaz conservara un marcador antiguo (p. ej. 3 en vez de
+  // 9) aun cuando el scoreboard ya había actualizado el partido.
+  const marcadorEvento = getMarcadorFutbol(evento);
+  const conservarScoreboard = Boolean(marcadorEvento);
+
   return {
     ...evento,
     name: header?.shortName || header?.competitions?.[0]?.shortName || evento.name,
     shortName: header?.shortName || evento.shortName,
-    date: competencia.date || header.date || evento.date,
-    status: competencia.status || header.status || evento.status,
-    competitions: header.competitions,
+    date: conservarScoreboard ? evento.date : (competencia.date || header.date || evento.date),
+    status: conservarScoreboard ? evento.status : (competencia.status || header.status || evento.status),
+    competitions: conservarScoreboard ? evento.competitions : header.competitions,
     boxscore: boxscore.boxscore || null,
     fuenteResultado: "espn_nfl_boxscore"
   };
