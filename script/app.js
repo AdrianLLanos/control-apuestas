@@ -8905,7 +8905,11 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   if (juegoFutbolNoIniciado(game)) return null;
   const marcador = getMarcadorFutbol(game);
   if (!marcador) return null;
-  const finalizado = juegoFutbolReglamentarioProbablementeTerminado(game);
+  const esNfl = autoFutbol.deporte === "nfl" || game?.leagueSlug === "nfl" || game?.leagueLabel === "NFL";
+  // Un partido NFL solo se liquida cuando ESPN/API lo declara final. La
+  // estimación por tiempo transcurrido es válida para fútbol, pero en NFL las
+  // pausas pueden extender ampliamente la duración real del encuentro.
+  const finalizado = esNfl ? juegoFutbolFinalizado(game) : juegoFutbolReglamentarioProbablementeTerminado(game);
 
   if (autoFutbol.mercado === "ganador_partido") {
     if (!finalizado) return null;
@@ -9087,7 +9091,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
       }
 
       if (!autoOriginal || JSON.stringify(autoOriginal) !== JSON.stringify(autoFutbol)) huboCambioMetadata = true;
-      const selConDetalle = aplicarDetalleAutoFutbolSeleccion(sel, autoFutbol, ev);
+      let selConDetalle = aplicarDetalleAutoFutbolSeleccion(sel, autoFutbol, ev);
       if (selConDetalle.titulo !== sel.titulo || selConDetalle.jugada !== sel.jugada) {
         huboCambioMetadata = true;
       }
@@ -9122,6 +9126,14 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           autoFutbol
         });
         continue;
+      }
+
+      const esNflEnVivo = (autoFutbol.deporte === "nfl" || game?.leagueSlug === "nfl" || game?.leagueLabel === "NFL") &&
+        juegoFutbolEnCurso(game);
+      const mercadoSoloFinal = ["ganador_partido", "doble_oportunidad", "handicap"].includes(autoFutbol.mercado);
+      if (esNflEnVivo && mercadoSoloFinal && ["ganada", "perdida", "nula"].includes(selConDetalle.estado)) {
+        selConDetalle = { ...selConDetalle, estado: "pendiente" };
+        huboCambio = true;
       }
 
       const estadoEspecial = combinarEstadoEspecial(
