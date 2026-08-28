@@ -90,6 +90,16 @@ export function createSyncManager({
     pendingTimers.clear();
   }
 
+  // Each application session starts inactive. A sport begins polling only
+  // after the user explicitly activates it from its sync button.
+  function reset() {
+    cancelPending();
+    intervals.forEach(interval => clearInterval(interval));
+    intervals.clear();
+    activeSports.clear();
+    persist();
+  }
+
   function registerLifecycle() {
     if (listenersRegistered) return;
     listenersRegistered = true;
@@ -106,5 +116,5 @@ export function createSyncManager({
   }
 
   loadActiveSports();
-  return { register, activate, isActive, schedule, restore, cancelPending, registerLifecycle };
+  return { register, activate, isActive, schedule, restore, reset, cancelPending, registerLifecycle };
 }

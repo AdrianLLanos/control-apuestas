@@ -6845,10 +6845,9 @@ async function sincronizarResultadosMlb(silencioso = false) {
         ? apuestas.find(item => item.id === apuesta.id)
         : null;
       const afectaVistaActual = Boolean(apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada));
-      // La sincronización no debe reconstruir el historial: además de mover la
-      // página, un snapshot intermedio puede mostrar metadatos transitorios.
+      // Refresco agrupado de la tarjeta para mostrar inmediatamente el marcador.
       if (afectaVistaActual) {
-        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
+        refrescarVistaTrasSincronizacion(apuestaActualizada);
       }
       if (silencioso && afectaVistaActual) actualizacionesVisibles++;
       actualizadas++;
@@ -9581,9 +9580,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
         ? apuestas.find(item => item.id === apuesta.id)
         : null;
       const afectaVistaActual = Boolean(apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada));
-      // Aplicar solamente los resultados que cambiaron, sin reemplazar el DOM.
+      // Refresco agrupado de la tarjeta para mostrar inmediatamente el marcador.
       if (afectaVistaActual) {
-        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
+        refrescarVistaTrasSincronizacion(apuestaActualizada);
       }
       if (silencioso && afectaVistaActual) actualizacionesVisibles++;
       if (idsHorario.has(apuesta.id)) idsHorariosActualizados.add(apuesta.id);
@@ -10024,7 +10023,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
         ? apuestas.find(item => item.id === apuesta.id)
         : null;
       if (apuestaActualizada && apuestaPerteneceFiltroActual(apuestaActualizada)) {
-        actualizarApuestaParcialDom(apuestaActualizada, { actualizarSelecciones: true });
+        refrescarVistaTrasSincronizacion(apuestaActualizada);
       }
       actualizadas++;
     }
@@ -10862,6 +10861,31 @@ function actualizarApuestaParcialDom(apuesta, options = {}) {
 
   if (apuesta.tipoApuesta !== "simple") return false;
   return actualizarCeldasResultadoApuestaDom(apuesta);
+}
+
+// Los marcadores viven dentro del HTML de cada selección. Actualizar solo las
+// celdas de cuota/estado deja visible el texto antiguo, especialmente en
+// sistemas y combinadas. Agrupamos un render completo de la vista actual para
+// reflejar el marcador ya guardado sin perder posición de lectura.
+let renderMarcadoresPendiente = false;
+let scrollMarcadoresPendiente = null;
+
+function refrescarVistaTrasSincronizacion(apuesta) {
+  if (!apuesta || !apuestaPerteneceFiltroActual(apuesta)) return false;
+  scrollMarcadoresPendiente ??= window.scrollY;
+  if (renderMarcadoresPendiente) return true;
+
+  renderMarcadoresPendiente = true;
+  const ejecutar = () => {
+    renderMarcadoresPendiente = false;
+    const scroll = scrollMarcadoresPendiente;
+    scrollMarcadoresPendiente = null;
+    renderApuestasCargadas({ mantenerPagina: true, pagina: paginaActual });
+    if (Number.isFinite(scroll)) window.scrollTo(0, scroll);
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(ejecutar);
+  else setTimeout(ejecutar, 0);
+  return true;
 }
 
 function actualizarResumenDiaDom(dia) {
@@ -12088,13 +12112,9 @@ function iniciarApp() {
   iniciarMonitorVersionDeploy();
   escucharCasas();
   escucharApuestas();
-  // Al recargar, continuar liquidando las apuestas MLB pendientes sin exigir
-  // otra pulsación manual del botón de sincronización.
-  startAutoSyncMlb();
-  // Fútbol y NFL se reanudan automáticamente si el usuario ya los activó
-  // anteriormente desde sus respectivos botones.
-  if (syncManager.isActive("futbol")) startAutoSyncFutbol();
-  if (syncManager.isActive("nfl")) startAutoSyncNfl();
+  // Al abrir o recargar no se sincroniza ningún deporte. El usuario inicia
+  // el ciclo de 90 segundos desde el botón correspondiente.
+  syncManager.reset();
   document.getElementById("btnAgregar").onclick = agregarApuesta;
   document.getElementById("btnBankroll").onclick = guardarBankroll;
   document.getElementById("btnEliminarCasa").onclick = eliminarCasaSeleccionada;
