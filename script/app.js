@@ -4937,10 +4937,23 @@ function agregarTokenAntiCache(url = "") {
 }
 
 function fetchMarcadorEnVivo(url, options = {}) {
+  const { timeoutMs = 15000, signal: externalSignal, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const abortar = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) abortar();
+    else externalSignal.addEventListener("abort", abortar, { once: true });
+  }
+  const timeoutId = setTimeout(abortar, timeoutMs);
+
   return fetch(agregarTokenAntiCache(url), {
-    ...options,
+    ...fetchOptions,
+    signal: controller.signal,
     cache: "no-store",
-    headers: options.headers || {}
+    headers: fetchOptions.headers || {}
+  }).finally(() => {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener?.("abort", abortar);
   });
 }
 
@@ -5063,7 +5076,9 @@ function seleccionarMejorJuegoPorHora(pool = [], targetHora = "") {
 
 async function cargarJuegosMlbPorFecha(fecha) {
   const timezone = getSportsTimezone();
-  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore,boxscore&timeZone=${encodeURIComponent(timezone)}`;
+  // El schedule/linescore contiene el marcador. Hidratar todos los boxscores
+  // hacía la petición innecesariamente pesada y podía dejar el botón esperando.
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(fecha)}&hydrate=linescore&timeZone=${encodeURIComponent(timezone)}`;
   const response = await fetchMarcadorEnVivo(url);
   if (!response.ok) {
     throw new Error(`MLB API respondio ${response.status}`);
@@ -6320,8 +6335,12 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
       // Hits y strikeouts se liquidan con el boxscore directo del partido,
       // no con el resumen del calendario que puede llegar con retraso.
       const textoSelParaBoxscore = `${sel.titulo || ""} ${sel.jugada || ""}`;
-      const requiereBoxscoreDirecto = autoMlb.deporte === "mlb" ||
-        esStrikeoutsMlb(textoSelParaBoxscore);
+      const requiereBoxscoreDirecto = [
+        "bases_totales_jugador",
+        "total_hits",
+        "strikeouts_jugador",
+        "total_strikeouts"
+      ].includes(autoMlb.mercado) || esStrikeoutsMlb(textoSelParaBoxscore);
       const boxscoreParaEvaluar = requiereBoxscoreDirecto && game?.gamePk
         ? await obtenerBoxscoreMlbDirecto(game.gamePk)
         : null;
@@ -6805,15 +6824,18 @@ async function sincronizarResultadosMlb(silencioso = false) {
       const fechasBusqueda = getFechasCercanas(fecha);
       const juegos = [];
       const juegosEspn = [];
-      for (const fechaBusqueda of fechasBusqueda) {
-        if (silencioso && !paginaEstaVisible()) return;
-        await cederControlNavegador();
-        juegos.push(...await cargarJuegosMlbPorFecha(fechaBusqueda));
-        try {
-          juegosEspn.push(...await cargarJuegosEspnMlbPorFecha(fechaBusqueda));
-        } catch (e) {
-          console.warn("No se pudo cargar ESPN MLB:", fechaBusqueda, e);
-        }
+      const cargas = await Promise.all(fechasBusqueda.map(async fechaBusqueda => {
+        const [mlb, espn] = await Promise.allSettled([
+          cargarJuegosMlbPorFecha(fechaBusqueda),
+          cargarJuegosEspnMlbPorFecha(fechaBusqueda)
+        ]);
+        return { fechaBusqueda, mlb, espn };
+      }));
+      for (const carga of cargas) {
+        if (carga.mlb.status === "fulfilled") juegos.push(...carga.mlb.value);
+        else console.warn("No se pudo cargar MLB API:", carga.fechaBusqueda, carga.mlb.reason);
+        if (carga.espn.status === "fulfilled") juegosEspn.push(...carga.espn.value);
+        else console.warn("No se pudo cargar ESPN MLB:", carga.fechaBusqueda, carga.espn.reason);
       }
       juegosPorFecha.set(fecha, juegos);
       juegosEspnPorFecha.set(fecha, juegosEspn);
@@ -7942,6 +7964,13 @@ function esPeriodoReglamentarioEspn(line = {}, index = 0) {
 }
 
 function getScoreReglamentarioEspnCompetidor(item = {}, event = {}) {
+  // NFL tiene cuatro cuartos reglamentarios. La lógica de fútbol que suma los
+  // dos primeros periodos representa el descanso (10-14), no el marcador en
+  // vivo del cuarto cuarto (17-27). En NFL ESPN ya entrega el total correcto.
+  const esNfl = event?.leagueSlug === "nfl" ||
+    String(event?.leagueLabel || "").toUpperCase() === "NFL";
+  if (esNfl) return toScoreNumberFutbol(item.score);
+
   const lineas = Array.isArray(item.linescores) ? item.linescores : [];
   const reglamentarias = lineas
     .filter(esPeriodoReglamentarioEspn)
