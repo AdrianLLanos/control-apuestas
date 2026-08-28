@@ -84,7 +84,11 @@ function getAutoFutbolResultadoHtml(contenido = "", extraHtml = "") {
 
 function getEstadoEnVivoHtml(autoFutbol = {}, escapeHtml = value => String(value ?? "")) {
   const estado = String(autoFutbol?.estadoJuego || "").trim();
-  if (!estado || !/\b(in progress|live|en vivo|en juego|en curso|1st|2nd|3rd|4th|quarter|half)\b/i.test(estado)) {
+  if (!estado) return "";
+  if (/\b(ht|halftime|half time|descanso|medio tiempo|entretiempo)\b/i.test(estado)) {
+    return `<div class="auto-mlb-score auto-mlb-score--status">Entretiempo</div>`;
+  }
+  if (!/\b(in progress|live|en vivo|en juego|en curso|1st|2nd|3rd|4th|quarter|half)\b/i.test(estado)) {
     return "";
   }
   return `<div class="auto-mlb-score auto-mlb-score--status">En vivo · ${escapeHtml(estado)}</div>`;
