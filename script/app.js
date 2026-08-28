@@ -9904,10 +9904,12 @@ async function sincronizarResultadosNfl(silencioso = false) {
           evento: eventoJugada,
           jugadas: [typeof jugada === "object" && jugada ? { ...jugada, ev: eventoJugada } : jugada]
         });
-        if (equipos.length) equiposDetectados.push(equipos.join(" vs "));
         const juegoMarcador = buscarJuegoEspnNfl(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
         if (!juegoMarcador || juegosConBoxscore.has(juegoMarcador.id)) continue;
         coincidencias++;
+        // Mostrar solo los equipos que realmente coincidieron con un evento
+        // NFL del proveedor; no aliases aislados detectados en otros textos.
+        if (equipos.length >= 2) equiposDetectados.push(equipos.slice(0, 2).join(" vs "));
         const boxscore = await cargarBoxscoreEspnNfl(juegoMarcador.id);
         if (boxscore) boxscoresCargados++;
         juegosConBoxscore.set(
@@ -9942,7 +9944,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
     if (!silencioso) {
       const fuenteCdn = juegosDesdeCdn ? ` CDN: ${juegosDesdeCdn}.` : "";
       const errores = erroresCarga ? ` Errores de carga: ${erroresCarga}.` : "";
-      const equiposInfo = equiposDetectados.length ? ` Equipos: ${[...new Set(equiposDetectados)].join(" | ")}.` : " Equipos NFL no detectados.";
+      const equiposInfo = equiposDetectados.length ? ` Eventos NFL: ${[...new Set(equiposDetectados)].join(" | ")}.` : " No se encontraron eventos NFL coincidentes.";
       setNflSyncStatus(
         `NFL sincronizado: ${actualizadas} de ${revisadas} apuestas revisadas. Eventos: ${juegosCargados}.${fuenteCdn} Coincidencias: ${coincidencias}. Boxscores: ${boxscoresCargados}.${equiposInfo}${errores}`,
         actualizadas ? "success" : ""
