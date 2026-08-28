@@ -9926,6 +9926,39 @@ function crearActualizacionMarcadorNflEnVivo(apuesta = {}, juegos = []) {
   };
 }
 
+// La evaluación de mercados y el marcador en vivo recorren caminos distintos.
+// Si ambos producen cambios, se conservan los estados calculados por la
+// evaluación y se superpone el marcador fresco del scoreboard en cada
+// selección. Así un cambio de estado nunca puede ocultar un nuevo 17-21.
+function combinarActualizacionesNfl(updateResultado = null, updateMarcador = null) {
+  if (!updateResultado) return updateMarcador;
+  if (!updateMarcador?.jugadas) return updateResultado;
+
+  const jugadas = (updateResultado.jugadas || []).map((jugadaResultado, matchIndex) => {
+    const jugadaMarcador = updateMarcador.jugadas?.[matchIndex];
+    if (!jugadaMarcador || !Array.isArray(jugadaResultado?.selections) || !Array.isArray(jugadaMarcador?.selections)) {
+      return jugadaResultado;
+    }
+
+    return {
+      ...jugadaResultado,
+      selections: jugadaResultado.selections.map((selectionResultado, selIndex) => {
+        const selectionMarcador = jugadaMarcador.selections?.[selIndex];
+        if (!selectionMarcador?.autoFutbol) return selectionResultado;
+        return {
+          ...selectionResultado,
+          autoFutbol: {
+            ...(selectionResultado.autoFutbol || {}),
+            ...selectionMarcador.autoFutbol
+          }
+        };
+      })
+    };
+  });
+
+  return { ...updateResultado, jugadas };
+}
+
 async function sincronizarResultadosNfl(silencioso = false) {
   const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
   if (_syncNflEnCurso) {
@@ -10006,8 +10039,9 @@ async function sincronizarResultadosNfl(silencioso = false) {
       const juegosParaEvaluar = juegos.map(juego => juegosConBoxscore.get(juego.id) || juego);
       const boxscoreApuestaCargado = [...juegosConBoxscore.values()]
         .some(juego => juego.fuenteResultado === "espn_nfl_boxscore");
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar) ||
-        crearActualizacionMarcadorNflEnVivo(apuesta, juegosParaEvaluar);
+      const updateResultado = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar);
+      const updateMarcador = crearActualizacionMarcadorNflEnVivo(apuesta, juegosParaEvaluar);
+      const updateData = combinarActualizacionesNfl(updateResultado, updateMarcador);
       if (!updateData) continue;
 
       updateData.deporte = "nfl";
