@@ -10,6 +10,7 @@ export function createSyncManager({
   const activeSports = new Set();
   const pendingTimers = new Map();
   const intervals = new Map();
+  const runningSports = new Set();
   let listenersRegistered = false;
 
   function loadActiveSports() {
@@ -53,7 +54,16 @@ export function createSyncManager({
     const timer = setTimeout(() => {
       pendingTimers.delete(sport);
       if (!isPageVisible() || !isActive(sport)) return;
-      runWhenFree(() => config.run(force));
+      runWhenFree(() => {
+        if (runningSports.has(sport)) return;
+        runningSports.add(sport);
+        Promise.resolve(config.run(force))
+          .catch(error => {
+            console.error(`Error en auto-sync ${sport}:`, error);
+            config.onError?.(error);
+          })
+          .finally(() => runningSports.delete(sport));
+      });
     }, finalDelay);
     pendingTimers.set(sport, timer);
   }

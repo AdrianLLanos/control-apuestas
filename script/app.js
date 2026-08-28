@@ -1233,7 +1233,9 @@ function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
 const syncManager = createSyncManager({
   isPageVisible: paginaEstaVisible,
   isPageRecentlyReactivated: paginaRecienReactivada,
-  runWhenFree: ejecutarCuandoEsteLibre
+  // Las consultas automáticas no deben depender de que el navegador declare
+  // tiempo ocioso; durante un partido la vista se re-renderiza con frecuencia.
+  runWhenFree: callback => setTimeout(callback, 0)
 });
 
 function programarSyncSilenciosa(deporte, delay = 0, force = false) {
@@ -9460,11 +9462,18 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
   return updatePayloadFutbol;
 }
 
+let _syncFutbolEnCurso = false;
+
 async function sincronizarResultadosFutbol(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
   const apuestasSync = silencioso
     ? await getApuestasAutoSyncScope("futbol")
     : getApuestasSyncScope(false);
+  if (_syncFutbolEnCurso) {
+    if (!silencioso) setFootballSyncStatus("Ya hay una sincronización de fútbol en curso.");
+    return;
+  }
+  _syncFutbolEnCurso = true;
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
@@ -9499,6 +9508,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     if (!silencioso) {
       setFootballSyncStatus("No hay apuestas de futbol pendientes para sincronizar.", "");
     }
+    _syncFutbolEnCurso = false;
     return;
   }
 
@@ -9673,6 +9683,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       setFootballSyncStatus(`No se pudo sincronizar fútbol: ${e.message}`, "error");
     }
   } finally {
+    _syncFutbolEnCurso = false;
     if (!silencioso && btn) btn.disabled = false;
     if (!silencioso && _syncFutbolActivado) programarSyncSilenciosa("futbol", 1500, true);
   }
@@ -9686,6 +9697,7 @@ const NFL_BOXSCORE_CACHE_MS = 12 * 1000;
 let _autoSyncNflEnCurso = false;
 let _ultimoAutoSyncNfl = 0;
 let _syncNflActivado = false;
+let _syncNflEnCurso = false;
 const nflBoxscoreCache = new Map();
 
 function setNflSyncStatus(message = "", type = "") {
@@ -9892,6 +9904,11 @@ function crearActualizacionMarcadorNflEnVivo(apuesta = {}, juegos = []) {
 
 async function sincronizarResultadosNfl(silencioso = false) {
   const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
+  if (_syncNflEnCurso) {
+    if (!silencioso) setNflSyncStatus("Ya hay una sincronización NFL en curso.");
+    return;
+  }
+  _syncNflEnCurso = true;
   const candidatas = apuestasSync.filter(apuesta => {
     if (!apuestaPareceNfl(apuesta)) return false;
     if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
@@ -9901,6 +9918,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
 
   if (candidatas.length === 0) {
     if (!silencioso) setNflSyncStatus("No hay apuestas NFL pendientes para sincronizar.");
+    _syncNflEnCurso = false;
     return;
   }
 
@@ -9999,6 +10017,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
     console.error("Error sincronizando NFL:", error);
     if (!silencioso) setNflSyncStatus(`No se pudo sincronizar NFL: ${error.message}`, "error");
   } finally {
+    _syncNflEnCurso = false;
     if (!silencioso && btn) btn.disabled = false;
   }
 }
