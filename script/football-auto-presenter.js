@@ -38,28 +38,41 @@ export function completarAutoFutbolRenderDesdeJugada(selection = {}, jugada = {}
   ]
     .filter(autoFutbolTieneMetaVisible)
     .filter(auto => autosFutbolCompatibles(autoActual, auto, deps.equiposFutbolCoinciden))
-    .sort((a, b) => scoreMetaAutoFutbol(b) - scoreMetaAutoFutbol(a));
+    .sort((a, b) => {
+      const porMeta = scoreMetaAutoFutbol(b) - scoreMetaAutoFutbol(a);
+      if (porMeta !== 0) return porMeta;
+      return Number(b?.sincronizadoEn || 0) - Number(a?.sincronizadoEn || 0);
+    });
 
   if (candidatos.length === 0) return selection;
   const base = candidatos[0];
+  const baseEsMasReciente = Number(base?.sincronizadoEn || 0) > Number(autoActual?.sincronizadoEn || 0);
+  const elegirMeta = clave => {
+    // Una jugada puede tener un marcador recién sincronizado mientras la
+    // selección conserva el anterior. Para la interfaz siempre gana el dato
+    // con marca de sincronización más nueva, incluso si el anterior no está vacío.
+    if (baseEsMasReciente && Object.prototype.hasOwnProperty.call(base, clave)) return base[clave];
+    return autoActual?.[clave] ?? base[clave];
+  };
 
   return {
     ...selection,
     autoFutbol: {
       ...(autoActual || {}),
-      id: autoActual?.id ?? base.id,
-      espnId: autoActual?.espnId ?? base.espnId,
-      liga: autoActual?.liga || base.liga,
-      estadoJuego: autoActual?.estadoJuego || base.estadoJuego,
-      estadoEspecial: autoActual?.estadoEspecial || base.estadoEspecial,
-      marcador: autoActual?.marcador || base.marcador,
-      marcadorTiempo: autoActual?.marcadorTiempo || base.marcadorTiempo,
-      fechaJuego: autoActual?.fechaJuego || base.fechaJuego,
-      totalGoles: autoActual?.totalGoles ?? base.totalGoles,
-      totalCorners: autoActual?.totalCorners ?? base.totalCorners,
-      cornersEquipo: autoActual?.cornersEquipo || base.cornersEquipo,
-      totalTarjetas: autoActual?.totalTarjetas ?? base.totalTarjetas,
-      tarjetasEquipo: autoActual?.tarjetasEquipo || base.tarjetasEquipo
+      id: elegirMeta("id"),
+      espnId: elegirMeta("espnId"),
+      liga: elegirMeta("liga"),
+      estadoJuego: elegirMeta("estadoJuego"),
+      estadoEspecial: elegirMeta("estadoEspecial"),
+      marcador: elegirMeta("marcador"),
+      marcadorTiempo: elegirMeta("marcadorTiempo"),
+      fechaJuego: elegirMeta("fechaJuego"),
+      totalGoles: elegirMeta("totalGoles"),
+      totalCorners: elegirMeta("totalCorners"),
+      cornersEquipo: elegirMeta("cornersEquipo"),
+      totalTarjetas: elegirMeta("totalTarjetas"),
+      tarjetasEquipo: elegirMeta("tarjetasEquipo"),
+      sincronizadoEn: Math.max(Number(autoActual?.sincronizadoEn || 0), Number(base?.sincronizadoEn || 0)) || undefined
     }
   };
 }

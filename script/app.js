@@ -10084,7 +10084,11 @@ async function ejecutarAutoSyncNfl(force = false) {
   if (!paginaEstaVisible() || !_syncNflActivado || _autoSyncNflEnCurso) return;
   const syncLiveRapida = getApuestasSyncScope(true).some(apuestaNflNecesitaSyncLiveRapida);
   const intervaloMinimo = syncLiveRapida ? NFL_LIVE_SYNC_INTERVAL_MS : NFL_AUTO_SYNC_INTERVAL_MS;
-  if (!force && Date.now() - _ultimoAutoSyncNfl < intervaloMinimo) return;
+  const transcurrido = Date.now() - _ultimoAutoSyncNfl;
+  if (!force && transcurrido < intervaloMinimo) {
+    programarSyncSilenciosa("nfl", intervaloMinimo - transcurrido + 50);
+    return;
+  }
   _autoSyncNflEnCurso = true;
   _ultimoAutoSyncNfl = Date.now();
   try {
@@ -10123,7 +10127,11 @@ async function ejecutarAutoSyncFutbol(force = false) {
   }
   if (_autoSyncFutbolEnCurso) return;
   const intervaloMinimo = syncStatsRapida ? FOOTBALL_LIVE_STATS_SYNC_INTERVAL_MS : FOOTBALL_AUTO_SYNC_INTERVAL_MS;
-  if (!force && Date.now() - _ultimoAutoSyncFutbol < intervaloMinimo) return;
+  const transcurrido = Date.now() - _ultimoAutoSyncFutbol;
+  if (!force && transcurrido < intervaloMinimo) {
+    programarSyncSilenciosa("futbol", intervaloMinimo - transcurrido + 50);
+    return;
+  }
 
   _autoSyncFutbolEnCurso = true;
   _ultimoAutoSyncFutbol = Date.now();
@@ -10163,7 +10171,11 @@ async function ejecutarAutoSyncMlb(force = false) {
   }
   if (_autoSyncMlbEnCurso) return;
   const intervaloMinimo = syncLiveRapida ? MLB_LIVE_SYNC_INTERVAL_MS : MLB_AUTO_SYNC_INTERVAL_MS;
-  if (!force && Date.now() - _ultimoAutoSyncMlb < intervaloMinimo) return;
+  const transcurrido = Date.now() - _ultimoAutoSyncMlb;
+  if (!force && transcurrido < intervaloMinimo) {
+    programarSyncSilenciosa("mlb", intervaloMinimo - transcurrido + 50);
+    return;
+  }
 
   _autoSyncMlbEnCurso = true;
   _ultimoAutoSyncMlb = Date.now();
