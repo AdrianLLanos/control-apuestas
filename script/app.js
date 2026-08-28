@@ -5081,10 +5081,12 @@ async function obtenerBoxscoreMlbDirecto(gamePk) {
   const now = Date.now();
   if (mlbBoxscoreFetchCache.has(key)) {
     const cached = mlbBoxscoreFetchCache.get(key);
-    if (now - cached.ts < 20000) return cached.data;
+    // El boxscore solo complementa estadísticas. Un caché corto evita repetir
+    // peticiones dentro de una misma apuesta sin retrasar un marcador en vivo.
+    if (now - cached.ts < 5000) return cached.data;
   }
   try {
-    const res = await fetch(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
+    const res = await fetchMarcadorEnVivo(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
     if (!res.ok) return null;
     const data = await res.json();
     mlbBoxscoreFetchCache.set(key, { ts: now, data });
@@ -5181,8 +5183,11 @@ function combinarJuegoMlbConBoxscoreDirecto(game, boxscore) {
     boxscore,
     teams: {
       ...game.teams,
-      home: { ...game?.teams?.home, score: homeRuns ?? game?.teams?.home?.score },
-      away: { ...game?.teams?.away, score: awayRuns ?? game?.teams?.away?.score }
+      // El schedule/linescore es la fuente principal para las carreras en
+      // vivo. El boxscore puede propagarse tarde, por lo que solo lo usamos
+      // como respaldo si el calendario no trajo una puntuación.
+      home: { ...game?.teams?.home, score: game?.teams?.home?.score ?? homeRuns },
+      away: { ...game?.teams?.away, score: game?.teams?.away?.score ?? awayRuns }
     }
   };
 }
@@ -9710,6 +9715,26 @@ function setNflSyncStatus(message = "", type = "") {
 async function cargarJuegosEspnNflPorFecha(fecha) {
   if (!fecha) return [];
   const date = String(fecha).replace(/-/g, "");
+
+  // El CDN se actualiza antes que site.api en varios partidos en vivo. Siempre
+  // se intenta primero, para no retroceder el marcador con una fuente atrasada.
+  try {
+    const cdnResponse = await fetchMarcadorEnVivo("https://cdn.espn.com/core/nfl/scoreboard?xhr=1");
+    if (!cdnResponse.ok) throw new Error(`ESPN CDN respondio ${cdnResponse.status}`);
+    const cdnData = await cdnResponse.json();
+    const eventsCdn = (cdnData?.content?.sbData?.events || [])
+      .filter(event => obtenerFechaLocalEvent(event) === fecha)
+      .map(event => ({
+        ...event,
+        leagueLabel: "NFL",
+        leagueSlug: "nfl",
+        fuenteResultado: "espn_nfl_cdn"
+      }));
+    if (eventsCdn.length > 0) return eventsCdn;
+  } catch (error) {
+    console.warn("No se pudo cargar scoreboard CDN ESPN NFL; se usara site.api:", error);
+  }
+
   const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${encodeURIComponent(date)}&limit=100&lang=es&region=mx&tz=${encodeURIComponent(getSportsTimezone())}`;
   try {
     const response = await fetchMarcadorEnVivo(url);
@@ -10041,9 +10066,9 @@ async function ejecutarAutoSyncNfl(force = false) {
   }
 }
 
-function startAutoSyncNfl() {
+function startAutoSyncNfl(scheduleImmediately = true) {
   _syncNflActivado = true;
-  syncManager.activate("nfl");
+  syncManager.activate("nfl", { scheduleImmediately });
 }
 
 let _autoSyncFutbolEnCurso = false;
@@ -10081,9 +10106,9 @@ async function ejecutarAutoSyncFutbol(force = false) {
   }
 }
 
-function startAutoSyncFutbol() {
+function startAutoSyncFutbol(scheduleImmediately = true) {
   _syncFutbolActivado = true;
-  syncManager.activate("futbol");
+  syncManager.activate("futbol", { scheduleImmediately });
 }
 
 let _autoSyncMlbEnCurso = false;
@@ -10121,9 +10146,9 @@ async function ejecutarAutoSyncMlb(force = false) {
   }
 }
 
-function startAutoSyncMlb() {
+function startAutoSyncMlb(scheduleImmediately = true) {
   _syncMlbActivado = true;
-  syncManager.activate("mlb");
+  syncManager.activate("mlb", { scheduleImmediately });
 }
 
 syncManager.register("mlb", {
@@ -12078,21 +12103,21 @@ function iniciarApp() {
   const btnSincronizarMlb = document.getElementById("btnSincronizarMlb");
   if (btnSincronizarMlb) {
     btnSincronizarMlb.onclick = () => {
-      startAutoSyncMlb();
+      startAutoSyncMlb(false);
       sincronizarResultadosMlb();
     };
   }
   const btnSincronizarFutbol = document.getElementById("btnSincronizarFutbol");
   if (btnSincronizarFutbol) {
     btnSincronizarFutbol.onclick = () => {
-      startAutoSyncFutbol();
+      startAutoSyncFutbol(false);
       sincronizarResultadosFutbol();
     };
   }
   const btnSincronizarNfl = document.getElementById("btnSincronizarNfl");
   if (btnSincronizarNfl) {
     btnSincronizarNfl.onclick = () => {
-      startAutoSyncNfl();
+      startAutoSyncNfl(false);
       sincronizarResultadosNfl();
     };
   }

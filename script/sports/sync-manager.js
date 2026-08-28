@@ -68,7 +68,7 @@ export function createSyncManager({
     pendingTimers.set(sport, timer);
   }
 
-  function activate(sport) {
+  function activate(sport, { scheduleImmediately = true } = {}) {
     const config = configs.get(sport);
     if (!config) throw new Error(`Auto-sync no registrado: ${sport}`);
     activeSports.add(sport);
@@ -76,7 +76,7 @@ export function createSyncManager({
     if (!intervals.has(sport)) {
       intervals.set(sport, setInterval(() => schedule(sport), config.intervalMs));
     }
-    schedule(sport, 0, true);
+    if (scheduleImmediately) schedule(sport, 0, true);
   }
 
   function restore() {
