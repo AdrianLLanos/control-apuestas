@@ -69,6 +69,14 @@ function getAutoFutbolResultadoHtml(contenido = "", extraHtml = "") {
   return `<div class="auto-mlb-score auto-football-score">${contenido}${extraHtml}</div>`;
 }
 
+function getEstadoEnVivoHtml(autoFutbol = {}, escapeHtml = value => String(value ?? "")) {
+  const estado = String(autoFutbol?.estadoJuego || "").trim();
+  if (!estado || !/\b(in progress|live|en vivo|en juego|en curso|1st|2nd|3rd|4th|quarter|half)\b/i.test(estado)) {
+    return "";
+  }
+  return `<div class="auto-mlb-score auto-mlb-score--status">En vivo · ${escapeHtml(estado)}</div>`;
+}
+
 function esNumeroAutoValido(value) {
   if (value === null || value === undefined || value === "") return false;
   return Number.isFinite(Number(value));
@@ -209,6 +217,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
 
   const totalGoles = Number(futbolAuto.totalGoles);
   const esNfl = futbolAuto.deporte === "nfl";
+  const estadoEnVivoHtml = marcadorActual ? getEstadoEnVivoHtml(futbolAuto, escapeHtml) : "";
   const totalGolesHtml = futbolAuto.mercado === "total_goles" &&
     futbolAuto.seleccionEquipo &&
     Number.isFinite(totalGoles)
@@ -223,6 +232,6 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
   }
 
   return marcadorActual
-    ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcadorActual)}${totalGolesHtml}`)}${estadoFinalizadoHtml}`
+    ? `${getAutoFutbolResultadoHtml(`${escapeHtml(marcadorActual)}${totalGolesHtml}`)}${estadoEnVivoHtml}${estadoFinalizadoHtml}`
     : horaHtml;
 }

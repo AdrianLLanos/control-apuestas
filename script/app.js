@@ -11,7 +11,8 @@ const [
   countriesModule,
   validationModal,
   marketConflicts,
-  footballAutoPresenter
+  footballAutoPresenter,
+  syncManagerModule
 ] = await Promise.all([
   import(withDeployToken("./firebase-store.js")),
   import(withDeployToken("./calculations.js")),
@@ -19,7 +20,8 @@ const [
   import(withDeployToken("./countries.js?v=1.1")),
   import(withDeployToken("./validation-modal.js")),
   import(withDeployToken("./sports/market-conflicts.js?v=1.1")),
-  import(withDeployToken("./football-auto-presenter.js?v=1.1"))
+  import(withDeployToken("./football-auto-presenter.js?v=1.1")),
+  import(withDeployToken("./sports/sync-manager.js?v=1.0"))
 ]);
 
 const {
@@ -85,6 +87,7 @@ const {
   esContextoMlb,
   quitarAutoFutbolSiEsMlb
 } = marketConflicts;
+const { createSyncManager } = syncManagerModule;
 
 let paginaActual = 1;
 const porPagina = 1;
@@ -1011,7 +1014,6 @@ const DEPLOY_INDEX_URL = "/index.html";
 const DEPLOY_VERSION_CHECK_MS = 3 * 60 * 1000;
 const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
 const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
-const autoSyncTimers = new Map();
 let ultimoDocApuestas = null;
 let hayMasApuestas = true;
 let cargandoApuestas = false;
@@ -1228,43 +1230,18 @@ function marcarRenderSilenciosoApuesta(id, ttl = 6000) {
   setTimeout(() => renderSilenciosoApuestas.delete(id), ttl);
 }
 
+const syncManager = createSyncManager({
+  isPageVisible: paginaEstaVisible,
+  isPageRecentlyReactivated: paginaRecienReactivada,
+  runWhenFree: ejecutarCuandoEsteLibre
+});
+
 function programarSyncSilenciosa(deporte, delay = 0, force = false) {
-  if (!paginaEstaVisible()) return;
-  if (deporte === "mlb" && !_syncMlbActivado) return;
-  if (deporte === "futbol" && !_syncFutbolActivado) return;
-  if (deporte === "nfl" && !_syncNflActivado) return;
-  if (autoSyncTimers.has(deporte)) {
-    if (!force) return;
-    clearTimeout(autoSyncTimers.get(deporte));
-    autoSyncTimers.delete(deporte);
-  }
-
-  const delayFinal = force || !paginaRecienReactivada()
-    ? delay
-    : Math.max(delay, AUTO_SYNC_RESUME_GRACE_MS + (deporte === "mlb" ? 4500 : 1500));
-
-  const timerId = setTimeout(() => {
-    autoSyncTimers.delete(deporte);
-    if (!paginaEstaVisible()) return;
-
-    ejecutarCuandoEsteLibre(() => {
-      if (!paginaEstaVisible()) return;
-      if (deporte === "mlb") {
-        ejecutarAutoSyncMlb(force);
-      } else if (deporte === "futbol") {
-        ejecutarAutoSyncFutbol(force);
-      } else if (deporte === "nfl") {
-        ejecutarAutoSyncNfl(force);
-      }
-    });
-  }, delayFinal);
-
-  autoSyncTimers.set(deporte, timerId);
+  syncManager.schedule(deporte, delay, force);
 }
 
 function cancelarSyncSilenciosaPendiente() {
-  autoSyncTimers.forEach(timerId => clearTimeout(timerId));
-  autoSyncTimers.clear();
+  syncManager.cancelPending();
 }
 
 function esErrorIndiceFirestore(error = {}) {
@@ -2638,6 +2615,7 @@ function crearAutoMlbSeleccion({ evento = "", titulo = "", jugada = "" } = {}) {
       lineaInclusiva = true;
     }
     const jugador = extraerNombreJugadorBasesTotales(textoCompleto);
+    const equipoJugador = detectarEquiposMlb(jugada || textoCompleto)[0] || "";
     if (linea !== null) {
       return {
         deporte: "mlb",
@@ -9693,11 +9671,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
 const NFL_AUTO_SYNC_INTERVAL_MS = 90 * 1000;
 const NFL_LIVE_SYNC_INTERVAL_MS = 90 * 1000;
 const NFL_BOXSCORE_CACHE_MS = 12 * 1000;
-let _autoSyncNflIntervalId = null;
 let _autoSyncNflEnCurso = false;
 let _ultimoAutoSyncNfl = 0;
 let _syncNflActivado = false;
-let _autoSyncNflListenersRegistrados = false;
 const nflBoxscoreCache = new Map();
 
 function setNflSyncStatus(message = "", type = "") {
@@ -9846,6 +9822,62 @@ function apuestaNflNecesitaSyncLiveRapida(apuesta = {}) {
   return apuestaPareceNfl(apuesta) && apuestaFutbolTienePartidoActivo(apuesta);
 }
 
+// Respaldo de marcador para NFL: la liquidación general también procesa
+// mercados y estadísticas, pero un fallo de metadatos no debe impedir que el
+// marcador del scoreboard ya encontrado se guarde y se renderice.
+function crearActualizacionMarcadorNflEnVivo(apuesta = {}, juegos = []) {
+  let huboCambio = false;
+  const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []).map(jugada => {
+    if (typeof jugada !== "object" || !jugada) return jugada;
+
+    const evento = jugada.ev || jugada.evento || apuesta.evento || "";
+    const selections = getSelectionsFromJugada(jugada).map(selection => {
+      const autoFutbol = selection?.autoFutbol;
+      const equipos = autoFutbol?.equipos?.length >= 2
+        ? autoFutbol.equipos
+        : detectarEquiposNfl(evento);
+      if (!autoFutbol || equipos.length < 2) return selection;
+
+      const juego = buscarJuegoEspnNfl(juegos, equipos, apuesta.fecha || apuesta.dia, apuesta.hora);
+      const marcador = getMarcadorFutbol(juego);
+      if (!juego || !marcador) return selection;
+
+      const marcadorTexto = obtenerMarcadorTextoFutbol(marcador, equipos);
+      const estadoJuego = getEstadoJuegoFutbol(juego) || autoFutbol.estadoJuego || "";
+      if (autoFutbol.marcador === marcadorTexto && autoFutbol.estadoJuego === estadoJuego) return selection;
+
+      huboCambio = true;
+      return {
+        ...selection,
+        autoFutbol: {
+          ...autoFutbol,
+          deporte: "nfl",
+          id: juego.id || autoFutbol.id,
+          espnId: juego.id || autoFutbol.espnId,
+          estadoJuego,
+          marcador: marcadorTexto,
+          fechaJuego: getFechaJuegoFutbol(juego) || autoFutbol.fechaJuego,
+          sincronizadoEn: Date.now()
+        }
+      };
+    });
+
+    return { ...jugada, selections };
+  });
+
+  if (!huboCambio) return null;
+  const resultado = recalcularResultadoApuesta({ ...apuesta, jugadas });
+  return {
+    jugadas,
+    resultado,
+    deporte: "nfl",
+    autoSync: crearAutoSyncPayload(apuesta, resultado, {
+      proveedor: "espn_nfl_scoreboard",
+      ultimaRevision: Date.now()
+    })
+  };
+}
+
 async function sincronizarResultadosNfl(silencioso = false) {
   const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
   const candidatas = apuestasSync.filter(apuesta => {
@@ -9920,7 +9952,8 @@ async function sincronizarResultadosNfl(silencioso = false) {
       const juegosParaEvaluar = juegos.map(juego => juegosConBoxscore.get(juego.id) || juego);
       const boxscoreApuestaCargado = [...juegosConBoxscore.values()]
         .some(juego => juego.fuenteResultado === "espn_nfl_boxscore");
-      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar);
+      const updateData = await aplicarResultadoFutbolApuesta(apuesta, [], juegosParaEvaluar) ||
+        crearActualizacionMarcadorNflEnVivo(apuesta, juegosParaEvaluar);
       if (!updateData) continue;
 
       updateData.deporte = "nfl";
@@ -9979,22 +10012,9 @@ async function ejecutarAutoSyncNfl(force = false) {
 
 function startAutoSyncNfl() {
   _syncNflActivado = true;
-  if (_autoSyncNflIntervalId === null) {
-    _autoSyncNflIntervalId = setInterval(() => programarSyncSilenciosa("nfl", 0), NFL_AUTO_SYNC_INTERVAL_MS);
-  }
-  programarSyncSilenciosa("nfl", 0, true);
-
-  if (_autoSyncNflListenersRegistrados) return;
-  _autoSyncNflListenersRegistrados = true;
-  document.addEventListener("visibilitychange", () => {
-    if (paginaEstaVisible() && _syncNflActivado) programarSyncSilenciosa("nfl", 1000, true);
-  });
-  window.addEventListener("focus", () => {
-    if (_syncNflActivado) programarSyncSilenciosa("nfl", 1000, true);
-  });
+  syncManager.activate("nfl");
 }
 
-let _autoSyncFutbolIntervalId = null;
 let _autoSyncFutbolEnCurso = false;
 let _ultimoAutoSyncFutbol = 0;
 let _syncFutbolActivado = false; // Solo inicia cuando el usuario presiona el botón manualmente
@@ -10030,38 +10050,14 @@ async function ejecutarAutoSyncFutbol(force = false) {
   }
 }
 
-let _autoSyncFutbolListenersRegistrados = false;
 function startAutoSyncFutbol() {
   _syncFutbolActivado = true;
-  if (_autoSyncFutbolIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncFutbolIntervalId = setInterval(() => {
-    if (_syncFutbolActivado) programarSyncSilenciosa("futbol", 0);
-  }, FOOTBALL_AUTO_SYNC_INTERVAL_MS);
-
-  if (!_autoSyncFutbolListenersRegistrados) {
-    _autoSyncFutbolListenersRegistrados = true;
-    document.addEventListener("visibilitychange", () => {
-      if (paginaEstaVisible() && _syncFutbolActivado) {
-        registrarReactivacionPagina();
-        programarSyncSilenciosa("futbol", 1000);
-      } else if (!paginaEstaVisible()) {
-        cancelarSyncSilenciosaPendiente();
-      }
-    });
-    window.addEventListener("focus", () => {
-      if (_syncFutbolActivado) {
-        registrarReactivacionPagina();
-        programarSyncSilenciosa("futbol", 1000);
-      }
-    });
-  }
+  syncManager.activate("futbol");
 }
 
-let _autoSyncMlbIntervalId = null;
 let _autoSyncMlbEnCurso = false;
 let _ultimoAutoSyncMlb = 0;
 let _syncMlbActivado = false;
-let _autoSyncMlbListenersRegistrados = false;
 
 async function ejecutarAutoSyncMlb(force = false) {
   if (!paginaEstaVisible()) return;
@@ -10096,30 +10092,25 @@ async function ejecutarAutoSyncMlb(force = false) {
 
 function startAutoSyncMlb() {
   _syncMlbActivado = true;
-  if (_autoSyncMlbIntervalId !== null) return; // Ya activo, no duplicar
-  _autoSyncMlbIntervalId = setInterval(() => {
-    if (_syncMlbActivado) programarSyncSilenciosa("mlb", 0);
-  }, MLB_AUTO_SYNC_INTERVAL_MS);
-  programarSyncSilenciosa("mlb", 0, true);
-
-  if (!_autoSyncMlbListenersRegistrados) {
-    _autoSyncMlbListenersRegistrados = true;
-    document.addEventListener("visibilitychange", () => {
-      if (paginaEstaVisible() && _syncMlbActivado) {
-        registrarReactivacionPagina();
-        programarSyncSilenciosa("mlb", 1000, true);
-      } else if (!paginaEstaVisible()) {
-        cancelarSyncSilenciosaPendiente();
-      }
-    });
-    window.addEventListener("focus", () => {
-      if (_syncMlbActivado) {
-        registrarReactivacionPagina();
-        programarSyncSilenciosa("mlb", 1000, true);
-      }
-    });
-  }
+  syncManager.activate("mlb");
 }
+
+syncManager.register("mlb", {
+  intervalMs: MLB_AUTO_SYNC_INTERVAL_MS,
+  resumeDelay: AUTO_SYNC_RESUME_GRACE_MS + 4500,
+  run: ejecutarAutoSyncMlb
+});
+syncManager.register("futbol", {
+  intervalMs: FOOTBALL_AUTO_SYNC_INTERVAL_MS,
+  resumeDelay: AUTO_SYNC_RESUME_GRACE_MS + 1500,
+  run: ejecutarAutoSyncFutbol
+});
+syncManager.register("nfl", {
+  intervalMs: NFL_AUTO_SYNC_INTERVAL_MS,
+  resumeDelay: AUTO_SYNC_RESUME_GRACE_MS + 1500,
+  run: ejecutarAutoSyncNfl
+});
+syncManager.registerLifecycle();
 
 function getAjusteManualFutbolHtml(autoFutbol = {}, options = {}) {
   if (!options.apuestaId && options.apuestaId !== 0) return "";
@@ -12044,6 +12035,10 @@ function iniciarApp() {
   // Al recargar, continuar liquidando las apuestas MLB pendientes sin exigir
   // otra pulsación manual del botón de sincronización.
   startAutoSyncMlb();
+  // Fútbol y NFL se reanudan automáticamente si el usuario ya los activó
+  // anteriormente desde sus respectivos botones.
+  if (syncManager.isActive("futbol")) startAutoSyncFutbol();
+  if (syncManager.isActive("nfl")) startAutoSyncNfl();
   document.getElementById("btnAgregar").onclick = agregarApuesta;
   document.getElementById("btnBankroll").onclick = guardarBankroll;
   document.getElementById("btnEliminarCasa").onclick = eliminarCasaSeleccionada;
