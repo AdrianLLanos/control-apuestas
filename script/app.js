@@ -5089,6 +5089,10 @@ async function cargarJuegosMlbPorFecha(fecha) {
 }
 
 const mlbBoxscoreFetchCache = new Map();
+// Varias selecciones de una misma combinada pueden requerir el mismo
+// boxscore. Compartir la petición en curso evita descargarlo una vez por
+// selección antes de que alcance a guardarse en la caché.
+const mlbBoxscoreFetchPendientes = new Map();
 
 async function obtenerBoxscoreMlbDirecto(gamePk) {
   if (!gamePk) return null;
@@ -5100,15 +5104,26 @@ async function obtenerBoxscoreMlbDirecto(gamePk) {
     // peticiones dentro de una misma apuesta sin retrasar un marcador en vivo.
     if (now - cached.ts < 5000) return cached.data;
   }
-  try {
-    const res = await fetchMarcadorEnVivo(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    mlbBoxscoreFetchCache.set(key, { ts: now, data });
-    return data;
-  } catch (e) {
-    return null;
-  }
+
+  const pendiente = mlbBoxscoreFetchPendientes.get(key);
+  if (pendiente) return pendiente;
+
+  const carga = (async () => {
+    try {
+      const res = await fetchMarcadorEnVivo(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      mlbBoxscoreFetchCache.set(key, { ts: Date.now(), data });
+      return data;
+    } catch (e) {
+      return null;
+    } finally {
+      mlbBoxscoreFetchPendientes.delete(key);
+    }
+  })();
+  mlbBoxscoreFetchPendientes.set(key, carga);
+
+  return carga;
 }
 
 function extraerStrikeoutsJugadorGame(game, nombreJugador = "") {
@@ -6818,19 +6833,35 @@ async function sincronizarResultadosMlb(silencioso = false) {
     const fechas = [...new Set(candidatas.map(a => a.fecha || a.dia).filter(Boolean))];
     const juegosPorFecha = new Map();
     const juegosEspnPorFecha = new Map();
+    // Las ventanas de fechas se solapan (p. ej. una apuesta del 10 y otra del
+    // 11 consultan ambas el día 10, 11 y 12). Reutilizamos cada descarga
+    // durante esta sincronización en lugar de volver a pedir el mismo
+    // calendario a los proveedores.
+    const cargasPorFechaBusqueda = new Map();
+    const cargarResultadosFecha = (fechaBusqueda) => {
+      const existente = cargasPorFechaBusqueda.get(fechaBusqueda);
+      if (existente) return existente;
+
+      const carga = (async () => {
+        const mlb = await Promise.allSettled([cargarJuegosMlbPorFecha(fechaBusqueda)]).then(([resultado]) => resultado);
+        // MLB Stats API ya aporta marcador, estado y horario. ESPN queda como
+        // respaldo cuando MLB no responde; consultarlo siempre duplicaba la
+        // mitad de las peticiones de cada sincronización.
+        const espn = mlb.status === "fulfilled"
+          ? { status: "fulfilled", value: [] }
+          : await Promise.allSettled([cargarJuegosEspnMlbPorFecha(fechaBusqueda)]).then(([resultado]) => resultado);
+        return { fechaBusqueda, mlb, espn };
+      })();
+      cargasPorFechaBusqueda.set(fechaBusqueda, carga);
+      return carga;
+    };
     for (const fecha of fechas) {
       if (silencioso && !paginaEstaVisible()) return;
       await cederControlNavegador();
       const fechasBusqueda = getFechasCercanas(fecha);
       const juegos = [];
       const juegosEspn = [];
-      const cargas = await Promise.all(fechasBusqueda.map(async fechaBusqueda => {
-        const [mlb, espn] = await Promise.allSettled([
-          cargarJuegosMlbPorFecha(fechaBusqueda),
-          cargarJuegosEspnMlbPorFecha(fechaBusqueda)
-        ]);
-        return { fechaBusqueda, mlb, espn };
-      }));
+      const cargas = await Promise.all(fechasBusqueda.map(cargarResultadosFecha));
       for (const carga of cargas) {
         if (carga.mlb.status === "fulfilled") juegos.push(...carga.mlb.value);
         else console.warn("No se pudo cargar MLB API:", carga.fechaBusqueda, carga.mlb.reason);
