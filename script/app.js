@@ -2023,6 +2023,10 @@ function formatearLineaBasesTotalesAuto(auto = {}) {
 
 function limpiarEquipoGanador(texto = "", evento = "") {
   let equipo = String(texto)
+    // El pago anticipado se conserva en autoFutbol como regla de liquidación,
+    // pero no forma parte del nombre visible de la selección.
+    .replace(/\bcon\s+pago\s+anticipado\s*:?\s*/ig, "")
+    .replace(/\bpago\s+anticipado\s*:?\s*/ig, "")
     .replace(/\b(equipo\s+)?ganador\b/ig, "")
     .replace(/\b(gana|ganan|ganara|ganaran|winner|moneyline|ml)\b/ig, "")
     .replace(/\b1x2\b/ig, "");

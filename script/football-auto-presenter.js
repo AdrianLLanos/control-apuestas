@@ -123,7 +123,6 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
     const totalCorners = futbolAuto.seleccionEquipo && deps.getTotalCornersObjetivoFutbol
       ? (deps.getTotalCornersObjetivoFutbol(futbolAuto, cornersEquipo) ?? futbolAuto.totalCorners)
       : (deps.getTotalCornersDesdeEquiposFutbol?.(cornersEquipo) ?? futbolAuto.totalCorners);
-    const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = deps.debeMostrarHorarioJuego?.(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     if (estadoPrevio) marcador = "";
 
@@ -143,7 +142,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       const ajusteHtml = options.showFootballAdjust === true
         ? (deps.getAjusteManualFutbolHtml?.(futbolAuto, options) || "")
         : "";
-      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}${liga}`, ajusteHtml)}${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}`, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
     if (esNumeroAutoValido(totalCorners)) {
@@ -153,7 +152,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       const etiquetaTotal = futbolAuto.seleccionEquipo
         ? `Corners de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalCorners)}`
         : `Total corners: ${escapeHtml(totalCorners)}`;
-      return `${getAutoFutbolResultadoHtml(`${etiquetaTotal}${liga}`, ajusteHtml)}${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(etiquetaTotal, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
     return horaHtml || "";
@@ -172,7 +171,6 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
     const totalTarjetas = futbolAuto.seleccionEquipo && deps.getTotalTarjetasObjetivoFutbol
       ? (deps.getTotalTarjetasObjetivoFutbol(futbolAuto, tarjetasEquipo) ?? futbolAuto.totalTarjetas)
       : (deps.getTotalTarjetasDesdeEquiposFutbol?.(tarjetasEquipo) ?? futbolAuto.totalTarjetas);
-    const liga = futbolAuto.liga ? ` &middot; ${escapeHtml(futbolAuto.liga)}` : "";
     const estadoPrevio = deps.debeMostrarHorarioJuego?.(futbolAuto.fechaJuego, futbolAuto.estadoJuego);
     if (estadoPrevio) marcador = "";
 
@@ -192,7 +190,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       const ajusteHtml = options.showFootballAdjust === true
         ? (deps.getAjusteManualFutbolHtml?.(futbolAuto, options) || "")
         : "";
-      return `${getAutoFutbolResultadoHtml(`Tarjetas: ${detalle}${totalHtml}${liga}`, ajusteHtml)}${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(`Tarjetas: ${detalle}${totalHtml}`, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
     if (esNumeroAutoValido(totalTarjetas)) {
@@ -202,7 +200,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       const etiquetaTotal = futbolAuto.seleccionEquipo
         ? `Tarjetas de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalTarjetas)}`
         : `Total tarjetas: ${escapeHtml(totalTarjetas)}`;
-      return `${getAutoFutbolResultadoHtml(`${etiquetaTotal}${liga}`, ajusteHtml)}${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(etiquetaTotal, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
     return horaHtml || "";
