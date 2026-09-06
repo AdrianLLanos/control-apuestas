@@ -75,10 +75,36 @@ export const NFL_TEAMS = [
   { name: "Washington Commanders", logo: "nfl-wsh.png", aliases: ["Washington Commanders", "Commanders", "WSH", "WAS"] }
 ];
 
+// Equipos oficiales de LALIGA EA SPORTS 2026/27. Se priorizan los SVG locales;
+// los PNG 500×500 mantienen el respaldo de alta calidad para los demás escudos.
+export const LALIGA_TEAMS = [
+  { name: "Athletic Club", logo: "la liga/athletic-club.svg", aliases: ["Athletic Club", "Athletic Bilbao", "Athletic"] },
+  { name: "Atlético de Madrid", logo: "la liga/atletico-de-madrid.png", aliases: ["Atlético de Madrid", "Atletico de Madrid", "Atlético Madrid", "Atletico Madrid"] },
+  { name: "CA Osasuna", logo: "la liga/osasuna.png", aliases: ["CA Osasuna", "Osasuna"] },
+  { name: "Celta", logo: "la liga/celta-de-vigo.svg", aliases: ["Celta", "Celta de Vigo", "RC Celta"] },
+  { name: "Deportivo Alavés", logo: "la liga/deportivo-alaves.png", aliases: ["Deportivo Alavés", "Deportivo Alaves", "Alavés", "Alaves"] },
+  { name: "Elche CF", logo: "la liga/elche.png", aliases: ["Elche CF", "Elche"] },
+  { name: "FC Barcelona", logo: "la liga/barcelona.svg", aliases: ["FC Barcelona", "Barcelona", "Barça", "Barca"] },
+  { name: "Getafe CF", logo: "la liga/getafe.svg", aliases: ["Getafe CF", "Getafe"] },
+  { name: "Levante UD", logo: "la liga/levante.png", aliases: ["Levante UD", "Levante"] },
+  { name: "Málaga CF", logo: "la liga/malaga.png", aliases: ["Málaga CF", "Malaga CF", "Málaga", "Malaga"] },
+  { name: "R. Racing Club", logo: "la liga/racing-santander.png", aliases: ["R. Racing Club", "Racing Club", "Racing de Santander", "Racing Santander"] },
+  { name: "Rayo Vallecano", logo: "la liga/rayo-vallecano.png", aliases: ["Rayo Vallecano", "Rayo"] },
+  { name: "RC Deportivo", logo: "la liga/deportivo-la-coruna.png", aliases: ["RC Deportivo", "Deportivo de La Coruña", "Deportivo La Coruña", "Deportivo"] },
+  { name: "RCD Espanyol", logo: "la liga/espanyol.png", aliases: ["RCD Espanyol", "Espanyol", "Espanyol de Barcelona"] },
+  { name: "Real Betis", logo: "la liga/real-betis.png", aliases: ["Real Betis", "Betis"] },
+  { name: "Real Madrid", logo: "la liga/real-madrid.svg", aliases: ["Real Madrid"] },
+  { name: "Real Sociedad", logo: "la liga/real-sociedad.png", aliases: ["Real Sociedad"] },
+  { name: "Sevilla FC", logo: "la liga/sevilla.png", aliases: ["Sevilla FC", "Sevilla"] },
+  { name: "Valencia CF", logo: "la liga/valencia.png", aliases: ["Valencia CF", "Valencia"] },
+  { name: "Villarreal CF", logo: "la liga/villarreal.png", aliases: ["Villarreal CF", "Villarreal"] }
+];
+
 const MLB_LEAGUE_LOGO = { name: "MLB", logo: "mlb.svg", aliases: ["MLB", "MLN"] };
 const MLB_LOGO_ENTRIES = [MLB_LEAGUE_LOGO, ...MLB_TEAMS];
 const NFL_LEAGUE_LOGO = { name: "NFL", logo: "nfl.png", aliases: ["NFL"] };
 const NFL_LOGO_ENTRIES = [NFL_LEAGUE_LOGO, ...NFL_TEAMS];
+const LALIGA_LOGO_ENTRIES = LALIGA_TEAMS;
 const COUNTRY_LOGO_ENTRIES = COUNTRY_FLAG_ENTRIES.map(country => ({
   type: "country",
   name: country.name,
@@ -89,6 +115,7 @@ const COUNTRY_LOGO_ENTRIES = COUNTRY_FLAG_ENTRIES.map(country => ({
 const LOGO_ENTRIES = [
   ...MLB_LOGO_ENTRIES.map(entry => ({ ...entry, type: "mlb" })),
   ...NFL_LOGO_ENTRIES.map(entry => ({ ...entry, type: "nfl" })),
+  ...LALIGA_LOGO_ENTRIES.map(entry => ({ ...entry, type: "laliga" })),
   ...COUNTRY_LOGO_ENTRIES
 ];
 
@@ -477,6 +504,9 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`Hándicap ${nA} -1.5`);
         options.push(`Hándicap ${nA} +1.5`);
       } else {
+        options.push(`Ganador con pago anticipado: Gana ${nA}`);
+        options.push(`Hándicap ${nA} -1.5`);
+        options.push(`Hándicap ${nA} +1.5`);
         options.push(`${nA} o Empate`);
         options.push(`${nA} a cero`);
         options.push(`gana a cero ${nA}`);
@@ -495,6 +525,9 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`Hándicap ${nB} -1.5`);
         options.push(`Hándicap ${nB} +1.5`);
       } else {
+        options.push(`Ganador con pago anticipado: Gana ${nB}`);
+        options.push(`Hándicap ${nB} -1.5`);
+        options.push(`Hándicap ${nB} +1.5`);
         options.push(`${nB} o Empate`);
         options.push(`${nB} a cero`);
         options.push(`gana a cero ${nB}`);
@@ -529,6 +562,9 @@ function generarOpcionesJugada(eventText, sport) {
         options.push(`Hándicap ${n} -1.5`);
         options.push(`Hándicap ${n} +1.5`);
       } else {
+        options.push(`Ganador con pago anticipado: Gana ${n}`);
+        options.push(`Hándicap ${n} -1.5`);
+        options.push(`Hándicap ${n} +1.5`);
         options.push(`${n} o Empate`);
         options.push(`${n} a cero`);
         options.push(`gana a cero ${n}`);
@@ -597,7 +633,11 @@ function generarOpcionesJugada(eventText, sport) {
       "Mas de 2.5",
       "Menos de 2.5",
       "Mas de 3.5",
-      "Menos de 3.5"
+      "Menos de 3.5",
+      "Hándicap -1.5",
+      "Hándicap +1.5",
+      "Hándicap -2.5",
+      "Hándicap +2.5"
     );
     if (competitors.length >= 2) {
       const [teamA, teamB] = competitors;
@@ -613,6 +653,8 @@ function generarOpcionesJugada(eventText, sport) {
       "Menos de 8.5 corners",
       "Mas de 9.5 corners",
       "Menos de 9.5 corners",
+      "Mas de 10.5 corners",
+      "Menos de 10.5 corners",
       "Mas de 3.5 tarjetas",
       "Menos de 3.5 tarjetas",
       "Mas de 4.5 tarjetas",

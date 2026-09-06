@@ -423,6 +423,9 @@ button {
     background: linear-gradient(135deg, rgba(15, 23, 42, .72), rgba(8, 47, 73, .34));
 }
 .quick-strikeouts-panel.is-open { display: block; }
+.quick-football-panel { display: none; }
+/* Respaldo visual: el mercado de fútbol no depende de que cargue el módulo MLB. */
+body:has(#deporte option[value="futbol"]:checked) .quick-football-panel { display: block; }
 .quick-market-group { margin:10px 0 5px; color:#cbd5e1; font-size:11px; }
 .quick-market-lines { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
 .quick-market-lines button { border:1px solid #334155; border-radius:7px; padding:5px 8px; background:#172033; color:#dbeafe; font-size:11px; cursor:pointer; }

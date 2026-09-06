@@ -11,7 +11,7 @@ function actualizarIndexHtml(assetToken) {
 
   const html = fs.readFileSync(indexPath, "utf8");
   const actualizado = html.replace(
-    /(href|src)="((?:Style\.css|estilos\/[^"]+\.css|script\/loader\.js)(?:\?[^"]*)?)"/g,
+    /(href|src)="((?:Style\.css|estilos\/[^"]+\.css|script\/(?:loader|football-market)\.js)(?:\?[^"]*)?)"/g,
     (_match, attr, assetPath) => {
       const cleanPath = assetPath.split("?")[0];
       return `${attr}="${cleanPath}?deploy=${assetToken}"`;
