@@ -13310,6 +13310,7 @@ function actualizarVisibilidadMercadosMlb() {
 }
 document.getElementById("tipoApuesta")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
 document.getElementById("deporte")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
+actualizarVisibilidadMercadosMlb();
 
 (() => {
   const add = (label, build) => {
