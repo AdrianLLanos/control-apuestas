@@ -13307,7 +13307,7 @@ function actualizarVisibilidadMercadosMlb() {
   const tipo = document.getElementById("tipoApuesta")?.value;
   document.getElementById("selectorStrikeoutsTotales")?.classList.toggle(
     "is-open",
-    ["mlb", "futbol"].includes(deporte) && tipo !== "simple_option_bet"
+    deporte === "mlb" && tipo !== "simple_option_bet"
   );
 }
 document.getElementById("tipoApuesta")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
@@ -13414,3 +13414,45 @@ actualizarVisibilidadMercadosMlb();
   document.getElementById("deporte")?.addEventListener("change", renderizarMercadosRapidos);
   renderizarMercadosRapidos();
 })();
+
+// El panel de fútbol se carga de forma independiente para no cruzarse con los
+// mercados rápidos de MLB. Este puente únicamente inserta la selección elegida.
+document.addEventListener("football-market:select", event => {
+  const { evento, jugada } = event.detail || {};
+  if (!evento || !jugada) return;
+  const type = document.getElementById("tipoApuesta")?.value || "simple";
+  const map = {
+    simple: ["eventosSimpleContainer", "simple-slot", crearSlotSimple],
+    combinada: ["eventosContainer", "jugada-slot", crearSlotCombinada],
+    sistema: ["eventosSistemaContainer", "sistema-slot", crearSlotSistema],
+    patente: ["eventosPatenteContainer", "patente-slot", crearSlotPatente],
+    dobles: ["eventosDoblesContainer", "dobles-slot", crearSlotDobles],
+    crear_apuesta: ["eventosCrearContainer", "crear-slot", crearSlotCrearApuesta],
+    crear_apuesta_simple: ["eventosCrearSimpleContainer", "crear-simple-slot", crearSlotCrearApuestaSimple]
+  }[type] || ["eventosSimpleContainer", "simple-slot", crearSlotSimple];
+  const container = document.getElementById(map[0]);
+  if (!container) return;
+  const groupByGame = ["sistema", "crear_apuesta", "crear_apuesta_simple"].includes(type);
+  let slot = [...container.querySelectorAll(`.${map[1]}`)]
+    .find(item => !item.querySelector(".jugada-ev-input")?.value && !item.querySelector(".jugada-jug-input")?.value);
+  if (groupByGame) {
+    slot = [...container.querySelectorAll(`.${map[1]}`)]
+      .find(item => item.querySelector(".jugada-ev-input")?.value.trim().toLowerCase() === evento.toLowerCase()) || slot;
+  }
+  if (!slot) {
+    slot = map[2](container.querySelectorAll(`.${map[1]}`).length + 1);
+    container.appendChild(slot);
+  }
+  const eventInput = slot.querySelector(".jugada-ev-input");
+  let playInput = slot.querySelector(".jugada-jug-input");
+  if (groupByGame && playInput?.value) {
+    const addSelection = type === "sistema" ? window.agregarSeleccionAlSlotSistema
+      : type === "crear_apuesta" ? window.agregarSeleccionAlSlot
+      : window.agregarSeleccionAlSlotCrearSimple;
+    addSelection?.(slot.querySelector(".btn-agregar-sel-slot"));
+    playInput = slot.querySelector(".selections-container .selection-row:last-child .jugada-jug-input");
+  }
+  if (eventInput) eventInput.value = evento;
+  if (playInput) playInput.value = jugada;
+  (slot.querySelector(".jugada-cuota-input") || slot.querySelector(".jugada-opti-odds-input"))?.focus();
+});
