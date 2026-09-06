@@ -69,13 +69,15 @@ const {
 const {
   MLB_TEAMS,
   NFL_TEAMS,
-  LALIGA_TEAMS,
   autocorregirTextoConLogos,
   crearMlbTeamsDatalist,
   crearMlbPlaysDatalist,
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
 } = mlbModule;
+// Compatibilidad con una copia en caché anterior de mlb.js: no impedimos que
+// cargue toda la aplicación mientras se actualizan los recursos del navegador.
+const LALIGA_TEAMS = mlbModule.LALIGA_TEAMS || [];
 const { COUNTRY_FLAG_ENTRIES } = countriesModule;
 const {
   cerrarModalValidacion,
