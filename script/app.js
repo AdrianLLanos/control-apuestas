@@ -7589,6 +7589,27 @@ function getSportsTimezone() {
   }
 }
 
+// ESPN puede incluir entradas nulas en `competitions`, `competitors` o
+// `linescores`. Normalizamos en el borde de la API para que ninguna apuesta
+// pueda romper la sincronización por una respuesta parcial del proveedor.
+function normalizarEventoEspnFutbol(event = {}) {
+  if (!event || typeof event !== "object") return null;
+  const competitions = Array.isArray(event.competitions)
+    ? event.competitions.filter(Boolean).map(competition => ({
+      ...competition,
+      competitors: Array.isArray(competition.competitors)
+        ? competition.competitors.filter(Boolean).map(competitor => ({
+          ...competitor,
+          linescores: Array.isArray(competitor.linescores)
+            ? competitor.linescores.filter(item => item && typeof item === "object")
+            : []
+        }))
+        : []
+    }))
+    : [];
+  return { ...event, competitions };
+}
+
 async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
   if (!fecha) return [];
   const cacheMs = options.cacheMs ?? ESPN_FOOTBALL_LIVE_CACHE_MS;
@@ -7611,11 +7632,15 @@ async function cargarJuegosEspnFutbolPorFecha(fecha, options = {}) {
       if (!response.ok) return [];
 
       const data = await response.json();
-      return (data.events || []).map(event => ({
-        ...event,
+      return (Array.isArray(data.events) ? data.events : []).map(event => {
+        const eventoSeguro = normalizarEventoEspnFutbol(event);
+        if (!eventoSeguro) return null;
+        return {
+        ...eventoSeguro,
         leagueLabel: event.leagueLabel || data?.leagues?.[0]?.name || league.label,
         leagueSlug: league.slug
-      }));
+        };
+      });
     }));
 
     events.push(...results
@@ -7694,14 +7719,17 @@ function autoFutbolTieneStatsReglamentariasGuardadas(autoFutbol = {}) {
 }
 
 async function cargarResumenFutbol(espnGame, options = {}) {
-  const juegoConAlargue = juegoFutbolTieneAlargueOPenales(espnGame);
+  // También protege eventos provenientes de caché o de una ruta distinta del
+  // marcador, que podrían no haber pasado por el normalizador de descarga.
+  const juegoSeguro = normalizarEventoEspnFutbol(espnGame) || {};
+  const juegoConAlargue = juegoFutbolTieneAlargueOPenales(juegoSeguro);
   const autoFutbol = options.autoFutbol || null;
-  const marcador = options.marcador || getMarcadorFutbol(espnGame);
+  const marcador = options.marcador || getMarcadorFutbol(juegoSeguro);
   if (juegoConAlargue && autoFutbolTieneStatsReglamentariasGuardadas(autoFutbol)) {
     return crearResumenEstadisticasGuardadasFutbol(autoFutbol);
   }
   if (juegoConAlargue && (!autoFutbol || !esMercadoEstadisticasFutbol(autoFutbol))) return null;
-  const espnSummary = await cargarResumenEspnFutbol(espnGame);
+  const espnSummary = await cargarResumenEspnFutbol(juegoSeguro);
   return espnSummary;
 }
 
@@ -9466,6 +9494,17 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const idsHorariosActualizados = new Set();
     const getApuestaActualizada = apuesta => apuestas.find(item => item.id === apuesta.id) || apuesta;
     let actualizacionesVisibles = 0;
+    let apuestasConDatosInvalidos = 0;
+    const aplicarResultadoFutbolSeguro = async (apuesta, juegosLocales, juegosEspn) => {
+      try {
+        return await aplicarResultadoFutbolApuesta(apuesta, juegosLocales, juegosEspn);
+      } catch (error) {
+        // Un dato parcial de ESPN no debe impedir actualizar las demás apuestas.
+        apuestasConDatosInvalidos++;
+        console.warn("Se omitió una apuesta de fútbol con datos incompletos:", apuesta?.id, error);
+        return null;
+      }
+    };
     const aplicarUpdateFutbol = async (apuesta, updateData) => {
       if (!updateData) return false;
       // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
@@ -9496,7 +9535,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       const fecha = getFechaFutbolApuesta(apuesta);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApiSportsApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
-      const updateDataApi = await aplicarResultadoFutbolApuesta(apuesta, juegosApiSportsApuesta, []);
+      const updateDataApi = await aplicarResultadoFutbolSeguro(apuesta, juegosApiSportsApuesta, []);
       if (await aplicarUpdateFutbol(apuesta, updateDataApi)) {
         actualizadasApi++;
       }
@@ -9554,7 +9593,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
       }
       await cederControlNavegador();
       const juegosApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
-      const updateDataEspn = await aplicarResultadoFutbolApuesta(apuestaActualizada, juegosApuesta, juegosEspnApuesta);
+      const updateDataEspn = await aplicarResultadoFutbolSeguro(apuestaActualizada, juegosApuesta, juegosEspnApuesta);
       if (await aplicarUpdateFutbol(apuestaActualizada, updateDataEspn)) {
         actualizadasEspn++;
       }
