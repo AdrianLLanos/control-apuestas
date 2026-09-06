@@ -7801,9 +7801,9 @@ function juegoFutbolTieneAlargueOPenales(game = {}) {
   if (esEstadoAlargueOPenalesFutbol(texto)) return true;
 
   const competitors = game?.competitions?.[0]?.competitors || [];
-  return competitors.some(item => {
+  return competitors.filter(Boolean).some(item => {
     const lineas = Array.isArray(item.linescores) ? item.linescores : [];
-    return lineas.some(line => {
+    return lineas.filter(Boolean).some(line => {
       const periodo = Number(line.period ?? line.periodNumber ?? line.number ?? line.sequence);
       return !Number.isNaN(periodo) && periodo > 2;
     });
@@ -7811,6 +7811,7 @@ function juegoFutbolTieneAlargueOPenales(game = {}) {
 }
 
 function esPeriodoReglamentarioEspn(line = {}, index = 0) {
+  line = line || {};
   const periodo = toScoreNumberFutbol(line.period ?? line.periodNumber ?? line.number ?? line.sequence);
   if (!Number.isNaN(periodo)) return periodo >= 1 && periodo <= 2;
 
@@ -7836,6 +7837,7 @@ function getScoreReglamentarioEspnCompetidor(item = {}, event = {}) {
 
   const lineas = Array.isArray(item.linescores) ? item.linescores : [];
   const reglamentarias = lineas
+    .filter(Boolean)
     .filter(esPeriodoReglamentarioEspn)
     .map(line => toScoreNumberFutbol(line.value ?? line.score ?? line.displayValue))
     .filter(value => !Number.isNaN(value));
@@ -7871,7 +7873,7 @@ function getCompetidoresFutbol(event) {
   }
 
   const competitors = event?.competitions?.[0]?.competitors || [];
-  return competitors.map(item => ({
+  return competitors.filter(Boolean).map(item => ({
     homeAway: item.homeAway,
     score: getScoreReglamentarioEspnCompetidor(item, event),
     name: item.team?.displayName || item.team?.name || item.team?.shortDisplayName || "",
