@@ -69,6 +69,7 @@ const {
 const {
   MLB_TEAMS,
   NFL_TEAMS,
+  LALIGA_TEAMS,
   autocorregirTextoConLogos,
   crearMlbTeamsDatalist,
   crearMlbPlaysDatalist,
@@ -2938,7 +2939,8 @@ function crearAutoFutbolSeleccion({ evento = "", titulo = "", jugada = "" } = {}
       deporte: deporteDetectado,
       mercado: "ganador_partido",
       equipos,
-      seleccionEquipo
+      seleccionEquipo,
+      pagoAnticipado: /\bpago\s+anticipado\b/.test(normalizado)
     };
   }
 
@@ -8978,6 +8980,13 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   const finalizado = esNfl ? juegoFutbolFinalizado(game) : juegoFutbolReglamentarioProbablementeTerminado(game);
 
   if (autoFutbol.mercado === "ganador_partido") {
+    if (autoFutbol.pagoAnticipadoAplicado) {
+      return { estado: "ganada", marcador, pagoAnticipadoAplicado: true };
+    }
+    const equipoSeleccionado = getScoreEquipoMarcadorFutbol(autoFutbol.seleccionEquipo, marcador);
+    if (autoFutbol.pagoAnticipado && equipoSeleccionado && equipoSeleccionado.seleccionado - equipoSeleccionado.rival >= 2) {
+      return { estado: "ganada", marcador, pagoAnticipadoAplicado: true };
+    }
     if (!finalizado) return null;
     if (marcador.home === marcador.away) {
       return { estado: autoFutbol.seleccion === "empate" ? "ganada" : "perdida", marcador };
@@ -9384,6 +9393,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
           fechaJuego: targetFechaJuego,
           pausaMedioTiempoHasta,
           pausaEstadoEspecialHasta: null,
+          pagoAnticipadoAplicado: Boolean(autoFutbol.pagoAnticipadoAplicado || evaluacion.pagoAnticipadoAplicado),
           sincronizadoEn: Date.now()
         }
       };
@@ -9403,6 +9413,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
         JSON.stringify(autoFutbol.tarjetasEquipo || null) !== JSON.stringify(siguiente.autoFutbol.tarjetasEquipo || null) ||
         autoFutbol.estadisticasTiempo !== siguiente.autoFutbol.estadisticasTiempo ||
         autoFutbol.fechaJuego !== targetFechaJuego ||
+        Boolean(autoFutbol.pagoAnticipadoAplicado) !== Boolean(siguiente.autoFutbol.pagoAnticipadoAplicado) ||
         (autoFutbol.pausaMedioTiempoHasta || null) !== siguiente.autoFutbol.pausaMedioTiempoHasta ||
         (autoFutbol.pausaEstadoEspecialHasta || null) !== null
       ) {
@@ -13134,7 +13145,7 @@ window.setEditingFinal = setEditingFinal;
   const inputsEquipos = [...panel.querySelectorAll(".quick-mlb-team-input")];
   const actualizarListaEquipos = input => {
     const deporte = document.getElementById("deporte")?.value;
-    const grupos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? COUNTRY_FLAG_ENTRIES : [];
+    const grupos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? LALIGA_TEAMS : [];
     const consulta = normalizarClaveMlb(input?.value || "");
     const oficiales = grupos.filter(equipo => [equipo.name, ...(equipo.aliases || [])]
       .some(alias => !consulta || normalizarClaveMlb(alias).includes(consulta)))
@@ -13161,7 +13172,7 @@ window.setEditingFinal = setEditingFinal;
       selectorDobleJornada.hidden = true;
       delete selectorDobleJornada.dataset.games;
     }
-    if (!equipoA || !equipoB || !fecha) return;
+    if (document.getElementById("deporte")?.value !== "mlb" || !equipoA || !equipoB || !fecha) return;
 
     const info = await detectarDobleJornadaMlb(`${equipoA} vs ${equipoB}`, fecha);
     if (consultaActual !== consultaDobleJornada || !info?.esDobleJornada) return;
@@ -13294,7 +13305,7 @@ function actualizarVisibilidadMercadosMlb() {
   const tipo = document.getElementById("tipoApuesta")?.value;
   document.getElementById("selectorStrikeoutsTotales")?.classList.toggle(
     "is-open",
-    deporte === "mlb" && tipo !== "simple_option_bet"
+    ["mlb", "futbol"].includes(deporte) && tipo !== "simple_option_bet"
   );
 }
 document.getElementById("tipoApuesta")?.addEventListener("change", actualizarVisibilidadMercadosMlb);
@@ -13304,12 +13315,13 @@ document.getElementById("deporte")?.addEventListener("change", actualizarVisibil
   const add = (label, build) => {
     const btn = document.createElement("button"); btn.type = "button"; btn.textContent = label;
     btn.addEventListener("click", () => {
+      const deporteRapido = document.getElementById("deporte")?.value || "mlb";
       const a = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
       const b = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
       if (!a || !b) return mostrarModalValidacion(["Indica los dos equipos antes de elegir un mercado."]);
       const selectorDoble = document.getElementById("quickDoubleheaderPicker");
       const selectJuegoDoble = document.getElementById("quickDoubleheaderGame");
-      if (selectorDoble && !selectorDoble.hidden && !selectJuegoDoble?.value) {
+      if (deporteRapido === "mlb" && selectorDoble && !selectorDoble.hidden && !selectJuegoDoble?.value) {
         return mostrarModalValidacion(["Elige Juego 1 o Juego 2 de la doble jornada antes de seleccionar un mercado."]);
       }
       const type = document.getElementById("tipoApuesta")?.value || "simple";
@@ -13342,55 +13354,60 @@ document.getElementById("deporte")?.addEventListener("change", actualizarVisibil
         jugada.value = build(a,b);
         (slot.querySelector(".jugada-cuota-input") || slot.querySelector(".jugada-opti-odds-input"))?.focus();
       });
-      document.getElementById("deporte").value = "mlb";
+      document.getElementById("deporte").value = deporteRapido;
     });
     return btn;
   };
-  const money = document.getElementById("quickMoneylineLines"), totals = document.getElementById("quickTotalRunsLines"), handicap = document.getElementById("quickHandicapLines");
-  if (!money || !totals || !handicap) return;
-  const ganaLocal = add("Gana local", a => `Gana ${a}`);
-  const ganaVisitante = add("Gana visitante", (_,b) => `Gana ${b}`);
-  money.append(ganaLocal, ganaVisitante);
-  const actualizarNombresGanador = () => {
-    const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
-    const visitante = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
-    ganaLocal.textContent = local ? `Gana ${local}` : "Gana local";
-    ganaVisitante.textContent = visitante ? `Gana ${visitante}` : "Gana visitante";
-  };
+  const money = document.getElementById("quickMoneylineLines"), totals = document.getElementById("quickTotalRunsLines"), handicap = document.getElementById("quickHandicapLines"), corners = document.getElementById("quickCornersLines");
+  if (!money || !totals || !handicap || !corners) return;
   const completarNombreEquipo = input => {
     const valor = input?.value.trim();
     if (!valor) return;
     const clave = normalizarClaveMlb(valor);
     const deporte = document.getElementById("deporte")?.value;
-    const equipos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? COUNTRY_FLAG_ENTRIES : [];
+    const equipos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? LALIGA_TEAMS : [];
     const equipo = equipos.find(team => [team.name, ...(team.aliases || [])]
       .some(alias => normalizarClaveMlb(alias) === clave));
     if (equipo) input.value = equipo.name;
-    actualizarNombresGanador();
+    renderizarMercadosRapidos();
   };
-  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", actualizarNombresGanador);
-  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("input", actualizarNombresGanador);
+  const renderizarMercadosRapidos = () => {
+    const deporte = document.getElementById("deporte")?.value;
+    const esFutbol = deporte === "futbol";
+    const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim() || "Local";
+    const visita = document.getElementById("quickStrikeoutsEquipoB")?.value.trim() || "Visita";
+    money.replaceChildren(); totals.replaceChildren(); handicap.replaceChildren(); corners.replaceChildren();
+    document.getElementById("quickMarketsHeading").textContent = esFutbol ? "⚽ Mercados de fútbol" : "⚾ Mercados MLB";
+    document.getElementById("quickMoneylineTitle").textContent = esFutbol ? "Ganador con pago anticipado" : "Ganador";
+    document.getElementById("quickTotalRunsTitle").textContent = esFutbol ? "Goles totales" : "Totales (incl. extra innings)";
+    document.getElementById("quickHandicapTitle").textContent = esFutbol ? "Hándicap" : "Hándicap (incl. extra innings)";
+    document.getElementById("quickEarlyPayoutNote").hidden = !esFutbol;
+    document.getElementById("quickCornersGroup").hidden = !esFutbol;
+    document.getElementById("quickStrikeoutsGroup").hidden = esFutbol;
+    money.append(
+      add(esFutbol ? `Gana ${local} · pago anticipado` : `Gana ${local}`, a => esFutbol ? `Ganador con pago anticipado: Gana ${a}` : `Gana ${a}`),
+      add(esFutbol ? `Gana ${visita} · pago anticipado` : `Gana ${visita}`, (_, b) => esFutbol ? `Ganador con pago anticipado: Gana ${b}` : `Gana ${b}`)
+    );
+    const lineasTotales = esFutbol ? [1.5, 2.5, 3.5, 4.5] : [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
+    lineasTotales.forEach(n => {
+      const sufijo = esFutbol ? "goles" : "carreras";
+      totals.append(add(`Más ${n}`, () => `Mas de ${n} ${sufijo}`), add(`Menos ${n}`, () => `Menos de ${n} ${sufijo}`));
+    });
+    [0, 0.5, 1, 1.5, 2, 2.5].forEach(n => {
+      const lineaLocal = `${n > 0 ? '+' : ''}${n}`;
+      const lineaVisita = `${n > 0 ? '-' : '+'}${Math.abs(n)}`;
+      handicap.append(add(`${local} ${lineaLocal}`, a => `Hándicap ${a} ${lineaLocal}`), add(`${visita} ${lineaVisita}`, (_, b) => `Hándicap ${b} ${lineaVisita}`));
+    });
+    if (esFutbol) [7.5, 8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15].forEach(n => {
+      corners.append(add(`Más ${n}`, () => `Mas de ${n} tiros de esquina`), add(`Menos ${n}`, () => `Menos de ${n} tiros de esquina`));
+    });
+  };
+  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", renderizarMercadosRapidos);
+  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("input", renderizarMercadosRapidos);
   document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("change", event => completarNombreEquipo(event.currentTarget));
   document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("change", event => completarNombreEquipo(event.currentTarget));
   document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("blur", event => completarNombreEquipo(event.currentTarget));
   document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("blur", event => completarNombreEquipo(event.currentTarget));
-  [5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10].forEach(n => { totals.append(add(`Más ${n}`, () => `Mas de ${n} carreras`), add(`Menos ${n}`, () => `Menos de ${n} carreras`)); });
-  const handicapBotones = [];
-  [1,1.5,2,2.5,3,3.5,4,4.5,-1,-1.5,-2,-2.5,-3,-3.5,-4,-4.5].forEach(n => {
-    const lineaLocal = `${n > 0 ? '+' : ''}${n}`;
-    const lineaVisita = `${n > 0 ? '-' : '+'}${Math.abs(n)}`;
-    const local = add(`Local ${lineaLocal}`, a => `Handicap ${a} ${lineaLocal}`);
-    const visita = add(`Visita ${lineaVisita}`, (_,b) => `Handicap ${b} ${lineaVisita}`);
-    handicapBotones.push({ btn: local, lado: "local", linea: lineaLocal }, { btn: visita, lado: "visita", linea: lineaVisita });
-    handicap.append(local, visita);
-  });
-  const actualizarNombresHandicap = () => {
-    const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim() || "Local";
-    const visita = document.getElementById("quickStrikeoutsEquipoB")?.value.trim() || "Visita";
-    handicapBotones.forEach(item => { item.btn.textContent = `${item.lado === "local" ? local : visita} ${item.linea}`; });
-  };
-  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", actualizarNombresHandicap);
-  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("input", actualizarNombresHandicap);
-  document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("change", actualizarNombresHandicap);
-  document.getElementById("quickStrikeoutsEquipoB")?.addEventListener("change", actualizarNombresHandicap);
+  document.getElementById("deporte")?.addEventListener("change", renderizarMercadosRapidos);
+  renderizarMercadosRapidos();
 })();
