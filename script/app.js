@@ -8350,8 +8350,8 @@ function obtenerCornersDetalleEnOrden(cornersEquipo, equipos) {
   if (!cornersEquipo?.home || !cornersEquipo?.away) return "";
   const awayName = cornersEquipo.away.name || "Visitante";
   const homeName = cornersEquipo.home.name || "Local";
-  const awayCorners = cornersEquipo.away.corners;
-  const homeCorners = cornersEquipo.home.corners;
+  const awayCorners = normalizarNumeroEstadisticaFutbol(cornersEquipo.away.corners) ?? "—";
+  const homeCorners = normalizarNumeroEstadisticaFutbol(cornersEquipo.home.corners) ?? "—";
 
   const eq0 = equipos?.[0];
   const eq1 = equipos?.[1];
@@ -8393,9 +8393,9 @@ function obtenerTarjetasDetalleEnOrden(tarjetasEquipo, equipos) {
 }
 
 function getTotalCornersDesdeEquiposFutbol(cornersEquipo = {}) {
-  const home = Number(cornersEquipo?.home?.corners);
-  const away = Number(cornersEquipo?.away?.corners);
-  return Number.isNaN(home) || Number.isNaN(away) ? null : home + away;
+  const home = normalizarNumeroEstadisticaFutbol(cornersEquipo?.home?.corners);
+  const away = normalizarNumeroEstadisticaFutbol(cornersEquipo?.away?.corners);
+  return home === null || away === null ? null : home + away;
 }
 
 function getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo = {}) {
@@ -8405,8 +8405,10 @@ function getTotalTarjetasDesdeEquiposFutbol(tarjetasEquipo = {}) {
 }
 
 function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
-  const total = Number(autoFutbol.totalCorners);
-  if (Number.isNaN(total)) return null;
+  const guardados = autoFutbol.cornersEquipo;
+  if (guardados?.home && guardados?.away) return guardados;
+  const total = normalizarNumeroEstadisticaFutbol(autoFutbol.totalCorners);
+  if (total === null) return guardados || null;
 
   const equipos = Array.isArray(autoFutbol.equipos) ? autoFutbol.equipos : [];
   const nombres = autoFutbol.marcador
@@ -8415,15 +8417,15 @@ function getCornersEquipoFallbackFutbol(autoFutbol = {}) {
   const awayName = equipos[0] || nombres[0] || "Visitante";
   const homeName = equipos[1] || nombres[1] || "Local";
 
-  if (total === 0) {
-    return {
-      total: 0,
-      away: { name: awayName, corners: 0 },
-      home: { name: homeName, corners: 0 }
-    };
-  }
-
-  return null;
+  const nombreFaltante = conocido => [awayName, homeName].find(nombre =>
+    scoreEquipoFutbol(nombre, { name: conocido || "" }) < 0.45
+  );
+  const cornersDesconocidos = total === 0 && !autoFutbol.seleccionEquipo ? 0 : null;
+  return {
+    total,
+    away: guardados?.away || { name: nombreFaltante(guardados?.home?.name) || awayName, corners: cornersDesconocidos },
+    home: guardados?.home || { name: guardados?.away ? (nombreFaltante(guardados.away.name) || homeName) : homeName, corners: cornersDesconocidos }
+  };
 }
 
 function getTarjetasEquipoFallbackFutbol(autoFutbol = {}) {
@@ -8510,10 +8512,9 @@ function normalizarNumeroEstadisticaFutbol(...values) {
 }
 
 function extraerValorCornersFutbol(stat = {}) {
-  const etiqueta = normalizarTextoMercado(
-    stat.name || stat.type || stat.displayName || stat.label || stat.key || ""
-  );
-  if (!/\b(corner|corners|cornerkick|cornerkicks|corner kick|corner kicks|woncorners|won corners|esquina|esquinas)\b/.test(etiqueta)) return null;
+  const esCorner = [stat.name, stat.type, stat.displayName, stat.label, stat.key]
+    .some(value => /\b(corner|corners|cornerkick|cornerkicks|corner kick|corner kicks|woncorners|won corners|esquina|esquinas)\b/.test(normalizarTextoMercado(value || "")));
+  if (!esCorner) return null;
 
   return normalizarNumeroEstadisticaFutbol(stat.value, stat.displayValue);
 }
@@ -8538,7 +8539,11 @@ function getEquiposEstadisticasEspn(summary = {}) {
     }))
     : [];
 
-  return [...boxscoreTeams, ...scoreboardCompetitors];
+  const headerCompetitors = (summary?.header?.competitions?.[0]?.competitors || []).map(item => ({
+    team: item.team || {},
+    statistics: item.statistics || item.stats || []
+  }));
+  return [...boxscoreTeams, ...headerCompetitors, ...scoreboardCompetitors];
 }
 
 function getCornersEquipoFutbol(summary, marcador = null) {
@@ -8559,23 +8564,24 @@ function getCornersEquipoFutbol(summary, marcador = null) {
       };
     }).filter(Boolean)
     : [];
-  const teams = apiSportsStatistics.length ? apiSportsStatistics : getEquiposEstadisticasEspn(summary);
+  const teams = [...apiSportsStatistics, ...getEquiposEstadisticasEspn(summary)];
   if (!Array.isArray(teams) || teams.length === 0) return null;
 
   const cornersEquipos = teams.map(teamInfo => {
-    const stat = (teamInfo.statistics || []).find(item =>
-      item.name === "wonCorners" || extraerValorCornersFutbol(item) !== null
-    );
+    const stat = (teamInfo.statistics || []).find(item => extraerValorCornersFutbol(item) !== null);
     const value = stat ? normalizarNumeroEstadisticaFutbol(stat.value, stat.displayValue) : null;
     if (!stat || value === null) return null;
 
     return {
+      id: teamInfo.team?.id,
       name: teamInfo.team?.displayName || teamInfo.team?.name || teamInfo.team?.shortDisplayName || "",
       shortName: teamInfo.team?.shortDisplayName || teamInfo.team?.name || "",
       abbreviation: teamInfo.team?.abbreviation || "",
       corners: value
     };
-  }).filter(Boolean);
+  }).filter(Boolean).filter((team, index, all) => all.findIndex(other =>
+    team.id && other.id ? String(team.id) === String(other.id) : normalizarTextoMercado(team.name) === normalizarTextoMercado(other.name)
+  ) === index);
 
   if (cornersEquipos.length === 0) return null;
 
@@ -8584,11 +8590,11 @@ function getCornersEquipoFutbol(summary, marcador = null) {
 
   if (marcador) {
     home = cornersEquipos.find(team => scoreEquipoFutbol(marcador.homeTeam, team) >= 0.45) || null;
-    away = cornersEquipos.find(team => scoreEquipoFutbol(marcador.awayTeam, team) >= 0.45) || null;
+    away = cornersEquipos.find(team => team !== home && scoreEquipoFutbol(marcador.awayTeam, team) >= 0.45) || null;
   }
 
   if ((!home || !away) && cornersEquipos.length >= 2) {
-    home = home || cornersEquipos[0];
+    home = home || cornersEquipos.find(team => team !== away);
     away = away || cornersEquipos.find(team => team !== home) || cornersEquipos[1];
   }
 
@@ -8597,7 +8603,7 @@ function getCornersEquipoFutbol(summary, marcador = null) {
       home: { corners: home.corners },
       away: { corners: away.corners }
     })
-    : cornersEquipos.reduce((sum, team) => sum + team.corners, 0);
+    : null;
 
   return {
     total: totalPartido,

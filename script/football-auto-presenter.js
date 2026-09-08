@@ -6,6 +6,7 @@ export function autoFutbolTieneMetaVisible(autoFutbol = {}) {
     autoFutbol?.estadoEspecial ||
     autoFutbol?.totalGoles !== undefined ||
     autoFutbol?.totalCorners !== undefined ||
+    autoFutbol?.cornersEquipo ||
     autoFutbol?.totalTarjetas !== undefined
   );
 }
@@ -48,6 +49,13 @@ export function completarAutoFutbolRenderDesdeJugada(selection = {}, jugada = {}
   const base = candidatos[0];
   const baseEsMasReciente = Number(base?.sincronizadoEn || 0) > Number(autoActual?.sincronizadoEn || 0);
   const elegirMeta = clave => {
+    if (clave === "cornersEquipo") {
+      const completos = [autoActual, ...candidatos].filter(auto =>
+        esNumeroAutoValido(auto?.cornersEquipo?.home?.corners) &&
+        esNumeroAutoValido(auto?.cornersEquipo?.away?.corners)
+      ).sort((a, b) => Number(b.sincronizadoEn || 0) - Number(a.sincronizadoEn || 0));
+      if (completos.length) return completos[0].cornersEquipo;
+    }
     // Una jugada puede tener un marcador recién sincronizado mientras la
     // selección conserva el anterior. Para la interfaz siempre gana el dato
     // con marca de sincronización más nueva, incluso si el anterior no está vacío.
@@ -119,7 +127,7 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       return `${getAutoFutbolResultadoHtml(escapeHtml(marcador))}${estadoEspecialHtml}`;
     }
 
-    const cornersEquipo = futbolAuto.cornersEquipo || deps.getCornersEquipoFallbackFutbol?.(futbolAuto);
+    const cornersEquipo = deps.getCornersEquipoFallbackFutbol?.(futbolAuto) || futbolAuto.cornersEquipo;
     const totalCorners = futbolAuto.seleccionEquipo && deps.getTotalCornersObjetivoFutbol
       ? (deps.getTotalCornersObjetivoFutbol(futbolAuto, cornersEquipo) ?? futbolAuto.totalCorners)
       : (deps.getTotalCornersDesdeEquiposFutbol?.(cornersEquipo) ?? futbolAuto.totalCorners);
@@ -139,10 +147,12 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
       const totalLabel = futbolAuto.seleccionEquipo ? `Corners de ${escapeHtml(futbolAuto.seleccionEquipo)}` : "Total";
       const totalHtml = esNumeroAutoValido(totalCorners) ? ` &middot; ${totalLabel}: ${escapeHtml(totalCorners)}` : "";
       const detalle = deps.obtenerCornersDetalleEnOrden?.(cornersEquipo, futbolAuto.equipos) || "";
+      const pendiente = !esNumeroAutoValido(cornersEquipo.home.corners) || !esNumeroAutoValido(cornersEquipo.away.corners)
+        ? " (desglose pendiente)" : "";
       const ajusteHtml = options.showFootballAdjust === true
         ? (deps.getAjusteManualFutbolHtml?.(futbolAuto, options) || "")
         : "";
-      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}`, ajusteHtml)}${estadoFinalizadoHtml}`;
+      return `${getAutoFutbolResultadoHtml(`${detalle}${totalHtml}${pendiente}`, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
     if (esNumeroAutoValido(totalCorners)) {
@@ -157,9 +167,9 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
             ? equipos
             : String(marcador || "").split(/\s+\d+\s*-\s*\d+\s+/).map(nombre => nombre.trim()).filter(Boolean);
           const partido = nombres.length === 2
-            ? `${escapeHtml(nombres[0])} vs ${escapeHtml(nombres[1])} &middot; `
+            ? `${escapeHtml(nombres[0])} — - — ${escapeHtml(nombres[1])} &middot; `
             : "";
-          return `${partido}Total: ${escapeHtml(totalCorners)}`;
+          return `${partido}Total: ${escapeHtml(totalCorners)} (desglose pendiente)`;
         })();
       return `${getAutoFutbolResultadoHtml(etiquetaTotal, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
