@@ -4,6 +4,10 @@ const deployModuleToken = new URL(import.meta.url).searchParams.get("deploy") ||
 const withDeployToken = (path) =>
   `${path}${path.includes("?") ? "&" : "?"}deploy=${encodeURIComponent(deployModuleToken)}`;
 
+const { apuestaResultadoPendiente, seleccionPendiente, jugadaTienePendientes,
+  cargarTodasLasPaginas, preservarSeleccionesResueltas, guardarSiSiguePendiente
+} = await import(withDeployToken("./sports/pending-sync.js"));
+
 const [
   firebaseStore,
   calculations,
@@ -33,6 +37,7 @@ const {
   onSnapshot,
   getDocs,
   getDoc,
+  runTransaction,
   limit: firestoreLimit,
   orderBy,
   query,
@@ -75,9 +80,6 @@ const {
   formatTextWithMlbTeams,
   habilitarAutocompleteMlb
 } = mlbModule;
-// Compatibilidad con una copia en caché anterior de mlb.js: no impedimos que
-// cargue toda la aplicación mientras se actualizan los recursos del navegador.
-const LALIGA_TEAMS = mlbModule.LALIGA_TEAMS || [];
 const { COUNTRY_FLAG_ENTRIES } = countriesModule;
 const {
   cerrarModalValidacion,
@@ -97,7 +99,6 @@ const porPagina = 1;
 const APUESTAS_PAGE_LIMIT = 80;
 const APUESTAS_VISIBLES_POR_DIA = 10;
 const AUTO_SYNC_GLOBAL_PENDING_LIMIT = 250;
-const AUTO_SYNC_GLOBAL_FECHA_LIMIT = 160;
 
 /* =========================
    ESTADO
@@ -231,9 +232,10 @@ function getApuestasFiltradas() {
 }
 
 function getApuestasSyncScope(silencioso = false) {
-  if (!silencioso) return getApuestasFiltradas();
-  if (filtroCasaId === CASA_TODAS_ID) return apuestas;
-  return apuestas.filter(a => apuestaPerteneceCasa(a, filtroCasaId));
+  const scope = !silencioso ? getApuestasFiltradas()
+    : filtroCasaId === CASA_TODAS_ID ? apuestas
+    : apuestas.filter(a => apuestaPerteneceCasa(a, filtroCasaId));
+  return scope.filter(apuestaResultadoPendiente);
 }
 
 function apuestaPerteneceFiltroActual(apuesta = {}) {
@@ -248,54 +250,66 @@ function deduplicarApuestasPorId(lista = []) {
   ).values()];
 }
 
-function getFechasAutoSyncGlobal(deporte = "") {
-  const hoy = obtenerFechaActualLocal();
-  const fechas = [hoy];
-  const lookback = ["futbol", "nfl"].includes(deporte) ? FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS : 0;
-  const base = new Date(`${hoy}T00:00:00`);
-  if (!Number.isNaN(base.getTime())) {
-    for (let i = 1; i <= lookback; i++) {
-      const fecha = new Date(base);
-      fecha.setDate(fecha.getDate() - i);
-      fechas.push(formatFechaLocal(fecha));
-    }
-  }
-  return [...new Set(fechas)];
-}
-
-async function cargarApuestasAutoSyncGlobal(deporte = "") {
-  const fechas = getFechasAutoSyncGlobal(deporte);
-  const consultas = [
-    query(collection(db, "apuestas"), where("resultado", "==", "pendiente"), firestoreLimit(AUTO_SYNC_GLOBAL_PENDING_LIMIT)),
-    ...fechas.flatMap(fecha => [
-      query(collection(db, "apuestas"), where("fecha", "==", fecha), firestoreLimit(AUTO_SYNC_GLOBAL_FECHA_LIMIT)),
-      query(collection(db, "apuestas"), where("dia", "==", fecha), firestoreLimit(AUTO_SYNC_GLOBAL_FECHA_LIMIT))
-    ])
-  ];
-
-  const snapshots = await Promise.allSettled(consultas.map(consulta => getDocs(consulta)));
-  const apuestasGlobales = snapshots.flatMap(resultado => {
-    if (resultado.status !== "fulfilled") {
-      console.warn("No se pudo cargar una tanda global para auto-sync:", resultado.reason?.message || resultado.reason);
-      return [];
-    }
-    return resultado.value.docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
-  });
-
-  return deduplicarApuestasPorId(apuestasGlobales);
+async function cargarApuestasAutoSyncGlobal() {
+  const docs = await cargarTodasLasPaginas(cursor => {
+    const constraints = [where("resultado", "==", "pendiente"), firestoreLimit(AUTO_SYNC_GLOBAL_PENDING_LIMIT)];
+    if (cursor) constraints.push(startAfter(cursor));
+    return getDocs(query(collection(db, "apuestas"), ...constraints)).then(snapshot => snapshot.docs);
+  }, AUTO_SYNC_GLOBAL_PENDING_LIMIT);
+  return docs.map(d => normalizarFechaDeApuesta({ ...d.data(), id: d.id }));
 }
 
 async function getApuestasAutoSyncScope(deporte = "") {
-  const locales = getApuestasSyncScope(true);
-  const globales = await cargarApuestasAutoSyncGlobal(deporte);
-  const pareceDeporte = deporte === "mlb"
-    ? apuestaPareceMlb
-    : deporte === "futbol"
-      ? apuestaPareceFutbol
-      : deporte === "nfl"
-        ? apuestaPareceNfl
-      : () => true;
-  return deduplicarApuestasPorId([...locales, ...globales]).filter(pareceDeporte);
+  const globales = await cargarApuestasAutoSyncGlobal();
+  const pareceDeporte = deporte === "mlb" ? apuestaPareceMlb
+    : deporte === "futbol" ? apuestaPareceFutbol
+    : deporte === "nfl" ? apuestaPareceNfl : () => true;
+  return deduplicarApuestasPorId(globales).filter(a => apuestaResultadoPendiente(a) && pareceDeporte(a));
+}
+
+async function guardarActualizacionSyncPendiente(apuesta, updateData) {
+  if (!updateData) return false;
+  if (updateData.jugadas) {
+    updateData.jugadas = preservarSeleccionesResueltas(apuesta.jugadas, updateData.jugadas);
+  }
+  marcarRenderSilenciosoApuesta(apuesta.id);
+  try {
+    const guardada = await guardarSiSiguePendiente({
+      runTransaction, db, ref: doc(db, "apuestas", apuesta.id), apuesta,
+      updateData: limpiarUndefinedFirestore(updateData), normalizar: normalizarFechaDeApuesta
+    });
+    if (!guardada) renderSilenciosoApuestas.delete(apuesta.id);
+    return guardada;
+  } catch (error) {
+    renderSilenciosoApuestas.delete(apuesta.id);
+    throw error;
+  }
+}
+
+// Incluye la carga paginada en el bloqueo: un clic manual y el temporizador
+// no pueden iniciar dos recorridos del mismo deporte simultáneamente.
+const sincronizacionesPendientesEnCurso = new Map();
+function ejecutarSyncPendientes(deporte, ejecutar, silencioso) {
+  if (sincronizacionesPendientesEnCurso.has(deporte)) return sincronizacionesPendientesEnCurso.get(deporte);
+  const tarea = Promise.resolve().then(() => ejecutar(silencioso)).catch(error => {
+    console.error(`Error sincronizando pendientes ${deporte}:`, error);
+    if (!silencioso) {
+      const informar = deporte === "mlb" ? setMlbSyncStatus : deporte === "nfl" ? setNflSyncStatus : setFootballSyncStatus;
+      informar(`No se pudieron sincronizar las pendientes: ${error.message}`, "error");
+    }
+  }).finally(() => sincronizacionesPendientesEnCurso.delete(deporte));
+  sincronizacionesPendientesEnCurso.set(deporte, tarea);
+  return tarea;
+}
+
+function sincronizarResultadosMlb(silencioso = false) {
+  return ejecutarSyncPendientes("mlb", sincronizarResultadosMlbInterno, silencioso);
+}
+function sincronizarResultadosFutbol(silencioso = false) {
+  return ejecutarSyncPendientes("futbol", sincronizarResultadosFutbolInterno, silencioso);
+}
+function sincronizarResultadosNfl(silencioso = false) {
+  return ejecutarSyncPendientes("nfl", sincronizarResultadosNflInterno, silencioso);
 }
 
 function getCasasParaResumen() {
@@ -965,10 +979,6 @@ function debeRecalcularCuotaCombinada(tipoApuesta) {
   return tipoApuesta === "combinada" ||
     tipoApuesta === "crear_apuesta" ||
     tipoApuesta === "crear_apuesta_simple";
-}
-
-function apuestaResultadoPendiente(apuesta = {}) {
-  return (apuesta.resultado || "pendiente") === "pendiente";
 }
 
 function crearAutoSyncEstado(apuesta = {}, resultado = apuesta.resultado) {
@@ -6220,6 +6230,7 @@ function evaluarAutoMlb(autoMlb, game, options = {}) {
 }
 
 async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+  if (!apuestaResultadoPendiente(apuesta)) return null;
   const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadasBase = normalizarJugadasConEstado(apuesta.jugadas || []);
   const jugadas = repararTotalesEquipoMlbPartidos(jugadasBase);
@@ -6231,6 +6242,7 @@ async function aplicarResultadoMlbApuesta(apuesta, juegosFecha = [], juegosEspnF
 
     const ev = jugada.ev || jugada.evento || apuesta.evento || "";
     const selections = await Promise.all(getSelectionsFromJugada(jugada).map(async sel => {
+      if (!seleccionPendiente(sel)) return sel;
       const autoMlbOriginal = sel.autoMlb || null;
       const autoMlbDetectado = crearAutoMlbSeleccion({
         evento: ev,
@@ -6669,6 +6681,7 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
 
     const ev = jugada.ev || jugada.evento || apuesta.evento || "";
     const selections = getSelectionsFromJugada(jugada).map(sel => {
+      if (!seleccionPendiente(sel)) return sel;
       const autoMlbOriginal = sel.autoMlb || null;
       const autoMlbDetectado = crearAutoMlbSeleccion({
         evento: ev,
@@ -6761,7 +6774,7 @@ function aplicarHorarioMlbApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [
 
 let _syncMlbEnCurso = false;
 
-async function sincronizarResultadosMlb(silencioso = false) {
+async function sincronizarResultadosMlbInterno(silencioso = false) {
   if (_syncMlbEnCurso) {
     if (!silencioso) {
       setMlbSyncStatus("Ya hay una sincronizacion MLB en curso.", "");
@@ -6770,33 +6783,13 @@ async function sincronizarResultadosMlb(silencioso = false) {
   }
 
   const hoy = obtenerFechaActualLocal();
-  const apuestasSync = silencioso
-    ? await getApuestasAutoSyncScope("mlb")
-    : getApuestasSyncScope(false);
+  const apuestasSync = await getApuestasAutoSyncScope("mlb");
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceMlb(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    const tienePartidoActivo = apuestaMlbTienePartidoActivo(a);
-    if (apuestaYaFinalizadaYResuelta(a, "autoMlb") && !tienePartidoActivo) return false;
-
-    const esResultadoPendiente = apuestaResultadoPendiente(a);
-    const fuePospuesto = (a.jugadas || []).some(j =>
-      esEstadoJuegoReembolso(j?.autoMlb?.estadoJuego) ||
-      (j?.selections || []).some(sel =>
-        sel?.estado === "nula" ||
-        sel?.autoMlb?.estadoEspecial?.tipo === "pospuesto" ||
-        esEstadoJuegoReembolso(sel?.autoMlb?.estadoJuego)
-      )
-    ) || (a.resultado === "nula" && (apuestaTieneMarcadorMlb(a) || apuestaPareceMlb(a)));
-
-    if (apuestaSyncCerrada(a) && !fuePospuesto && !tienePartidoActivo) return false;
-    if (!esResultadoPendiente && !fuePospuesto && !tienePartidoActivo) return false;
-
-    const fechaApuesta = a.fecha || a.dia;
-    const esApuestaHoy = fechaApuesta === hoy;
+    if (!apuestaResultadoPendiente(a)) return false;
+    const esApuestaHoy = (a.fecha || a.dia) === hoy;
     if (!apuestaMlbYaDebeSincronizar(a) && !esApuestaHoy) return false;
-    // En modo automático/silencioso, solo procesar apuestas de hoy o con estado pospuesto
-    if (silencioso && !esApuestaHoy && !fuePospuesto) return false;
     return true;
   });
   const candidatasHorario = apuestasSync.filter(a => {
@@ -6886,8 +6879,7 @@ async function sincronizarResultadosMlb(silencioso = false) {
       if (!updateData) continue;
 
       // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
-      marcarRenderSilenciosoApuesta(apuesta.id);
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      if (!await guardarActualizacionSyncPendiente(apuesta, updateData)) continue;
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
       const apuestaActualizada = actualizadaLocal
         ? apuestas.find(item => item.id === apuesta.id)
@@ -7183,7 +7175,6 @@ const ESPN_FOOTBALL_LIVE_CACHE_MS = 0;
 const ESPN_FOOTBALL_STATISTICS_CACHE_MS = 15 * 1000;
 const FOOTBALL_DISCOVERY_RETRY_MS = 6 * 60 * 60 * 1000;
 const FOOTBALL_DISCOVERY_VERSION = "espn-v1";
-const FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS = 1;
 const FOOTBALL_DEFAULT_TIMEZONE = "America/La_Paz";
 const MLB_LIVE_SYNC_INTERVAL_MS = 90 * 1000;
 const FOOTBALL_HALFTIME_PAUSE_MS = 15 * 60 * 1000;
@@ -7451,24 +7442,6 @@ function apuestaFutbolYaDebeSincronizar(apuesta = {}) {
   const fecha = apuesta.fecha || apuesta.dia;
   if (!fecha) return false;
   return fecha < obtenerFechaActualLocal();
-}
-
-function apuestaFutbolEnVentanaSyncSilencioso(apuesta = {}) {
-  const fecha = apuesta.fecha || apuesta.dia;
-  if (!fecha) return false;
-
-  const hoy = obtenerFechaActualLocal();
-  if (fecha === hoy) return true;
-
-  const inicio = getInicioFutbolApuesta(apuesta);
-  const base = inicio || new Date(`${fecha}T12:00:00`);
-  if (!base || Number.isNaN(base.getTime())) return false;
-
-  const limiteInferior = new Date(`${hoy}T00:00:00`);
-  if (Number.isNaN(limiteInferior.getTime())) return false;
-  limiteInferior.setDate(limiteInferior.getDate() - FOOTBALL_SILENT_SYNC_LOOKBACK_DAYS);
-
-  return base >= limiteInferior && base <= new Date();
 }
 
 function getFutbolDiscoveryKey(apuesta = {}) {
@@ -8981,6 +8954,7 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
 }
 
 async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+  if (!apuestaResultadoPendiente(apuesta)) return null;
   const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   let huboCambio = false;
@@ -8999,6 +8973,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     const selections = [];
 
     for (const sel of getSelectionsFromJugada(jugada)) {
+      if (!seleccionPendiente(sel)) { selections.push(sel); continue; }
       await cederControlNavegador();
       const autoOriginal = sel.autoFutbol || null;
       const autoDetectado = crearAutoFutbolSeleccion({
@@ -9400,11 +9375,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
 let _syncFutbolEnCurso = false;
 
-async function sincronizarResultadosFutbol(silencioso = false) {
+async function sincronizarResultadosFutbolInterno(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const apuestasSync = silencioso
-    ? await getApuestasAutoSyncScope("futbol")
-    : getApuestasSyncScope(false);
+  const apuestasSync = await getApuestasAutoSyncScope("futbol");
   if (_syncFutbolEnCurso) {
     if (!silencioso) setFootballSyncStatus("Ya hay una sincronización de fútbol en curso.");
     return;
@@ -9413,17 +9386,9 @@ async function sincronizarResultadosFutbol(silencioso = false) {
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    const tienePartidoActivo = apuestaFutbolTienePartidoActivo(a);
-    if (silencioso && apuestaSyncCerrada(a) && !tienePartidoActivo) return false;
-    if (silencioso && !apuestaResultadoPendiente(a) && !tienePartidoActivo) return false;
-    if (silencioso && apuestaYaFinalizadaYResuelta(a, "autoFutbol") && !tienePartidoActivo) return false;
-    if (silencioso && apuestaFutbolPausadaPorMedioTiempo(a)) return false;
-    if (silencioso && apuestaFutbolPausadaPorEstadoEspecial(a)) return false;
-    const fechaApuesta = a.fecha || a.dia;
-    const forzarRevisionManualHoy = !silencioso && fechaApuesta === hoy;
-    if (!apuestaFutbolYaDebeSincronizar(a) && !forzarRevisionManualHoy) return false;
-    // En modo automatico/silencioso, revisar tambien pendientes recientes para cerrar partidos que terminaron tarde.
-    if (silencioso && !apuestaFutbolEnVentanaSyncSilencioso(a)) return false;
+    if (!apuestaResultadoPendiente(a)) return false;
+    const esApuestaHoy = (a.fecha || a.dia) === hoy;
+    if (!apuestaFutbolYaDebeSincronizar(a) && !esApuestaHoy) return false;
     return true;
   });
   const candidatasHorario = apuestasSync.filter(a => {
@@ -9496,7 +9461,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     }
 
     const idsHorariosActualizados = new Set();
-    const getApuestaActualizada = apuesta => apuestas.find(item => item.id === apuesta.id) || apuesta;
+    const actualizadasEnCiclo = new Map();
+    const getApuestaActualizada = apuesta => actualizadasEnCiclo.get(apuesta.id) || apuesta;
     let actualizacionesVisibles = 0;
     let apuestasConDatosInvalidos = 0;
     const aplicarResultadoFutbolSeguro = async (apuesta, juegosLocales, juegosEspn) => {
@@ -9512,8 +9478,8 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const aplicarUpdateFutbol = async (apuesta, updateData) => {
       if (!updateData) return false;
       // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
-      marcarRenderSilenciosoApuesta(apuesta.id);
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      if (!await guardarActualizacionSyncPendiente(apuesta, updateData)) return false;
+      actualizadasEnCiclo.set(apuesta.id, { ...apuesta, ...updateData });
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
       const apuestaActualizada = actualizadaLocal
         ? apuestas.find(item => item.id === apuesta.id)
@@ -9548,6 +9514,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     const fechasEspn = new Set();
     candidatas.forEach(apuesta => {
       const apuestaActualizada = getApuestaActualizada(apuesta);
+      if (!apuestaResultadoPendiente(apuestaActualizada)) return;
       const fecha = getFechaFutbolApuesta(apuestaActualizada);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApiSportsApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
@@ -9586,6 +9553,7 @@ async function sincronizarResultadosFutbol(silencioso = false) {
     let revisadasEspn = 0;
     for (const apuesta of candidatas) {
       const apuestaActualizada = getApuestaActualizada(apuesta);
+      if (!apuestaResultadoPendiente(apuestaActualizada)) continue;
       const fecha = getFechaFutbolApuesta(apuestaActualizada);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosEspnApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosEspnPorFecha.get(fechaBusqueda) || []);
@@ -9813,12 +9781,14 @@ function apuestaNflNecesitaSyncLiveRapida(apuesta = {}) {
 // mercados y estadísticas, pero un fallo de metadatos no debe impedir que el
 // marcador del scoreboard ya encontrado se guarde y se renderice.
 function crearActualizacionMarcadorNflEnVivo(apuesta = {}, juegos = []) {
+  if (!apuestaResultadoPendiente(apuesta)) return null;
   let huboCambio = false;
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []).map(jugada => {
     if (typeof jugada !== "object" || !jugada) return jugada;
 
     const evento = jugada.ev || jugada.evento || apuesta.evento || "";
     const selections = getSelectionsFromJugada(jugada).map(selection => {
+      if (!seleccionPendiente(selection)) return selection;
       const autoFutbol = selection?.autoFutbol;
       const equipos = autoFutbol?.equipos?.length >= 2
         ? autoFutbol.equipos
@@ -9898,8 +9868,8 @@ function combinarActualizacionesNfl(updateResultado = null, updateMarcador = nul
   return { ...updateResultado, jugadas };
 }
 
-async function sincronizarResultadosNfl(silencioso = false) {
-  const apuestasSync = silencioso ? await getApuestasAutoSyncScope("nfl") : getApuestasSyncScope(false);
+async function sincronizarResultadosNflInterno(silencioso = false) {
+  const apuestasSync = await getApuestasAutoSyncScope("nfl");
   if (_syncNflEnCurso) {
     if (!silencioso) setNflSyncStatus("Ya hay una sincronización NFL en curso.");
     return;
@@ -9908,8 +9878,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
   const candidatas = apuestasSync.filter(apuesta => {
     if (!apuestaPareceNfl(apuesta)) return false;
     if (!Array.isArray(apuesta.jugadas) || apuesta.jugadas.length === 0) return false;
-    if (!silencioso) return true;
-    return apuestaResultadoPendiente(apuesta) || !apuestaSyncCerrada(apuesta) || apuestaFutbolTienePartidoActivo(apuesta);
+    return apuestaResultadoPendiente(apuesta);
   });
 
   if (candidatas.length === 0) {
@@ -9954,6 +9923,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
       const juegos = fechasApuesta.flatMap(fecha => juegosPorFecha.get(fecha) || []);
       const juegosConBoxscore = new Map();
       for (const jugada of apuesta.jugadas || []) {
+        if (!jugadaTienePendientes(jugada)) continue;
         const eventoJugada = typeof jugada === "object" && jugada
           ? (jugada.ev || jugada.evento || apuesta.evento || "")
           : apuesta.evento || "";
@@ -9989,8 +9959,7 @@ async function sincronizarResultadosNfl(silencioso = false) {
         ultimaRevision: Date.now()
       });
       // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
-      marcarRenderSilenciosoApuesta(apuesta.id);
-      await updateDoc(doc(db, "apuestas", apuesta.id), limpiarUndefinedFirestore(updateData));
+      if (!await guardarActualizacionSyncPendiente(apuesta, updateData)) continue;
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
       const apuestaActualizada = actualizadaLocal
         ? apuestas.find(item => item.id === apuesta.id)
@@ -13013,7 +12982,7 @@ window.setEditingFinal = setEditingFinal;
   const inputsEquipos = [...panel.querySelectorAll(".quick-mlb-team-input")];
   const actualizarListaEquipos = input => {
     const deporte = document.getElementById("deporte")?.value;
-    const grupos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? LALIGA_TEAMS : [];
+    const grupos = deporte === "mlb" ? MLB_TEAMS : [];
     const consulta = normalizarClaveMlb(input?.value || "");
     const oficiales = grupos.filter(equipo => [equipo.name, ...(equipo.aliases || [])]
       .some(alias => !consulta || normalizarClaveMlb(alias).includes(consulta)))
@@ -13092,6 +13061,7 @@ window.setEditingFinal = setEditingFinal;
     btn.textContent = Number.isInteger(valor) ? String(valor) : valor.toFixed(1);
     btn.title = `Agregar ${lado === "over" ? "Más de" : "Menos de"} ${btn.textContent} strikeouts totales`;
     btn.addEventListener("click", async () => {
+      if (document.getElementById("deporte")?.value !== "mlb" || document.getElementById("tipoApuesta")?.value === "simple_option_bet") return;
       const equipoA = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
       const equipoB = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
       if (!equipoA || !equipoB) {
@@ -13184,7 +13154,8 @@ actualizarVisibilidadMercadosMlb();
   const add = (label, build) => {
     const btn = document.createElement("button"); btn.type = "button"; btn.textContent = label;
     btn.addEventListener("click", () => {
-      const deporteRapido = document.getElementById("deporte")?.value || "mlb";
+      const deporteRapido = document.getElementById("deporte")?.value;
+      if (deporteRapido !== "mlb" || document.getElementById("tipoApuesta")?.value === "simple_option_bet") return;
       const a = document.getElementById("quickStrikeoutsEquipoA")?.value.trim();
       const b = document.getElementById("quickStrikeoutsEquipoB")?.value.trim();
       if (!a || !b) return mostrarModalValidacion(["Indica los dos equipos antes de elegir un mercado."]);
@@ -13227,14 +13198,14 @@ actualizarVisibilidadMercadosMlb();
     });
     return btn;
   };
-  const money = document.getElementById("quickMoneylineLines"), totals = document.getElementById("quickTotalRunsLines"), handicap = document.getElementById("quickHandicapLines"), corners = document.getElementById("quickCornersLines");
-  if (!money || !totals || !handicap || !corners) return;
+  const money = document.getElementById("quickMoneylineLines"), totals = document.getElementById("quickTotalRunsLines"), handicap = document.getElementById("quickHandicapLines");
+  if (!money || !totals || !handicap) return;
   const completarNombreEquipo = input => {
     const valor = input?.value.trim();
     if (!valor) return;
     const clave = normalizarClaveMlb(valor);
     const deporte = document.getElementById("deporte")?.value;
-    const equipos = deporte === "mlb" ? MLB_TEAMS : deporte === "nfl" ? NFL_TEAMS : deporte === "futbol" ? LALIGA_TEAMS : [];
+    const equipos = deporte === "mlb" ? MLB_TEAMS : [];
     const equipo = equipos.find(team => [team.name, ...(team.aliases || [])]
       .some(alias => normalizarClaveMlb(alias) === clave));
     if (equipo) input.value = equipo.name;
@@ -13242,33 +13213,25 @@ actualizarVisibilidadMercadosMlb();
   };
   const renderizarMercadosRapidos = () => {
     const deporte = document.getElementById("deporte")?.value;
-    const esFutbol = deporte === "futbol";
+    if (deporte !== "mlb") return;
     const local = document.getElementById("quickStrikeoutsEquipoA")?.value.trim() || "Local";
     const visita = document.getElementById("quickStrikeoutsEquipoB")?.value.trim() || "Visita";
-    money.replaceChildren(); totals.replaceChildren(); handicap.replaceChildren(); corners.replaceChildren();
-    document.getElementById("quickMarketsHeading").textContent = esFutbol ? "⚽ Mercados de fútbol" : "⚾ Mercados MLB";
-    document.getElementById("quickMoneylineTitle").textContent = esFutbol ? "Ganador con pago anticipado" : "Ganador";
-    document.getElementById("quickTotalRunsTitle").textContent = esFutbol ? "Goles totales" : "Totales (incl. extra innings)";
-    document.getElementById("quickHandicapTitle").textContent = esFutbol ? "Hándicap" : "Hándicap (incl. extra innings)";
-    document.getElementById("quickEarlyPayoutNote").hidden = !esFutbol;
-    document.getElementById("quickCornersGroup").hidden = !esFutbol;
-    document.getElementById("quickStrikeoutsGroup").hidden = esFutbol;
+    money.replaceChildren(); totals.replaceChildren(); handicap.replaceChildren();
     money.append(
-      add(esFutbol ? `Gana ${local} · pago anticipado` : `Gana ${local}`, a => esFutbol ? `Ganador con pago anticipado: Gana ${a}` : `Gana ${a}`),
-      add(esFutbol ? `Gana ${visita} · pago anticipado` : `Gana ${visita}`, (_, b) => esFutbol ? `Ganador con pago anticipado: Gana ${b}` : `Gana ${b}`)
+      add(`Gana ${local}`, a => `Gana ${a}`),
+      add(`Gana ${visita}`, (_, b) => `Gana ${b}`)
     );
-    const lineasTotales = esFutbol ? [1.5, 2.5, 3.5, 4.5] : [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
-    lineasTotales.forEach(n => {
-      const sufijo = esFutbol ? "goles" : "carreras";
-      totals.append(add(`Más ${n}`, () => `Mas de ${n} ${sufijo}`), add(`Menos ${n}`, () => `Menos de ${n} ${sufijo}`));
+    [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].forEach(n => {
+      totals.append(add(`Más ${n}`, () => `Mas de ${n} carreras`), add(`Menos ${n}`, () => `Menos de ${n} carreras`));
     });
-    [0, 0.5, 1, 1.5, 2, 2.5].forEach(n => {
-      const lineaLocal = `${n > 0 ? '+' : ''}${n}`;
-      const lineaVisita = `${n > 0 ? '-' : '+'}${Math.abs(n)}`;
-      handicap.append(add(`${local} ${lineaLocal}`, a => `Hándicap ${a} ${lineaLocal}`), add(`${visita} ${lineaVisita}`, (_, b) => `Hándicap ${b} ${lineaVisita}`));
-    });
-    if (esFutbol) [7.5, 8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15].forEach(n => {
-      corners.append(add(`Más ${n}`, () => `Mas de ${n} tiros de esquina`), add(`Menos ${n}`, () => `Menos de ${n} tiros de esquina`));
+    Array.from({ length: 19 }, (_, index) => 1 + index / 2).forEach(n => {
+      ["+", "-"].forEach(signo => {
+        const linea = `${signo}${n}`;
+        handicap.append(
+          add(`${local} ${linea}`, a => `Hándicap ${a} ${linea}`),
+          add(`${visita} ${linea}`, (_, b) => `Hándicap ${b} ${linea}`)
+        );
+      });
     });
   };
   document.getElementById("quickStrikeoutsEquipoA")?.addEventListener("input", renderizarMercadosRapidos);
@@ -13284,6 +13247,7 @@ actualizarVisibilidadMercadosMlb();
 // El panel de fútbol se carga de forma independiente para no cruzarse con los
 // mercados rápidos de MLB. Este puente únicamente inserta la selección elegida.
 document.addEventListener("football-market:select", event => {
+  if (document.getElementById("deporte")?.value !== "futbol" || document.getElementById("tipoApuesta")?.value === "simple_option_bet") return;
   const { evento, jugada } = event.detail || {};
   if (!evento || !jugada) return;
   const type = document.getElementById("tipoApuesta")?.value || "simple";

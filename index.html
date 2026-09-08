@@ -39,16 +39,16 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="Style.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/simple.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/combinada.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/crear-apuesta-combinada.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/crear-apuesta-simple.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/simple-option-bet.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/patente.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/sistema.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/temas/tarde-noche/estilos.css?deploy=8fb3bc42c960">
-<link rel="stylesheet" href="estilos/temas/Noctis/estilos.css?deploy=8fb3bc42c960">
+<link rel="stylesheet" href="Style.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/simple.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/combinada.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/crear-apuesta-combinada.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/crear-apuesta-simple.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/simple-option-bet.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/patente.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/sistema.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/temas/tarde-noche/estilos.css?deploy=1c76312e83c0">
+<link rel="stylesheet" href="estilos/temas/Noctis/estilos.css?deploy=1c76312e83c0">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
 </head>
 
@@ -136,10 +136,9 @@
         <label for="quickDoubleheaderGame">Doble jornada: elige el partido</label>
         <select id="quickDoubleheaderGame" aria-label="Partido de la doble jornada"></select>
       </div>
-      <div id="quickMoneylineGroup" class="quick-market-group"><strong id="quickMoneylineTitle">Ganador</strong><div id="quickMoneylineLines" class="quick-market-lines"></div><small id="quickEarlyPayoutNote" hidden>Pago anticipado: se resuelve si tu equipo va 2 goles por delante; aplica al mercado normal de ganador.</small></div>
+      <div id="quickMoneylineGroup" class="quick-market-group"><strong id="quickMoneylineTitle">Ganador</strong><div id="quickMoneylineLines" class="quick-market-lines"></div></div>
       <div id="quickTotalRunsGroup" class="quick-market-group"><strong id="quickTotalRunsTitle">Totales (incl. extra innings)</strong><div id="quickTotalRunsLines" class="quick-market-lines"></div></div>
       <div id="quickHandicapGroup" class="quick-market-group"><strong id="quickHandicapTitle">Hándicap (incl. extra innings)</strong><div id="quickHandicapLines" class="quick-market-lines"></div></div>
-      <div id="quickCornersGroup" class="quick-market-group" hidden><strong>Total de tiros de esquina</strong><div id="quickCornersLines" class="quick-market-lines"></div></div>
       <div id="quickStrikeoutsGroup">
       <div class="quick-market-group"><strong>Strikeouts totales</strong></div>
       <div class="quick-strikeouts-side" role="group" aria-label="Tipo de línea de strikeouts">
@@ -152,7 +151,12 @@
     </section>
 
     <section id="selectorMercadosFutbol" class="quick-strikeouts-panel quick-football-panel" aria-label="Mercados de fútbol rápidos">
-      <div class="quick-strikeouts-heading"><span>⚽ Mercados de fútbol</span><small>Elige una línea y se añade a tu apuesta</small></div>
+      <div class="quick-strikeouts-heading"><span id="quickFootballHeading">⚽ Mercados UEFA Champions League</span><small>Elige una línea y se añade a tu apuesta</small></div>
+      <label for="quickFootballCompetition">Competición</label>
+      <select id="quickFootballCompetition">
+        <option value="champions">UEFA Champions League 2026/27 · 36 equipos</option>
+        <option value="laliga">LaLiga</option>
+      </select>
       <div class="quick-strikeouts-event">
         <input id="quickFootballEquipoA" type="text" placeholder="Equipo local" list="quickFootballTeamsList" autocomplete="off">
         <span>vs</span>
@@ -165,23 +169,6 @@
       <div class="quick-market-group"><strong>Total de tiros de esquina</strong><div id="quickFootballCornersLines" class="quick-market-lines"></div></div>
       <p class="quick-strikeouts-note">Después de elegir, completa la cuota e importe de esa selección.</p>
     </section>
-    <script>
-      // Respaldo inmediato: el panel de fútbol no depende de la carga de MLB.
-      (() => {
-        const actualizarMercadoFutbol = () => {
-          const panel = document.getElementById('selectorMercadosFutbol');
-          const mlb = document.getElementById('selectorStrikeoutsTotales');
-          const deporte = document.getElementById('deporte')?.value;
-          const tipo = document.getElementById('tipoApuesta')?.value;
-          const mostrar = deporte === 'futbol' && tipo !== 'simple_option_bet';
-          if (panel) { panel.hidden = !mostrar; panel.classList.toggle('is-open', mostrar); }
-          if (mlb && deporte === 'futbol') mlb.classList.remove('is-open');
-        };
-        document.getElementById('deporte')?.addEventListener('change', actualizarMercadoFutbol);
-        document.getElementById('tipoApuesta')?.addEventListener('change', actualizarMercadoFutbol);
-        requestAnimationFrame(actualizarMercadoFutbol);
-      })();
-    </script>
 
     <!-- Tarjeta principal -->
     <div id="tarjetaApuesta" class="tarjeta-apuesta" style="margin-top:12px;">
@@ -381,8 +368,8 @@
 <button id="btnArriba">↑ NUEVA APUESTA</button>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="script/football-market.js?deploy=8fb3bc42c960"></script>
-<script type="module" src="script/loader.js?deploy=8fb3bc42c960"></script>
+<script type="module" src="script/football-market.js?deploy=1c76312e83c0"></script>
+<script type="module" src="script/loader.js?deploy=1c76312e83c0"></script>
 
 </body>
 </html>

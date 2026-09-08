@@ -14,6 +14,7 @@ export {
   onSnapshot,
   getDocs,
   getDoc,
+  runTransaction,
   limit,
   orderBy,
   query,

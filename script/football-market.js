@@ -1,10 +1,8 @@
+const token = new URL(import.meta.url).searchParams.get("deploy") || Date.now().toString(36);
+const { CHAMPIONS_TEAMS, LALIGA_TEAMS, formatTextWithTeams } = await import(`./sports-assets.js?deploy=${encodeURIComponent(token)}`);
+
 (() => {
-  const teams = [
-    "Athletic Club", "Atlético de Madrid", "CA Osasuna", "Celta", "Deportivo Alavés",
-    "Elche CF", "FC Barcelona", "Getafe CF", "Levante UD", "Málaga CF", "R. Racing Club",
-    "Rayo Vallecano", "RC Deportivo", "RCD Espanyol", "Real Betis", "Real Madrid",
-    "Real Sociedad", "Sevilla FC", "Valencia CF", "Villarreal CF"
-  ];
+  const getTeams = () => byId("quickFootballCompetition")?.value === "laliga" ? LALIGA_TEAMS : CHAMPIONS_TEAMS;
 
   const byId = id => document.getElementById(id);
   const normalize = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -13,16 +11,22 @@
   function addButton(container, label, selection) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = label;
+    button.innerHTML = formatTextWithTeams(label);
     button.addEventListener("click", () => {
+      if (byId("deporte")?.value !== "futbol" || byId("tipoApuesta")?.value === "simple_option_bet") return;
       const local = byId("quickFootballEquipoA")?.value.trim();
       const visitante = byId("quickFootballEquipoB")?.value.trim();
       if (!local || !visitante) {
         alert("Indica el equipo local y visitante antes de elegir un mercado.");
         return;
       }
+      const resolve = value => getTeams().find(team => team.aliases.some(alias => normalize(alias) === normalize(value)))?.name || value;
+      if (normalize(resolve(local)) === normalize(resolve(visitante))) {
+        alert("Elige dos equipos diferentes.");
+        return;
+      }
       document.dispatchEvent(new CustomEvent("football-market:select", {
-        detail: { evento: `${local} vs ${visitante}`, jugada: selection(local, visitante) }
+        detail: { evento: `${resolve(local)} vs ${resolve(visitante)}`, jugada: selection(resolve(local), resolve(visitante)) }
       }));
       button.classList.add("is-selected");
       setTimeout(() => button.classList.remove("is-selected"), 450);
@@ -44,12 +48,13 @@
     byId("quickFootballWinnerTitle").textContent = pagoAnticipado ? "Ganador con pago anticipado" : "Ganador";
     byId("quickFootballEarlyNote").hidden = !pagoAnticipado;
     addButton(winner, pagoAnticipado ? `Gana ${local} · pago anticipado` : `Gana ${local}`, team => pagoAnticipado ? `Ganador con pago anticipado: Gana ${team}` : `Gana ${team}`);
+    addButton(winner, "Empate", () => "Empate");
     addButton(winner, pagoAnticipado ? `Gana ${visitante} · pago anticipado` : `Gana ${visitante}`, (_, team) => pagoAnticipado ? `Ganador con pago anticipado: Gana ${team}` : `Gana ${team}`);
-    [0, 0.5, 1, 1.5, 2, 2.5].forEach(line => {
-      const home = `${line > 0 ? "+" : ""}${line}`;
-      const away = `${line > 0 ? "-" : "+"}${Math.abs(line)}`;
-      addButton(handicap, `${local} ${home}`, team => `Hándicap ${team} ${home}`);
-      addButton(handicap, `${visitante} ${away}`, (_, team) => `Hándicap ${team} ${away}`);
+    Array.from({ length: 19 }, (_, index) => 1 + index / 2).forEach(line => {
+      ["+", "-"].forEach(sign => {
+        addButton(handicap, `${local} ${sign}${line}`, team => `Hándicap ${team} ${sign}${line}`);
+        addButton(handicap, `${visitante} ${sign}${line}`, (_, team) => `Hándicap ${team} ${sign}${line}`);
+      });
     });
     [1.5, 2.5, 3.5, 4.5].forEach(line => {
       addButton(goals, `Más ${line}`, () => `Más de ${line} goles`);
@@ -65,9 +70,9 @@
     const list = byId("quickFootballTeamsList");
     if (!list) return;
     const query = normalize(input?.value);
-    list.replaceChildren(...teams.filter(team => !query || normalize(team).includes(query)).map(team => {
+    list.replaceChildren(...getTeams().filter(team => !query || team.aliases.some(alias => normalize(alias).includes(query))).map(team => {
       const option = document.createElement("option");
-      option.value = team;
+      option.value = team.name;
       return option;
     }));
   }
@@ -76,13 +81,11 @@
     const isFootball = byId("deporte")?.value === "futbol";
     const isSimpleOption = byId("tipoApuesta")?.value === "simple_option_bet";
     const footballPanel = byId("selectorMercadosFutbol");
-    const mlbPanel = byId("selectorStrikeoutsTotales");
     if (footballPanel) {
       const show = isFootball && !isSimpleOption;
       footballPanel.hidden = !show;
       footballPanel.classList.toggle("is-open", show);
     }
-    if (mlbPanel && isFootball) mlbPanel.classList.remove("is-open");
   }
 
   function setup() {
@@ -91,11 +94,24 @@
     [local, visitante].forEach(input => {
       input?.addEventListener("focus", () => updateTeams(input));
       input?.addEventListener("input", () => { updateTeams(input); renderMarkets(); });
-      input?.addEventListener("change", renderMarkets);
+      input?.addEventListener("change", () => {
+        const team = getTeams().find(team => team.aliases.some(alias => normalize(alias) === normalize(input.value.trim())));
+        if (team) input.value = team.name;
+        renderMarkets();
+      });
+    });
+    byId("quickFootballCompetition")?.addEventListener("change", () => {
+      local.value = "";
+      visitante.value = "";
+      byId("quickFootballHeading").textContent = byId("quickFootballCompetition").value === "champions"
+        ? "⚽ Mercados UEFA Champions League" : "⚽ Mercados LaLiga";
+      updateTeams();
+      renderMarkets();
     });
     byId("deporte")?.addEventListener("change", updateVisibility);
     byId("casaApuesta")?.addEventListener("change", renderMarkets);
     byId("tipoApuesta")?.addEventListener("change", updateVisibility);
+    updateTeams();
     renderMarkets();
     updateVisibility();
   }
