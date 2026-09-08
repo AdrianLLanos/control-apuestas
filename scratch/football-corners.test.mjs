@@ -52,3 +52,29 @@ assert.equal(zero.away.corners, 0);
 const selectedZero = context.getCornersEquipoFallbackFutbol({...auto, totalCorners: 0, seleccionEquipo: 'Club Brujas'});
 assert.equal(selectedZero.home.corners, null, 'A team total does not imply zero corners for its opponent');
 console.log('Football corners regression checks passed.');
+
+// The saved goals selection has a timestamp; the corners selection may not.
+// Its null corner metadata must not erase ESPN's complete team statistics.
+const savedCorners = {autoFutbol: {...auto, cornersEquipo: stats}};
+const savedGoals = {autoFutbol: {...auto, mercado: 'total_goles',
+  cornersEquipo: null, totalCorners: undefined, totalGoles: 3,
+  marcador: 'Club Brujas 1 - 2 Aston Villa', sincronizadoEn: 1788888073795}};
+const savedSelection = presenter.completarAutoFutbolRenderDesdeJugada(savedCorners,
+  {selections: [savedGoals, savedCorners]});
+assert.equal(savedSelection.autoFutbol.cornersEquipo, stats);
+assert.ok(presenter.getAutoFutbolMarcadorHtml(savedSelection, {}, context)
+  .includes('Club Brujas 2 - 1 Aston Villa &middot; Total: 3'));
+
+if (process.argv.includes('--live')) {
+  const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/summary?event=401915426&lang=es&region=mx');
+  assert.equal(response.status, 200);
+  const liveStats = context.getCornersEquipoFutbol(await response.json(), marcador);
+  assert.ok(liveStats?.home && liveStats?.away, 'ESPN must supply both teams');
+  const liveCorners = {autoFutbol: {...auto, cornersEquipo: liveStats, totalCorners: liveStats.total}};
+  const liveSelection = presenter.completarAutoFutbolRenderDesdeJugada(liveCorners,
+    {selections: [savedGoals, liveCorners]});
+  const liveHtml = presenter.getAutoFutbolMarcadorHtml(liveSelection, {}, context);
+  const expected = `Club Brujas ${liveStats.home.corners} - ${liveStats.away.corners} Aston Villa &middot; Total: ${liveStats.total}`;
+  assert.ok(liveHtml.includes(expected), liveHtml);
+  console.log('ESPN live -> selection metadata -> rendered result:', liveHtml);
+}

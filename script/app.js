@@ -24,7 +24,7 @@ const [
   import(withDeployToken("./countries.js?v=1.1")),
   import(withDeployToken("./validation-modal.js")),
   import(withDeployToken("./sports/market-conflicts.js?v=1.1")),
-  import(withDeployToken("./football-auto-presenter.js?v=1.1")),
+  import(withDeployToken("./football-auto-presenter.js?v=1.2")),
   import(withDeployToken("./sports/sync-manager.js?v=1.0"))
 ]);
 
