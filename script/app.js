@@ -4862,6 +4862,8 @@ function formatFechaJuego(fechaJuegoStr, fechaBet = "") {
 function esEstadoJuegoPrevio(estadoJuego = "") {
   const normalizado = normalizarEstadoExternoTexto(estadoJuego);
   if (!normalizado) return true;
+  // ESPN's scheduled detail can be a localized date instead of "Scheduled".
+  if (/\b(?:at|a las)\s+\d{1,2}:\d{2}\b/.test(normalizado)) return true;
   return /\b(preview|scheduled|pre|pre game|programado|previo|not started|no iniciado|por comenzar|warmup|ns|tbd)\b/.test(normalizado);
 }
 
@@ -7728,7 +7730,9 @@ function getEstadoJuegoFutbol(game) {
     const elapsed = apiStatus.elapsed ? ` ${apiStatus.elapsed}'` : "";
     return `${apiStatus.long || apiStatus.short || ""}${elapsed}`.trim();
   }
-  return game?.status?.type?.detail || game?.status?.type?.description || "";
+  const status = game?.status?.type || game?.competitions?.[0]?.status?.type;
+  if (status?.state === "pre" || status?.name === "STATUS_SCHEDULED") return "Programado";
+  return status?.detail || status?.description || "";
 }
 
 function toScoreNumberFutbol(value) {
@@ -8875,6 +8879,9 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
     const equipo = getScoreEquipoMarcadorFutbol(autoFutbol.seleccionEquipo, marcador);
     if (Number.isNaN(linea) || !equipo) return null;
     const ajustado = equipo.seleccionado + linea;
+    if (!esNfl && linea === 0) {
+      return { estado: equipo.seleccionado >= equipo.rival ? "ganada" : "perdida", marcador };
+    }
     if (ajustado === equipo.rival) return { estado: "nula", marcador };
     return {
       estado: ajustado > equipo.rival ? "ganada" : "perdida",

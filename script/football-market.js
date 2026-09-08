@@ -38,11 +38,17 @@ const { CHAMPIONS_TEAMS, LALIGA_TEAMS, formatTextWithTeams } = await import(`./s
     const local = byId("quickFootballEquipoA")?.value.trim() || "Local";
     const visitante = byId("quickFootballEquipoB")?.value.trim() || "Visitante";
     const winner = byId("quickFootballWinnerLines");
+    const doubleChance = byId("quickFootballDoubleChanceLines");
     const handicap = byId("quickFootballHandicapLines");
     const goals = byId("quickFootballGoalsLines");
     const corners = byId("quickFootballCornersLines");
     if (!winner || !handicap || !goals || !corners) return;
     [winner, handicap, goals, corners].forEach(node => node.replaceChildren());
+    if (doubleChance) {
+      doubleChance.replaceChildren();
+      addButton(doubleChance, `${local} gana o empata`, team => `Doble oportunidad ${team} o Empate`);
+      addButton(doubleChance, `${visitante} gana o empata`, (_, team) => `Doble oportunidad ${team} o Empate`);
+    }
 
     const pagoAnticipado = isMiCasino();
     byId("quickFootballWinnerTitle").textContent = pagoAnticipado ? "Ganador con pago anticipado" : "Ganador";
@@ -50,7 +56,9 @@ const { CHAMPIONS_TEAMS, LALIGA_TEAMS, formatTextWithTeams } = await import(`./s
     addButton(winner, pagoAnticipado ? `Gana ${local} · pago anticipado` : `Gana ${local}`, team => pagoAnticipado ? `Ganador con pago anticipado: Gana ${team}` : `Gana ${team}`);
     addButton(winner, "Empate", () => "Empate");
     addButton(winner, pagoAnticipado ? `Gana ${visitante} · pago anticipado` : `Gana ${visitante}`, (_, team) => pagoAnticipado ? `Ganador con pago anticipado: Gana ${team}` : `Gana ${team}`);
-    Array.from({ length: 19 }, (_, index) => 1 + index / 2).forEach(line => {
+    addButton(handicap, `${local} 0 (gana o empata)`, team => `Hándicap ${team} +0`);
+    addButton(handicap, `${visitante} 0 (gana o empata)`, (_, team) => `Hándicap ${team} +0`);
+    Array.from({ length: 14 }, (_, index) => (index + 1) / 2).forEach(line => {
       ["+", "-"].forEach(sign => {
         addButton(handicap, `${local} ${sign}${line}`, team => `Hándicap ${team} ${sign}${line}`);
         addButton(handicap, `${visitante} ${sign}${line}`, (_, team) => `Hándicap ${team} ${sign}${line}`);

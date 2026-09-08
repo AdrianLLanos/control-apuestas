@@ -48,7 +48,8 @@ for (const team of CHAMPIONS_TEAMS) {
 }
 assert.equal(get('quickFootballTeamsList').children.length, 36);
 assert.equal(get('quickFootballWinnerLines').children.length, 3);
-assert.equal(get('quickFootballHandicapLines').children.length, 76);
+assert.equal(get('quickFootballDoubleChanceLines').children.length, 2);
+assert.equal(get('quickFootballHandicapLines').children.length, 58);
 assert.equal(get('quickFootballGoalsLines').children.length, 8);
 assert.equal(get('quickFootballCornersLines').children.length, 18);
 get('quickFootballEquipoA').value = 'PSG';
@@ -56,9 +57,16 @@ get('quickFootballEquipoA').fire('change');
 assert.equal(get('quickFootballEquipoA').value, 'Paris Saint-Germain');
 get('quickFootballEquipoB').value = 'Arsenal';
 get('quickFootballEquipoB').fire('change');
+get('quickFootballDoubleChanceLines').children[0].fire('click');
+assert.equal(selected.jugada, 'Doble oportunidad Paris Saint-Germain o Empate');
+get('quickFootballDoubleChanceLines').children[1].fire('click');
+assert.equal(selected.jugada, 'Doble oportunidad Arsenal o Empate');
 for (const button of get('quickFootballHandicapLines').children) button.fire('click');
-assert.deepEqual(JSON.parse(JSON.stringify(selected)), { evento: 'Paris Saint-Germain vs Arsenal', jugada: 'Hándicap Arsenal -10' });
-for (let n = 1; n <= 10; n += .5) for (const team of ['Paris Saint-Germain', 'Arsenal']) for (const sign of ['+', '-']) {
+assert.deepEqual(JSON.parse(JSON.stringify(selected)), { evento: 'Paris Saint-Germain vs Arsenal', jugada: 'Hándicap Arsenal -7' });
+for (const team of ['Paris Saint-Germain', 'Arsenal']) {
+  assert.ok(get('quickFootballHandicapLines').children.some(button => { button.fire('click'); return selected.jugada === `Hándicap ${team} +0`; }));
+}
+for (let n = .5; n <= 7; n += .5) for (const team of ['Paris Saint-Germain', 'Arsenal']) for (const sign of ['+', '-']) {
   assert.ok(get('quickFootballHandicapLines').children.some(button => { button.fire('click'); return selected.jugada === `Hándicap ${team} ${sign}${n}`; }));
 }
 get('quickFootballWinnerLines').children[1].fire('click');
@@ -107,4 +115,4 @@ const legacy = await load('script/mlb.js');
 await legacy.evaluate();
 assert.equal(legacy.namespace.formatTextWithMlbTeams, formatTextWithMlbTeams, 'Compatibility uses the same shared formatter');
 assert.ok(formatTextWithMlbTeams('New York Yankees').includes('new-york-yankees.svg'));
-console.log('OK: 36 logos, autocomplete, 76 handicaps, winner/draw, totals, selection events, competition switch and MLB logos.');
+console.log('OK: 36 logos, autocomplete, 58 handicaps (0 to 7), winner/draw, totals, selection events, competition switch and MLB logos.');
