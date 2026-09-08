@@ -151,7 +151,16 @@ export function getAutoFutbolMarcadorHtml(selection = {}, options = {}, deps = {
         : "";
       const etiquetaTotal = futbolAuto.seleccionEquipo
         ? `Corners de ${escapeHtml(futbolAuto.seleccionEquipo)}: ${escapeHtml(totalCorners)}`
-        : `Total corners: ${escapeHtml(totalCorners)}`;
+        : (() => {
+          const equipos = Array.isArray(futbolAuto.equipos) ? futbolAuto.equipos.filter(Boolean) : [];
+          const nombres = equipos.length === 2
+            ? equipos
+            : String(marcador || "").split(/\s+\d+\s*-\s*\d+\s+/).map(nombre => nombre.trim()).filter(Boolean);
+          const partido = nombres.length === 2
+            ? `${escapeHtml(nombres[0])} vs ${escapeHtml(nombres[1])} &middot; `
+            : "";
+          return `${partido}Total: ${escapeHtml(totalCorners)}`;
+        })();
       return `${getAutoFutbolResultadoHtml(etiquetaTotal, ajusteHtml)}${estadoFinalizadoHtml}`;
     }
 
