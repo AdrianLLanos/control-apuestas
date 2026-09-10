@@ -111,3 +111,25 @@ for (const [name, next] of [['aplicarResultadoMlbApuesta', 'function apuestaMlbN
   assert.equal(await vm.runInContext(`${name}({resultado: 'ganada'})`, context), null);
 }
 console.log('OK: pending-only policy, 501 records paginated across all sports, settled selections preserved, atomic stale/deleted/resolved-write protection.');
+
+// A manual click must not pull resolved bets from the visible history.
+const syncSource = app.match(/^async function sincronizarResultadosFutbolInterno\([\s\S]*?^}/m)[0];
+for (const silencioso of [false, true]) {
+  for (const resultado of ['ganada', 'perdida', 'nula']) {
+    const syncContext = vm.createContext({
+      ...policy, _syncFutbolEnCurso: false,
+      obtenerFechaActualLocal: () => '2026-09-10',
+      getApuestasAutoSyncScope: async () => [{id: 'resolved', resultado,
+        fecha: '2026-09-10', jugadas: [{selections: [{estado: resultado}]}]}],
+      getApuestasFiltradas: () => { throw Error('Resolved history must not be scanned'); },
+      apuestaPareceFutbol: () => true,
+      apuestaSyncCerrada: () => false,
+      setFootballSyncStatus() {},
+      document: {getElementById() { throw Error('Provider work must not start for resolved bets'); }}
+    });
+    vm.runInContext(syncSource, syncContext);
+    await syncContext.sincronizarResultadosFutbolInterno(silencioso);
+    assert.equal(syncContext._syncFutbolEnCurso, false);
+  }
+}
+console.log('OK: manual and automatic football sync skip won, lost and void bets, even without scores.');

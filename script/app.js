@@ -5,8 +5,7 @@ const withDeployToken = (path) =>
   `${path}${path.includes("?") ? "&" : "?"}deploy=${encodeURIComponent(deployModuleToken)}`;
 
 const { apuestaResultadoPendiente, seleccionPendiente, jugadaTienePendientes,
-  cargarTodasLasPaginas, preservarSeleccionesResueltas, guardarSiSiguePendiente,
-  completarMarcadoresFutbol, guardarMarcadoresFutbol
+  cargarTodasLasPaginas, preservarSeleccionesResueltas, guardarSiSiguePendiente
 } = await import(withDeployToken("./sports/pending-sync.js"));
 
 const [
@@ -8972,8 +8971,8 @@ function evaluarAutoFutbol(autoFutbol, game, summary = null) {
   return null;
 }
 
-async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEspnFecha = [], soloMarcadores = false) {
-  if (!soloMarcadores && !apuestaResultadoPendiente(apuesta)) return null;
+async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEspnFecha = []) {
+  if (!apuestaResultadoPendiente(apuesta)) return null;
   const fechaBet = apuesta.fecha || apuesta.dia;
   const jugadas = normalizarJugadasConEstado(apuesta.jugadas || []);
   let huboCambio = false;
@@ -8992,7 +8991,7 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
     const selections = [];
 
     for (const sel of getSelectionsFromJugada(jugada)) {
-      if (!soloMarcadores && !seleccionPendiente(sel)) { selections.push(sel); continue; }
+      if (!seleccionPendiente(sel)) { selections.push(sel); continue; }
       await cederControlNavegador();
       const autoOriginal = sel.autoFutbol || null;
       const autoDetectado = crearAutoFutbolSeleccion({
@@ -9329,8 +9328,6 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
   if (!huboCambio && !huboCambioMetadata) return null;
 
-  if (soloMarcadores) return { jugadas: completarMarcadoresFutbol(apuesta.jugadas, nuevasJugadas) };
-
   // Extraer hora y fecha local desde el primer juego de fútbol encontrado
   const juegosFutbolDisponibles = [...juegosEspnFecha, ...juegosFecha];
   const primerJuegoFutbol = juegosFutbolDisponibles.find(game => {
@@ -9396,25 +9393,9 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
 let _syncFutbolEnCurso = false;
 
-function apuestaFutbolNecesitaMarcadores(apuesta = {}) {
-  const numeroValido = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
-  return (apuesta.jugadas || []).some(jugada => (jugada?.selections || []).some(sel => {
-    const auto = sel.autoFutbol || jugada.autoFutbol;
-    if (!auto || !esEstadoJuegoFinalizado(auto.estadoJuego)) return true;
-    if (auto.mercado === "total_corners") return !numeroValido(auto.totalCorners);
-    if (auto.mercado === "total_tarjetas") return !numeroValido(auto.totalTarjetas);
-    return !auto.marcador;
-  }));
-}
-
 async function sincronizarResultadosFutbolInterno(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
-  const pendientes = await getApuestasAutoSyncScope("futbol");
-  const resueltas = getApuestasFiltradas().filter(a =>
-    apuestaPareceFutbol(a) && !apuestaResultadoPendiente(a) &&
-    (!silencioso || ((a.fecha || a.dia) === hoy && apuestaFutbolNecesitaMarcadores(a))));
-  const apuestasSync = deduplicarApuestasPorId([...pendientes, ...resueltas]);
-  const idsSoloMarcadores = new Set(resueltas.map(a => a.id));
+  const apuestasSync = await getApuestasAutoSyncScope("futbol");
   if (_syncFutbolEnCurso) {
     if (!silencioso) setFootballSyncStatus("Ya hay una sincronización de fútbol en curso.");
     return;
@@ -9423,7 +9404,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
   const candidatasResultados = apuestasSync.filter(a => {
     if (!apuestaPareceFutbol(a)) return false;
     if (!Array.isArray(a.jugadas) || a.jugadas.length === 0) return false;
-    if (!apuestaResultadoPendiente(a) && !idsSoloMarcadores.has(a.id)) return false;
+    if (!apuestaResultadoPendiente(a)) return false;
     const esApuestaHoy = (a.fecha || a.dia) === hoy;
     if (!apuestaFutbolYaDebeSincronizar(a) && !esApuestaHoy) return false;
     return true;
@@ -9444,7 +9425,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
 
   if (candidatas.length === 0) {
     if (!silencioso) {
-      setFootballSyncStatus("No hay apuestas de futbol para sincronizar.", "");
+      setFootballSyncStatus("No hay apuestas de futbol pendientes para sincronizar.", "");
     }
     _syncFutbolEnCurso = false;
     return;
@@ -9504,7 +9485,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
     let apuestasConDatosInvalidos = 0;
     const aplicarResultadoFutbolSeguro = async (apuesta, juegosLocales, juegosEspn) => {
       try {
-        return await aplicarResultadoFutbolApuesta(apuesta, juegosLocales, juegosEspn, idsSoloMarcadores.has(apuesta.id));
+        return await aplicarResultadoFutbolApuesta(apuesta, juegosLocales, juegosEspn);
       } catch (error) {
         // Un dato parcial de ESPN no debe impedir actualizar las demás apuestas.
         apuestasConDatosInvalidos++;
@@ -9515,13 +9496,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
     const aplicarUpdateFutbol = async (apuesta, updateData) => {
       if (!updateData) return false;
       // Evita que el listener confirme esta actualización reconstruyendo toda la tabla.
-      const guardada = idsSoloMarcadores.has(apuesta.id)
-        ? await guardarMarcadoresFutbol({
-          runTransaction, db, ref: doc(db, "apuestas", apuesta.id), apuesta,
-          updateData: limpiarUndefinedFirestore(updateData), normalizar: normalizarFechaDeApuesta
-        })
-        : await guardarActualizacionSyncPendiente(apuesta, updateData);
-      if (!guardada) return false;
+      if (!await guardarActualizacionSyncPendiente(apuesta, updateData)) return false;
       actualizadasEnCiclo.set(apuesta.id, { ...apuesta, ...updateData });
       const actualizadaLocal = aplicarUpdateLocalApuesta(apuesta.id, updateData);
       const apuestaActualizada = actualizadaLocal
@@ -9557,7 +9532,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
     const fechasEspn = new Set();
     candidatas.forEach(apuesta => {
       const apuestaActualizada = getApuestaActualizada(apuesta);
-      if (!apuestaResultadoPendiente(apuestaActualizada) && !idsSoloMarcadores.has(apuesta.id)) return;
+      if (!apuestaResultadoPendiente(apuestaActualizada)) return;
       const fecha = getFechaFutbolApuesta(apuestaActualizada);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosApiSportsApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosPorFecha.get(fechaBusqueda) || []);
@@ -9596,7 +9571,7 @@ async function sincronizarResultadosFutbolInterno(silencioso = false) {
     let revisadasEspn = 0;
     for (const apuesta of candidatas) {
       const apuestaActualizada = getApuestaActualizada(apuesta);
-      if (!apuestaResultadoPendiente(apuestaActualizada) && !idsSoloMarcadores.has(apuesta.id)) continue;
+      if (!apuestaResultadoPendiente(apuestaActualizada)) continue;
       const fecha = getFechaFutbolApuesta(apuestaActualizada);
       const fechasBusqueda = fechasBusquedaPorApuesta.get(apuesta) || [fecha].filter(Boolean);
       const juegosEspnApuesta = fechasBusqueda.flatMap(fechaBusqueda => juegosEspnPorFecha.get(fechaBusqueda) || []);
