@@ -46,6 +46,36 @@ function firma(value) {
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 }
 
+// Solo incorpora datos deportivos; conserva los estados y valores de la apuesta.
+export function completarMarcadoresFutbol(originales = [], nuevas = []) {
+  return originales.map((original, index) => {
+    const nueva = nuevas[index];
+    if (!original || typeof original !== "object" || !nueva) return original;
+    return {
+      ...original,
+      ...(nueva.autoFutbol ? { autoFutbol: nueva.autoFutbol } : {}),
+      ...(Array.isArray(original.selections) ? {
+        selections: original.selections.map((sel, i) => ({
+          ...sel,
+          ...(nueva.selections?.[i]?.autoFutbol ? { autoFutbol: nueva.selections[i].autoFutbol } : {})
+        }))
+      } : {})
+    };
+  });
+}
+
+export async function guardarMarcadoresFutbol({ runTransaction, db, ref, apuesta, updateData, normalizar = value => value }) {
+  if (!updateData?.jugadas) return false;
+  return runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists()) return false;
+    const actual = normalizar({ ...snapshot.data(), id: apuesta.id });
+    if (firma(actual) !== firma(apuesta)) return false;
+    transaction.update(ref, { jugadas: completarMarcadoresFutbol(actual.jugadas, updateData.jugadas) });
+    return true;
+  });
+}
+
 // La lectura y escritura son atómicas. Si hubo una edición durante la consulta
 // deportiva, se descarta el cálculo antiguo y se revisará en el siguiente ciclo.
 export async function guardarSiSiguePendiente({ runTransaction, db, ref, apuesta, updateData, normalizar = value => value }) {
