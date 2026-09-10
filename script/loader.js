@@ -1,5 +1,4 @@
 const VERSION_URL = "/version.json";
-const INDEX_URL = "/index.html";
 const DEPLOY_TOKEN_KEY = "apuestas-deploy-token";
 const DEPLOY_SIGNATURE_KEY = "apuestas-deploy-signature";
 
@@ -55,36 +54,32 @@ function actualizarAssetsHtml(token) {
 async function obtenerTokenDeploy() {
   const params = new URLSearchParams(window.location.search);
   const tokenUrl = params.get("deploy") || params.get("v");
-  if (tokenUrl) {
-    guardarStorage(sessionStorage, DEPLOY_TOKEN_KEY, tokenUrl);
-    return tokenUrl;
-  }
-
   try {
-    const [versionResponse, indexResponse] = await Promise.all([
-      fetch(`${VERSION_URL}?t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" }
-      }),
-      fetch(`${INDEX_URL}?t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" }
-      })
-    ]);
+    const versionResponse = await fetch(`${VERSION_URL}?t=${Date.now()}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" }
+    });
 
     if (versionResponse.ok) {
       const versionText = (await versionResponse.text()).trim();
-      const versionFirma = normalizarFirmaVersion(versionText);
-      const indexText = indexResponse.ok ? await indexResponse.text() : "";
-      const mainScript = indexText.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/i)?.[1] || "";
-      const indexFirma = crearTokenVersionDeploy(`${mainScript}|${indexText}`);
-      const firma = [versionFirma, indexFirma].filter(Boolean).join("::");
+      // Misma firma que obtenerVersionDeployActual en app.js. Una firma
+      // distinta aquí provocaba una recarga aun sin una nueva publicación.
+      const firma = normalizarFirmaVersion(versionText);
+      if (!firma) throw new Error("Version vacia");
       const token = crearTokenVersionDeploy(firma);
       window.__APUESTAS_DEPLOY_SIGNATURE__ = firma;
       guardarStorage(sessionStorage, DEPLOY_TOKEN_KEY, token);
       guardarStorage(sessionStorage, DEPLOY_SIGNATURE_KEY, firma);
       guardarStorage(localStorage, DEPLOY_TOKEN_KEY, token);
       guardarStorage(localStorage, DEPLOY_SIGNATURE_KEY, firma);
+      // Un enlace guardado no debe fijar un token de una publicación anterior.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("deploy") || url.searchParams.has("v") || url.searchParams.has("t")) {
+        url.searchParams.delete("deploy");
+        url.searchParams.delete("v");
+        url.searchParams.delete("t");
+        window.history.replaceState(window.history.state, "", url.toString());
+      }
       return token;
     }
   } catch (error) {
@@ -94,7 +89,7 @@ async function obtenerTokenDeploy() {
   window.__APUESTAS_DEPLOY_SIGNATURE__ = sessionStorage.getItem(DEPLOY_SIGNATURE_KEY) ||
     localStorage.getItem(DEPLOY_SIGNATURE_KEY) ||
     "";
-  return sessionStorage.getItem(DEPLOY_TOKEN_KEY) ||
+  return tokenUrl || sessionStorage.getItem(DEPLOY_TOKEN_KEY) ||
     localStorage.getItem(DEPLOY_TOKEN_KEY) ||
     "local";
 }
