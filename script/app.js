@@ -1076,6 +1076,12 @@ function usuarioEstaEditandoFormulario() {
   return false;
 }
 
+function usuarioEstaEditandoHistorial() {
+  if (editandoId !== null || isEditingFinal) return true;
+  const activo = document.activeElement;
+  return Boolean(activo?.closest?.("#contenido") && usuarioEstaEditandoFormulario());
+}
+
 function ejecutarCuandoEsteLibre(callback, timeout = 8000) {
   if (typeof window !== "undefined" && "requestIdleCallback" in window) {
     window.requestIdleCallback(callback, { timeout });
@@ -1407,6 +1413,8 @@ function cargarApuestasIniciales() {
     // La primera respuesta puede ser una copia local de ayer. Mantener la
     // carga hasta recibir el servidor, incluso si solo cambia la metadata.
     if (!apuestasSnapshotRecibido && snapshot.metadata.fromCache) return;
+    const diasPrevios = getDiasKeysRender(getApuestasFiltradas());
+    const estabaEnUltimoDia = paginaActual >= Math.max(1, Math.ceil(diasPrevios.length / porPagina));
     const cambios = apuestasSnapshotRecibido ? snapshot.docChanges() : [];
     const soloCambiosSilenciosos = cambios.length > 0 &&
       cambios.every(change => change.type !== "removed" && renderSilenciosoApuestas.has(change.doc.id));
@@ -1426,8 +1434,8 @@ function cargarApuestasIniciales() {
     inicializado = true;
     autocorregirApuestasCargadas(iniciales);
     if (soloCambiosSilenciosos) return;
-    if (usuarioEstaEditandoFormulario() && !paginaInicialHistorialPendiente) return;
-    renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
+    if (usuarioEstaEditandoHistorial() && !paginaInicialHistorialPendiente) return;
+    renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 && !estabaEnUltimoDia });
   }, (error) => {
     console.error("Error escuchando primera tanda de apuestas:", error);
     if (
@@ -10909,7 +10917,7 @@ function render() {
 let renderSnapshotPendiente = false;
 function renderSnapshotProgramado() {
   if (!cargaInicialListaParaRender()) return;
-  if (usuarioEstaEditandoFormulario() && !paginaInicialHistorialPendiente) return;
+  if (usuarioEstaEditandoHistorial() && !paginaInicialHistorialPendiente) return;
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
 
@@ -10920,6 +10928,7 @@ function renderSnapshotProgramado() {
       if (!paginaEstaVisible()) {
         return;
       }
+      if (usuarioEstaEditandoHistorial() && !paginaInicialHistorialPendiente) return;
       render();
     }, delay);
   });

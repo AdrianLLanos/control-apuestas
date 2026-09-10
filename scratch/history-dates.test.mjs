@@ -14,6 +14,8 @@ function setup(filter = 'todas') {
   const context = vm.createContext({
     apuestas: [], paginaActual: 1, porPagina: 1, paginaInicialHistorialPendiente: true,
     casasSnapshotRecibido: false, apuestasSnapshotRecibido: false,
+    editandoId: null, isEditingFinal: false,
+    document: {activeElement: {closest: () => null}},
     ultimoDiaAgregado: null, renderSnapshotPendiente: false, visible: [], filter,
     compararApuestasOrdenTabla: (a, b) => a.creadoEn - b.creadoEn,
     programarSyncInicialVisible() {}, usuarioEstaEditandoFormulario: () => false,
@@ -21,7 +23,7 @@ function setup(filter = 'todas') {
     requestAnimationFrame: callback => callback(), setTimeout: callback => callback()
   });
   for (const name of ['cargaInicialListaParaRender', 'getDiasKeysRender', 'ajustarPaginaHistorial',
-    'getApuestasPorDiaPagina', 'renderApuestasCargadas', 'renderSnapshotProgramado']) {
+    'getApuestasPorDiaPagina', 'renderApuestasCargadas', 'renderSnapshotProgramado', 'usuarioEstaEditandoHistorial']) {
     const match = source.match(new RegExp(`^function ${name}\\([\\s\\S]*?^}`, 'm'));
     assert.ok(match, name);
     vm.runInContext(match[0], context);
@@ -109,5 +111,23 @@ for (const housesFirst of [true, false]) {
   }
   assert.equal(c.visible.length, 3, 'Today appears on the first server response');
   assert.ok(c.visible.every(a => a.fecha === '2026-09-10'));
+  // A later server update must reach the history while a creation input
+  // retains focus; otherwise yesterday remains visible until reload.
+  c.apuestas = structuredClone([rows[0]]);
+  c.renderApuestasCargadas();
+  assert.equal(c.visible[0].fecha, '2026-09-09');
+  c.deliver(snapshot(rows, false));
+  assert.equal(c.visible.length, 3, 'New bets must render even with focus in the creation form');
+  assert.ok(c.visible.every(a => a.fecha === '2026-09-10'));
+  c.apuestas = structuredClone([rows[0]]);
+  c.apuestasExtraPaginadas = [{id: 'older', fecha: '2026-09-08', dia: '2026-09-08'}];
+  c.apuestas.push(...c.apuestasExtraPaginadas);
+  c.renderApuestasCargadas();
+  c.deliver(snapshot(rows, false));
+  assert.ok(c.visible.every(a => a.fecha === '2026-09-10'), 'Loaded older pages must not keep the latest view on yesterday');
+  c.editandoId = 'editing';
+  c.apuestas = structuredClone([rows[0]]);
+  c.renderSnapshotProgramado();
+  assert.ok(c.visible.every(a => a.fecha === '2026-09-10'), 'Do not replace the history while editing an existing bet');
 }
 console.log('Cached yesterday is withheld; the first server response displays today without reloading.');
