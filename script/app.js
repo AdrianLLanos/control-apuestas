@@ -96,6 +96,7 @@ const {
 const { createSyncManager } = syncManagerModule;
 
 let paginaActual = 1;
+let paginaInicialHistorialPendiente = true;
 const porPagina = 1;
 const APUESTAS_PAGE_LIMIT = 80;
 const APUESTAS_VISIBLES_POR_DIA = 10;
@@ -1375,7 +1376,7 @@ function renderApuestasCargadas({ mantenerPagina = false, pagina = null } = {}) 
 
   apuestas.sort(compararApuestasOrdenTabla);
 
-  const diasUnicos = [...new Set(apuestas.map(a => a.dia || a.fecha).filter(Boolean))];
+  const diasUnicos = getDiasKeysRender(getApuestasFiltradas());
   const totalPags = Math.ceil(diasUnicos.length / porPagina);
   if (pagina !== null) {
     paginaActual = pagina;
@@ -1401,6 +1402,7 @@ function cargarApuestasIniciales() {
   hayMasApuestas = true;
   apuestasSnapshotRecibido = false;
   paginaActual = 1;
+  paginaInicialHistorialPendiente = true;
 
   unsubscribeApuestas = onSnapshot(getConsultaApuestasPaginada(), (snapshot) => {
     const cambios = apuestasSnapshotRecibido ? snapshot.docChanges() : [];
@@ -9391,11 +9393,23 @@ async function aplicarResultadoFutbolApuesta(apuesta, juegosFecha = [], juegosEs
 
 let _syncFutbolEnCurso = false;
 
+function apuestaFutbolNecesitaMarcadores(apuesta = {}) {
+  const numeroValido = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+  return (apuesta.jugadas || []).some(jugada => (jugada?.selections || []).some(sel => {
+    const auto = sel.autoFutbol || jugada.autoFutbol;
+    if (!auto || !esEstadoJuegoFinalizado(auto.estadoJuego)) return true;
+    if (auto.mercado === "total_corners") return !numeroValido(auto.totalCorners);
+    if (auto.mercado === "total_tarjetas") return !numeroValido(auto.totalTarjetas);
+    return !auto.marcador;
+  }));
+}
+
 async function sincronizarResultadosFutbolInterno(silencioso = false) {
   const hoy = obtenerFechaActualLocal();
   const pendientes = await getApuestasAutoSyncScope("futbol");
-  const resueltas = silencioso ? [] : getApuestasFiltradas().filter(a =>
-    apuestaPareceFutbol(a) && !apuestaResultadoPendiente(a));
+  const resueltas = getApuestasFiltradas().filter(a =>
+    apuestaPareceFutbol(a) && !apuestaResultadoPendiente(a) &&
+    (!silencioso || ((a.fecha || a.dia) === hoy && apuestaFutbolNecesitaMarcadores(a))));
   const apuestasSync = deduplicarApuestasPorId([...pendientes, ...resueltas]);
   const idsSoloMarcadores = new Set(resueltas.map(a => a.id));
   if (_syncFutbolEnCurso) {
@@ -10944,6 +10958,17 @@ function getDiasKeysRender(apuestasRender) {
   return diasKeys;
 }
 
+function ajustarPaginaHistorial(diasKeys) {
+  const totalPaginas = Math.max(1, Math.ceil(diasKeys.length / porPagina));
+  // Ambos listeners pueden llegar en cualquier orden. Elegir el último día
+  // al pintar la primera vista completa, no al recibir uno de los snapshots.
+  if (paginaInicialHistorialPendiente && cargaInicialListaParaRender()) {
+    paginaActual = totalPaginas;
+    paginaInicialHistorialPendiente = false;
+  }
+  paginaActual = Math.max(1, Math.min(paginaActual, totalPaginas));
+}
+
 function getApuestasPorDiaPagina(apuestasRender, diasPagina) {
   const diasPaginaSet = new Set(diasPagina);
   const dias = {};
@@ -11208,10 +11233,7 @@ function _render() {
   const diasKeys = getDiasKeysRender(apuestasRender);
 
   const totalPaginas = Math.ceil(diasKeys.length / porPagina);
-
-  if (paginaActual > totalPaginas) {
-    paginaActual = totalPaginas || 1;
-  }
+  ajustarPaginaHistorial(diasKeys);
 
   const inicio = (paginaActual - 1) * porPagina;
   const fin = inicio + porPagina;
@@ -12954,12 +12976,7 @@ window.toggleEstadoSeleccion = async function (apuestaId, matchIndex, selIndex) 
 };
 
 window.cambiarPagina = async function (direccion, scrollAlTop = false) {
-  const totalPaginas = Math.ceil(Object.keys(
-    getApuestasFiltradas().reduce((acc, a) => {
-      acc[a.dia] = true;
-      return acc;
-    }, {})
-  ).length / porPagina);
+  const totalPaginas = Math.max(1, Math.ceil(getDiasKeysRender(getApuestasFiltradas()).length / porPagina));
 
   if (direccion < 0 && paginaActual <= 1 && hayMasApuestas) {
     await cargarMasApuestas();

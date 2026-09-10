@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 const load = async path => import(`data:text/javascript;base64,${Buffer.from(
   readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -42,3 +43,14 @@ for (const estado of ['ganada', 'perdida', 'nula']) {
   }
 }
 console.log('Resolved football scores render; settlement is preserved; concurrent edits and deleted bets are protected.');
+
+const app = readFileSync(new URL('../script/app.js', import.meta.url), 'utf8');
+const scope = vm.createContext({ esEstadoJuegoFinalizado: estado => estado === 'Final' });
+vm.runInContext(app.match(/^function apuestaFutbolNecesitaMarcadores\([\s\S]*?^}/m)[0], scope);
+const needs = auto => scope.apuestaFutbolNecesitaMarcadores({resultado: 'ganada', jugadas: [{selections: [{autoFutbol: auto}]}]});
+assert.equal(needs({mercado: 'total_goles'}), true);
+assert.equal(needs({mercado: 'total_goles', marcador: 'A 4 - 0 B', estadoJuego: "69'"}), true);
+assert.equal(needs({mercado: 'total_goles', marcador: 'A 4 - 0 B', estadoJuego: 'Final'}), false);
+assert.equal(needs({mercado: 'total_corners', totalCorners: null, estadoJuego: 'Final'}), true);
+assert.equal(needs({mercado: 'total_corners', totalCorners: 0, estadoJuego: 'Final'}), false);
+console.log('Automatic score refresh continues for resolved live games and missing statistics, and stops after complete final data.');
