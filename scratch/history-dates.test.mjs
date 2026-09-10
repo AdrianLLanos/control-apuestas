@@ -74,3 +74,40 @@ c.renderApuestasCargadas();
 assert.equal(c.paginaActual, 1);
 assert.equal(c.visible.length, 0);
 console.log('History: Sep 10 visible in both startup orders; filtered dates, navigation and empty history pass.');
+
+// Exercise the real listener: cached yesterday must never be the first view.
+for (const housesFirst of [true, false]) {
+  const c = setup();
+  Object.assign(c, {
+    unsubscribeApuestas: null, apuestasExtraPaginadas: [], ultimoDocApuestas: null,
+    hayMasApuestas: true, APUESTAS_PAGE_LIMIT: 80, inicializado: false,
+    renderSilenciosoApuestas: new Set(), normalizarFechaDeApuesta: a => a,
+    getConsultaApuestasPaginada: () => ({}), autocorregirApuestasCargadas() {},
+    // Restored focus in the creation form must not suppress the initial history.
+    usuarioEstaEditandoFormulario: () => true,
+    onSnapshot: (query, options, callback) => {
+      assert.equal(options.includeMetadataChanges, true);
+      c.deliver = callback;
+      return () => {};
+    }
+  });
+  vm.runInContext(source.match(/^function cargarApuestasIniciales\([\s\S]*?^}/m)[0], c);
+  c.cargarApuestasIniciales();
+  c.casasSnapshotRecibido = housesFirst;
+  const snapshot = (data, fromCache) => ({
+    metadata: {fromCache}, docs: data.map(a => ({id: a.id, data: () => a})),
+    docChanges: () => []
+  });
+  c.deliver(snapshot([rows[0]], true));
+  assert.equal(c.apuestasSnapshotRecibido, false);
+  assert.equal(c.paginaInicialHistorialPendiente, true);
+  assert.equal(c.visible.length, 0, 'Do not display yesterday from the cache');
+  c.deliver(snapshot(rows, false));
+  if (!housesFirst) {
+    c.casasSnapshotRecibido = true;
+    c.renderSnapshotProgramado();
+  }
+  assert.equal(c.visible.length, 3, 'Today appears on the first server response');
+  assert.ok(c.visible.every(a => a.fecha === '2026-09-10'));
+}
+console.log('Cached yesterday is withheld; the first server response displays today without reloading.');

@@ -1404,7 +1404,10 @@ function cargarApuestasIniciales() {
   paginaActual = 1;
   paginaInicialHistorialPendiente = true;
 
-  unsubscribeApuestas = onSnapshot(getConsultaApuestasPaginada(), (snapshot) => {
+  unsubscribeApuestas = onSnapshot(getConsultaApuestasPaginada(), { includeMetadataChanges: true }, (snapshot) => {
+    // La primera respuesta puede ser una copia local de ayer. Mantener la
+    // carga hasta recibir el servidor, incluso si solo cambia la metadata.
+    if (!apuestasSnapshotRecibido && snapshot.metadata.fromCache) return;
     const cambios = apuestasSnapshotRecibido ? snapshot.docChanges() : [];
     const soloCambiosSilenciosos = cambios.length > 0 &&
       cambios.every(change => change.type !== "removed" && renderSilenciosoApuestas.has(change.doc.id));
@@ -1424,7 +1427,7 @@ function cargarApuestasIniciales() {
     inicializado = true;
     autocorregirApuestasCargadas(iniciales);
     if (soloCambiosSilenciosos) return;
-    if (usuarioEstaEditandoFormulario()) return;
+    if (usuarioEstaEditandoFormulario() && !paginaInicialHistorialPendiente) return;
     renderApuestasCargadas({ mantenerPagina: apuestasExtraPaginadas.length > 0 });
   }, (error) => {
     console.error("Error escuchando primera tanda de apuestas:", error);
@@ -10931,7 +10934,7 @@ function render() {
 let renderSnapshotPendiente = false;
 function renderSnapshotProgramado() {
   if (!cargaInicialListaParaRender()) return;
-  if (usuarioEstaEditandoFormulario()) return;
+  if (usuarioEstaEditandoFormulario() && !paginaInicialHistorialPendiente) return;
   if (renderSnapshotPendiente) return;
   renderSnapshotPendiente = true;
 
@@ -11228,6 +11231,7 @@ function renderFechaYHoraCeldaHtml(apuesta = {}, fechaFormateada = "") {
 function _render() {
   const contenido = document.getElementById("contenido");
   if (!contenido) return;
+  if (!cargaInicialListaParaRender()) return;
 
   const apuestasRender = getApuestasFiltradas();
   const diasKeys = getDiasKeysRender(apuestasRender);
